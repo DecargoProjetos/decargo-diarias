@@ -1,0 +1,9 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "buildCommand": "cd ../.. && pnpm install --no-frozen-lockfile && pnpm --filter @workspace/diarias run build"
+  },
+  "deploy": {
+    "startCommand": "pnpm --filter @workspace/diarias run serve"
+  }
+}
