@@ -3,20 +3,36 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Controle de Diárias de Prestadores de Serviços
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication via DECARGO ID
+  - name: users
+    description: User management
+  - name: teams
+    description: Team management
+  - name: providers
+    description: Service provider management
+  - name: diarias
+    description: Daily rate records
+  - name: audit
+    description: Audit log
+  - name: dashboard
+    description: Dashboard summary
+  - name: reports
+    description: Reports
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +40,674 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── AUTH ──────────────────────────────────────────────────────────────
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user session
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: End session
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── USERS ─────────────────────────────────────────────────────────────
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users (admin only)
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user role or team (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # ── TEAMS ─────────────────────────────────────────────────────────────
+  /teams:
+    get:
+      operationId: listTeams
+      tags: [teams]
+      summary: List teams
+      responses:
+        "200":
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Team"
+
+    post:
+      operationId: createTeam
+      tags: [teams]
+      summary: Create a team (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamInput"
+      responses:
+        "201":
+          description: Created team
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+
+  /teams/{id}:
+    get:
+      operationId: getTeam
+      tags: [teams]
+      summary: Get a team by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Team
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateTeam
+      tags: [teams]
+      summary: Update a team (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamUpdate"
+      responses:
+        "200":
+          description: Updated team
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+
+    delete:
+      operationId: deleteTeam
+      tags: [teams]
+      summary: Delete a team (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── PROVIDERS ─────────────────────────────────────────────────────────
+  /providers:
+    get:
+      operationId: listProviders
+      tags: [providers]
+      summary: List active service providers
+      parameters:
+        - name: teamId
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: List of providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Provider"
+
+  /providers/sync:
+    post:
+      operationId: syncProviders
+      tags: [providers]
+      summary: Sync providers from DECARGO People (admin only)
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResult"
+
+  /providers/{id}:
+    get:
+      operationId: getProvider
+      tags: [providers]
+      summary: Get a provider by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Provider
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── DIÁRIAS ───────────────────────────────────────────────────────────
+  /diarias:
+    get:
+      operationId: listDiarias
+      tags: [diarias]
+      summary: List daily rate records (filtered by role)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum:
+              - pendente_aprovacao
+              - em_analise
+              - aprovada
+              - rejeitada
+              - solicitacao_correcao
+              - disponivel_exportacao
+              - exportada
+              - paga
+              - cancelada
+              - null
+        - name: providerId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: teamId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: managerId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: startDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+        - name: page
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: pageSize
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: Paginated daily rate records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiariasPage"
+
+    post:
+      operationId: createDiaria
+      tags: [diarias]
+      summary: Register a new daily rate (manager only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiariaInput"
+      responses:
+        "201":
+          description: Created daily rate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diaria"
+
+  /diarias/{id}:
+    get:
+      operationId: getDiaria
+      tags: [diarias]
+      summary: Get a daily rate by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Daily rate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diaria"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateDiaria
+      tags: [diarias]
+      summary: Update a pending daily rate (manager only, while pending)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiariaUpdate"
+      responses:
+        "200":
+          description: Updated daily rate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diaria"
+
+    delete:
+      operationId: deleteDiaria
+      tags: [diarias]
+      summary: Cancel a daily rate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diaria"
+
+  /diarias/{id}/approve:
+    post:
+      operationId: approveDiaria
+      tags: [diarias]
+      summary: Approve a daily rate (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiariaActionNote"
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diaria"
+
+  /diarias/{id}/reject:
+    post:
+      operationId: rejectDiaria
+      tags: [diarias]
+      summary: Reject a daily rate (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiariaActionNote"
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diaria"
+
+  /diarias/{id}/request-correction:
+    post:
+      operationId: requestCorrectionDiaria
+      tags: [diarias]
+      summary: Request correction on a daily rate (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiariaActionNote"
+      responses:
+        "200":
+          description: Correction requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diaria"
+
+  /diarias/{id}/mark-paid:
+    post:
+      operationId: markDiariaPaid
+      tags: [diarias]
+      summary: Mark a daily rate as paid (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiariaActionNote"
+      responses:
+        "200":
+          description: Marked as paid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diaria"
+
+  /diarias/export:
+    post:
+      operationId: exportDiarias
+      tags: [diarias]
+      summary: Export approved daily rates to DECARGO People (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportInput"
+      responses:
+        "200":
+          description: Export result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportResult"
+
+  # ── AUDIT ─────────────────────────────────────────────────────────────
+  /audit:
+    get:
+      operationId: listAuditLogs
+      tags: [audit]
+      summary: List audit log entries (admin only)
+      parameters:
+        - name: entityType
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: entityId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: userId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: startDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+        - name: page
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: pageSize
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditPage"
+
+  # ── DASHBOARD ─────────────────────────────────────────────────────────
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary counts and financial totals
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/by-team:
+    get:
+      operationId: getDashboardByTeam
+      tags: [dashboard]
+      summary: Get dashboard metrics grouped by team
+      responses:
+        "200":
+          description: Metrics by team
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamMetrics"
+
+  /dashboard/by-provider:
+    get:
+      operationId: getDashboardByProvider
+      tags: [dashboard]
+      summary: Get dashboard metrics grouped by provider
+      responses:
+        "200":
+          description: Metrics by provider
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderMetrics"
+
+  /dashboard/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Get recent diárias activity feed
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  # ── REPORTS ───────────────────────────────────────────────────────────
+  /reports/diarias:
+    get:
+      operationId: getReportDiarias
+      tags: [reports]
+      summary: Detailed report of daily rates with filters
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: providerId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: teamId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: managerId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: startDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+      responses:
+        "200":
+          description: Report data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiariasReport"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +715,453 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    # ── AUTH / USER ──────────────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        decargoId:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, gestor, prestador]
+        teamId:
+          type: ["integer", "null"]
+        teamName:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, decargoId, name, email, role, active, createdAt]
+
+    UserUpdate:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [admin, gestor, prestador]
+        teamId:
+          type: ["integer", "null"]
+        active:
+          type: boolean
+
+    # ── TEAMS ────────────────────────────────────────────────────────────
+    Team:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        managerId:
+          type: ["integer", "null"]
+        managerName:
+          type: ["string", "null"]
+        providerCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, providerCount, createdAt]
+
+    TeamInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        managerId:
+          type: ["integer", "null"]
+      required: [name]
+
+    TeamUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        managerId:
+          type: ["integer", "null"]
+
+    # ── PROVIDERS ────────────────────────────────────────────────────────
+    Provider:
+      type: object
+      properties:
+        id:
+          type: integer
+        decargoId:
+          type: string
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+        teamId:
+          type: ["integer", "null"]
+        teamName:
+          type: ["string", "null"]
+        active:
+          type: boolean
+        syncedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [id, decargoId, name, active]
+
+    SyncResult:
+      type: object
+      properties:
+        synced:
+          type: integer
+        created:
+          type: integer
+        updated:
+          type: integer
+        deactivated:
+          type: integer
+      required: [synced, created, updated, deactivated]
+
+    # ── DIÁRIAS ──────────────────────────────────────────────────────────
+    Diaria:
+      type: object
+      properties:
+        id:
+          type: integer
+        providerId:
+          type: integer
+        providerName:
+          type: string
+        teamId:
+          type: integer
+        teamName:
+          type: string
+        managerId:
+          type: ["integer", "null"]
+        managerName:
+          type: ["string", "null"]
+        workDate:
+          type: string
+          format: date
+        value:
+          type: ["number", "null"]
+          description: Null when viewer is a provider (no financial visibility)
+        paymentDate:
+          type: ["string", "null"]
+          format: date
+        observations:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum:
+            - pendente_aprovacao
+            - em_analise
+            - aprovada
+            - rejeitada
+            - solicitacao_correcao
+            - disponivel_exportacao
+            - exportada
+            - paga
+            - cancelada
+        actionNote:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        createdByName:
+          type: string
+        approvedAt:
+          type: ["string", "null"]
+          format: date-time
+        approvedByName:
+          type: ["string", "null"]
+        exportedAt:
+          type: ["string", "null"]
+          format: date-time
+        exportedByName:
+          type: ["string", "null"]
+        integrationId:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+          format: date-time
+        cancelledAt:
+          type: ["string", "null"]
+          format: date-time
+      required:
+        - id
+        - providerId
+        - providerName
+        - teamId
+        - teamName
+        - workDate
+        - status
+        - createdAt
+        - createdByName
+
+    DiariaInput:
+      type: object
+      properties:
+        providerId:
+          type: integer
+        teamId:
+          type: integer
+        workDate:
+          type: string
+          format: date
+        value:
+          type: number
+        paymentDate:
+          type: ["string", "null"]
+          format: date
+        observations:
+          type: ["string", "null"]
+      required: [providerId, teamId, workDate, value]
+
+    DiariaUpdate:
+      type: object
+      properties:
+        workDate:
+          type: string
+          format: date
+        value:
+          type: number
+        paymentDate:
+          type: ["string", "null"]
+          format: date
+        observations:
+          type: ["string", "null"]
+
+    DiariaActionNote:
+      type: object
+      properties:
+        note:
+          type: ["string", "null"]
+
+    ExportInput:
+      type: object
+      properties:
+        diariaIds:
+          type: array
+          items:
+            type: integer
+      required: [diariaIds]
+
+    ExportResult:
+      type: object
+      properties:
+        exported:
+          type: integer
+        integrationRef:
+          type: string
+        exportedAt:
+          type: string
+          format: date-time
+      required: [exported, integrationRef, exportedAt]
+
+    DiariasPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Diaria"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalPages:
+          type: integer
+      required: [data, total, page, pageSize, totalPages]
+
+    # ── AUDIT ─────────────────────────────────────────────────────────
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        entityType:
+          type: string
+        entityId:
+          type: integer
+        action:
+          type: string
+        userId:
+          type: ["integer", "null"]
+        userName:
+          type: ["string", "null"]
+        timestamp:
+          type: string
+          format: date-time
+        oldValues:
+          type: ["string", "null"]
+        newValues:
+          type: ["string", "null"]
+      required: [id, entityType, entityId, action, timestamp]
+
+    AuditPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalPages:
+          type: integer
+      required: [data, total, page, pageSize, totalPages]
+
+    # ── DASHBOARD ─────────────────────────────────────────────────────
+    DashboardSummary:
+      type: object
+      properties:
+        pendentes:
+          type: integer
+        emAnalise:
+          type: integer
+        aprovadas:
+          type: integer
+        rejeitadas:
+          type: integer
+        disponivelExportacao:
+          type: integer
+        exportadas:
+          type: integer
+        pagas:
+          type: integer
+        canceladas:
+          type: integer
+        totalValorAprovadas:
+          type: ["number", "null"]
+        totalValorExportadas:
+          type: ["number", "null"]
+        totalValorPagas:
+          type: ["number", "null"]
+      required:
+        - pendentes
+        - emAnalise
+        - aprovadas
+        - rejeitadas
+        - disponivelExportacao
+        - exportadas
+        - pagas
+        - canceladas
+
+    TeamMetrics:
+      type: object
+      properties:
+        teamId:
+          type: integer
+        teamName:
+          type: string
+        total:
+          type: integer
+        pendentes:
+          type: integer
+        aprovadas:
+          type: integer
+        rejeitadas:
+          type: integer
+        exportadas:
+          type: integer
+        pagas:
+          type: integer
+        totalValor:
+          type: ["number", "null"]
+      required: [teamId, teamName, total, pendentes, aprovadas, rejeitadas, exportadas, pagas]
+
+    ProviderMetrics:
+      type: object
+      properties:
+        providerId:
+          type: integer
+        providerName:
+          type: string
+        teamName:
+          type: string
+        total:
+          type: integer
+        pendentes:
+          type: integer
+        aprovadas:
+          type: integer
+        exportadas:
+          type: integer
+        pagas:
+          type: integer
+        totalValor:
+          type: ["number", "null"]
+      required: [providerId, providerName, teamName, total, pendentes, aprovadas, exportadas, pagas]
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        diariaId:
+          type: integer
+        providerName:
+          type: string
+        teamName:
+          type: string
+        action:
+          type: string
+        userName:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+      required: [id, diariaId, providerName, teamName, action, userName, timestamp, status]
+
+    # ── REPORTS ───────────────────────────────────────────────────────
+    DiariasReport:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Diaria"
+        totalRecords:
+          type: integer
+        totalValor:
+          type: ["number", "null"]
+        byStatus:
+          type: object
+          additionalProperties:
+            type: integer
+        byTeam:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamMetrics"
+      required: [data, totalRecords, byStatus, byTeam]

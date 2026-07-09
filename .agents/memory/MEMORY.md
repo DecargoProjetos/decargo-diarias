@@ -1,0 +1,3 @@
+- [Diarias SQL pattern](diarias-sql-pattern.md) — use pool.query(query, params) for dynamic-condition queries; sql.raw() does not bind params
+- [Diarias auth design](diarias-auth-design.md) — OIDC via DECARGO ID; prestador access control must check decargoId against provider record
+- [Diarias stack](diarias-stack.md) — Express5 + Drizzle + pg Pool; pool exported from @workspace/db alongside db
