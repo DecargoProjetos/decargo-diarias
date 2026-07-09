@@ -1,0 +1,91 @@
+I'll check what's happening with your build.
+
+Checked environment status
+
+Hide result
+2 of 2 services with issues
+•
+2 recent failures
+@workspace/api-server
+1
+Offline
+@workspace/diarias
+1
+Offline
+Both services failed. Let me get the build logs for each.
+
+Searched build logs: @level:error × 2
+
+Hide result
+17:24:52
+pnpm install --frozen-lockfile --prefer-offline
+17:24:52
+Build Failed: build daemon returned an error < failed to solve: process "pnpm install --frozen-lockfile --prefer-offline" did not complete successfully: exit code: 1 >
+
+Hide result
+17:25:04
+pnpm install --frozen-lockfile --prefer-offline
+17:25:04
+Build Failed: build daemon returned an error < failed to solve: process "pnpm install --frozen-lockfile --prefer-offline" did not complete successfully: exit code: 1 >
+Both services are failing at pnpm install. Let me get more context from the full build logs.
+
+Searched build logs × 2
+
+Hide result
+17:24:46
+loading .
+17:24:46
+copy /root/.local/state/mise
+17:24:46
+copy /etc/mise/config.toml
+17:24:46
+copy /usr/local/bin/mise
+17:24:46
+pnpm --filter @workspace/api-server build
+17:24:46
+copy /root/.cache
+17:24:46
+copy / /app
+17:24:46
+copy / /app
+17:24:46
+copy /mise/installs
+17:24:46
+pnpm install --frozen-lockfile --prefer-offline
+...and 90 more logs
+
+Hide result
+17:24:58
+loading .
+17:24:58
+mkdir /etc/mise
+17:24:58
+mkdir -p /app/node_modules/.cache
+17:24:58
+install apt packages: libatomic1
+17:24:58
+pnpm add -g node-gyp
+17:24:58
+pnpm install --frozen-lockfile --prefer-offline
+17:24:58
+copy /root/.local/state/mise
+17:24:58
+create mise config
+17:24:58
+copy /mise/shims
+17:24:58
+docker-image://ghcr.io/railwayapp/railpack-runtime:mise-2026.7.2
+...and 90 more logs
+Root cause: Both services are failing with the same error:
+
+ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+
+Your pnpm-lock.yaml is out of sync with your pnpm configuration (likely in package.json or .pnpmrc). The overrides field in your config doesn't match what's in the lockfile.
+
+Fix: Update your lockfile to match your current config:
+
+pnpm install --no-frozen-lockfile
+
+Then commit the updated pnpm-lock.yaml to your repo. This will regenerate the lockfile with your current overrides configuration.
+
+Once you push that change, the builds should pass.
