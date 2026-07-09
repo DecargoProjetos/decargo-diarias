@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Controle de Diárias"
+version = "1.0.0"
+id = "artifacts/diarias"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23598
+
+[services.development]
+run = "pnpm --filter @workspace/diarias run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/diarias", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/diarias/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23598"
+BASE_PATH = "/"
