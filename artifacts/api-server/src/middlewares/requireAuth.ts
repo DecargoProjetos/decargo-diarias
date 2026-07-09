@@ -1,4 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
+import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { verifyLocalJwt } from "../lib/localJwt";
 import type { User } from "@workspace/db";
 
@@ -12,8 +14,9 @@ declare global {
 }
 
 /**
- * Extracts and verifies the local Bearer JWT.
- * Populates req.currentUser from the JWT claims — no DB call needed per request.
+ * Extracts and verifies the local Bearer JWT, then revalidates the user
+ * against the database on every request so that deactivation and role changes
+ * take effect immediately (not after token expiry).
  */
 export async function requireAuth(
   req: Request,
@@ -21,8 +24,7 @@ export async function requireAuth(
   next: NextFunction,
 ): Promise<void> {
   const authHeader = req.headers.authorization;
-  const token =
-    authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
   if (!token) {
     res.status(401).json({ error: "Não autenticado" });
@@ -37,21 +39,19 @@ export async function requireAuth(
     return;
   }
 
-  // Shape JWT payload into the User-compatible object routes expect
-  req.currentUser = {
-    id: payload.userId,
-    decargoId: payload.decargoId,
-    email: payload.email,
-    name: payload.name,
-    role: payload.role,
-    teamId: payload.teamId,
-    // Fields not in JWT — safe defaults (routes that need them query the DB directly)
-    active: true,
-    avatarUrl: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  } as User;
+  // Revalidate against the database — catches deactivated users and role changes
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, payload.userId))
+    .limit(1);
 
+  if (!user || !user.active) {
+    res.status(401).json({ error: "Sessão inválida ou usuário inativo" });
+    return;
+  }
+
+  req.currentUser = user;
   next();
 }
 

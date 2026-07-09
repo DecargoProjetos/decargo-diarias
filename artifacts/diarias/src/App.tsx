@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Shell } from '@/components/layout/Shell';
 import { Switch, Route, Router as WouterRouter } from 'wouter';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -35,33 +35,46 @@ const queryClient = new QueryClient({
   },
 });
 
+// ---------------------------------------------------------------------------
+// HandoffGate — must run before any route or authenticated query executes.
+//
+// State machine:
+//   'processing' → hash has #handoff= token, exchange in progress
+//   'error'      → handoff exchange failed (show error, block app)
+//   'idle'       → no handoff in progress, render the app normally
+//
+// The initial state is computed synchronously from window.location.hash so
+// the app never renders in a half-authenticated state before the exchange
+// completes.  Routes and useGetMe only execute when state === 'idle'.
+// ---------------------------------------------------------------------------
 type HandoffState = 'idle' | 'processing' | 'error';
 
-/**
- * HandoffGate — must wrap the entire app.
- * Captures the #handoff=TOKEN fragment before any route renders,
- * exchanges it for a local access_token, then renders the app.
- * If the handoff fails, renders a hard error screen (no app rendered
- * to avoid the redirect loop described in the protocol).
- */
+function extractHandoffToken(): string | null {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#handoff=')) return null;
+  const token = hash.slice('#handoff='.length);
+  // Clear the fragment immediately — token must never sit in the URL
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  return token || null;
+}
+
+// Check synchronously so useState initializer runs before first render
+const pendingToken = extractHandoffToken();
+
 function HandoffGate({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<HandoffState>('idle');
+  const [state, setState] = useState<HandoffState>(() =>
+    pendingToken ? 'processing' : 'idle',
+  );
   const [errorMsg, setErrorMsg] = useState('');
 
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash.startsWith('#handoff=')) return;
-
-    const token = hash.slice('#handoff='.length);
-    // Clear the fragment immediately — never leave the token in the URL
-    window.history.replaceState(null, '', window.location.pathname + window.location.search);
-
-    setState('processing');
+  // Run the exchange exactly once if a token was found
+  useState(() => {
+    if (!pendingToken) return;
 
     fetch('/api/auth/handoff', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token: pendingToken }),
     })
       .then(async (res) => {
         if (!res.ok) {
@@ -72,7 +85,6 @@ function HandoffGate({ children }: { children: React.ReactNode }) {
       })
       .then(({ access_token }: { access_token: string }) => {
         setToken(access_token);
-        // Invalidate all cached queries so they re-run with the new token
         queryClient.invalidateQueries();
         setState('idle');
       })
@@ -80,7 +92,7 @@ function HandoffGate({ children }: { children: React.ReactNode }) {
         setErrorMsg(err.message);
         setState('error');
       });
-  }, []);
+  });
 
   if (state === 'processing') {
     return (
@@ -89,7 +101,9 @@ function HandoffGate({ children }: { children: React.ReactNode }) {
           <Building2 size={36} />
         </div>
         <Loader2 size={28} className="animate-spin text-primary" />
-        <p className="text-sm text-sidebar-foreground/70 tracking-wide">Autenticando via DECARGO ID…</p>
+        <p className="text-sm text-sidebar-foreground/70 tracking-wide">
+          Autenticando via DECARGO ID…
+        </p>
       </div>
     );
   }
