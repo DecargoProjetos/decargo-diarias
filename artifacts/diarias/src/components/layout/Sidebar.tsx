@@ -1,6 +1,7 @@
 import { useGetMe, useLogout } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
+import { clearToken, PEOPLE_PORTAL_URL } from '@/lib/auth';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -24,8 +25,14 @@ export function Sidebar() {
   const handleLogout = () => {
     logout.mutate(undefined, {
       onSuccess: () => {
-        window.location.href = '/api/auth/login';
-      }
+        clearToken();
+        window.location.href = PEOPLE_PORTAL_URL;
+      },
+      onError: () => {
+        // Even on error, clear token and redirect
+        clearToken();
+        window.location.href = PEOPLE_PORTAL_URL;
+      },
     });
   };
 

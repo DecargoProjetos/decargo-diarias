@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { verifyLocalJwt } from "../lib/localJwt";
 import type { User } from "@workspace/db";
 
 declare global {
@@ -12,30 +11,47 @@ declare global {
   }
 }
 
+/**
+ * Extracts and verifies the local Bearer JWT.
+ * Populates req.currentUser from the JWT claims — no DB call needed per request.
+ */
 export async function requireAuth(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const userId = req.session?.userId;
-  if (!userId) {
+  const authHeader = req.headers.authorization;
+  const token =
+    authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (!token) {
     res.status(401).json({ error: "Não autenticado" });
     return;
   }
 
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, userId))
-    .limit(1);
-
-  if (!user || !user.active) {
-    req.session.destroy(() => {});
-    res.status(401).json({ error: "Sessão inválida ou usuário inativo" });
+  let payload;
+  try {
+    payload = verifyLocalJwt(token);
+  } catch {
+    res.status(401).json({ error: "Token inválido ou expirado" });
     return;
   }
 
-  req.currentUser = user;
+  // Shape JWT payload into the User-compatible object routes expect
+  req.currentUser = {
+    id: payload.userId,
+    decargoId: payload.decargoId,
+    email: payload.email,
+    name: payload.name,
+    role: payload.role,
+    teamId: payload.teamId,
+    // Fields not in JWT — safe defaults (routes that need them query the DB directly)
+    active: true,
+    avatarUrl: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as User;
+
   next();
 }
 

@@ -1,116 +1,135 @@
 import { Router } from "express";
-import { getOidcClient, getCallbackUrl, generators } from "../lib/auth";
 import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { verifyHandoffToken } from "../lib/handoff";
+import { signLocalJwt, verifyLocalJwt } from "../lib/localJwt";
 import { requireAuth } from "../middlewares/requireAuth";
 
 const router = Router();
 
-// GET /api/auth/login
-router.get("/login", async (req, res) => {
-  try {
-    const client = await getOidcClient();
-    const state = generators.state();
-    const nonce = generators.nonce();
-    const codeVerifier = generators.codeVerifier();
-    const codeChallenge = generators.codeChallenge(codeVerifier);
-
-    req.session.state = state;
-    req.session.nonce = nonce;
-    req.session.codeVerifier = codeVerifier;
-
-    await new Promise<void>((resolve, reject) =>
-      req.session.save((err) => (err ? reject(err) : resolve())),
-    );
-
-    const authUrl = client.authorizationUrl({
-      scope: "openid profile email",
-      state,
-      nonce,
-      code_challenge: codeChallenge,
-      code_challenge_method: "S256",
-      redirect_uri: getCallbackUrl(),
-    });
-
-    res.redirect(authUrl);
-  } catch (err) {
-    req.log.error({ err }, "OIDC login error");
-    res.status(500).json({ error: "Erro ao iniciar autenticação" });
+/**
+ * Translate the coarse People role into a local app role for new users.
+ * Existing users keep their locally-assigned role.
+ * Default to "prestador" (least privilege) for unknown/new roles.
+ */
+function mapPapelToLocalRole(papel: string): "admin" | "gestor" | "prestador" {
+  switch (papel.toLowerCase()) {
+    case "admin":
+    case "administrador":
+      return "admin";
+    case "gestor":
+    case "manager":
+      return "gestor";
+    default:
+      return "prestador";
   }
-});
+}
 
-// GET /api/auth/callback
-router.get("/callback", async (req, res) => {
+/**
+ * POST /api/auth/handoff
+ * Body: { token: string }   — the JWT that arrived in the URL fragment #handoff=<token>
+ *
+ * 1. Verifies the handoff JWT (issuer, audience, signature, expiry)
+ * 2. Looks up or JIT-provisions the local user by email
+ * 3. Returns a local app JWT
+ */
+router.post("/handoff", async (req, res) => {
+  const { token } = req.body as { token?: string };
+
+  if (!token || typeof token !== "string") {
+    res.status(400).json({ error: "Token ausente" });
+    return;
+  }
+
+  let claims;
   try {
-    const client = await getOidcClient();
-    const params = client.callbackParams(req);
-    const { state, nonce, codeVerifier } = req.session;
+    claims = verifyHandoffToken(token);
+  } catch (err: any) {
+    req.log.warn({ err }, "Handoff token inválido");
+    res.status(401).json({ error: "Token de handoff inválido ou expirado" });
+    return;
+  }
 
-    const tokenSet = await client.callback(getCallbackUrl(), params, {
-      state,
-      nonce,
-      code_verifier: codeVerifier,
-    });
+  const email = claims.email.toLowerCase();
 
-    const claims = tokenSet.claims();
-    const decargoId = claims.sub;
-    const name = (claims.name as string) || (claims.preferred_username as string) || "Usuário";
-    const email = (claims.email as string) || "";
-    const avatarUrl = (claims.picture as string) || null;
+  // Lookup user by email (canonical key for matching)
+  let [user] = await db
+    .select()
+    .from(usersTable)
+    .where(sql`lower(${usersTable.email}) = ${email}`)
+    .limit(1);
 
-    // Upsert user
-    let [user] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.decargoId, decargoId))
-      .limit(1);
-
-    if (!user) {
-      const [created] = await db
-        .insert(usersTable)
-        .values({ decargoId, name, email, role: "prestador", avatarUrl })
-        .returning();
-      user = created;
-    } else {
-      const [updated] = await db
-        .update(usersTable)
-        .set({ name, email, avatarUrl, updatedAt: new Date() })
-        .where(eq(usersTable.id, user.id))
-        .returning();
-      user = updated;
+  if (!user) {
+    // JIT provision — new user, default to least-privilege role
+    const [created] = await db
+      .insert(usersTable)
+      .values({
+        decargoId: String(claims.id_usuario),
+        name: claims.name,
+        email,
+        role: mapPapelToLocalRole(claims.papel),
+        active: true,
+      })
+      .returning();
+    user = created;
+    req.log.info({ userId: user.id, email }, "Usuário JIT-provisionado via handoff");
+  } else {
+    if (!user.active) {
+      res.status(403).json({ error: "Usuário inativo. Contate o administrador." });
+      return;
     }
-
-    req.session.userId = user.id;
-    delete req.session.state;
-    delete req.session.nonce;
-    delete req.session.codeVerifier;
-
-    await new Promise<void>((resolve, reject) =>
-      req.session.save((err) => (err ? reject(err) : resolve())),
-    );
-
-    res.redirect("/");
-  } catch (err) {
-    req.log.error({ err }, "OIDC callback error");
-    res.redirect("/?error=auth_failed");
+    // Keep local role — do not overwrite with People role
+    // Update name if changed
+    if (user.name !== claims.name) {
+      await db
+        .update(usersTable)
+        .set({ name: claims.name, updatedAt: new Date() })
+        .where(eq(usersTable.id, user.id));
+      user = { ...user, name: claims.name };
+    }
   }
-});
 
-// POST /api/auth/logout
-router.post("/logout", (req, res) => {
-  req.session.destroy((err) => {
-    if (err) req.log.error({ err }, "Session destroy error");
-    res.json({ message: "Sessão encerrada" });
+  const accessToken = signLocalJwt({
+    userId: user.id,
+    decargoId: user.decargoId,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    teamId: user.teamId,
+  });
+
+  res.json({
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: 8 * 60 * 60,
+    usuario: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      teamId: user.teamId,
+    },
   });
 });
 
-// GET /api/auth/me
+/**
+ * POST /api/auth/logout
+ * Stateless — client just drops the token. We return 200 for consistency.
+ */
+router.post("/logout", (_req, res) => {
+  res.json({ message: "Sessão encerrada" });
+});
+
+/**
+ * GET /api/auth/me
+ * Returns the current user. requireAuth middleware populates req.currentUser from Bearer JWT.
+ */
 router.get("/me", requireAuth, async (req, res) => {
   const u = req.currentUser!;
-  // Fetch team name
+  const { teamsTable } = await import("@workspace/db");
+
   let teamName: string | null = null;
   if (u.teamId) {
-    const { teamsTable } = await import("@workspace/db");
     const [team] = await db
       .select({ name: teamsTable.name })
       .from(teamsTable)
@@ -118,6 +137,7 @@ router.get("/me", requireAuth, async (req, res) => {
       .limit(1);
     teamName = team?.name ?? null;
   }
+
   res.json({
     id: u.id,
     decargoId: u.decargoId,
@@ -126,7 +146,7 @@ router.get("/me", requireAuth, async (req, res) => {
     role: u.role,
     teamId: u.teamId,
     teamName,
-    avatarUrl: u.avatarUrl,
+    avatarUrl: u.avatarUrl ?? null,
     active: u.active,
     createdAt: u.createdAt,
   });
