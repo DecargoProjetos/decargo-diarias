@@ -6,12 +6,6 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 import { getToken, setToken, PEOPLE_PORTAL_URL } from '@/lib/auth';
-
-// Point all API calls (including handoff) to the api-server.
-// In dev (Replit) the api-server is on the same host; VITE_API_URL is empty.
-// In production (Railway) VITE_API_URL = "https://workspaceapi-server-production.up.railway.app"
-const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
-setBaseUrl(API_BASE || null);
 import { Building2, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NotFound from '@/pages/not-found';
@@ -26,6 +20,21 @@ import UsersList from '@/pages/UsersList';
 import Reports from '@/pages/Reports';
 import AuditLogs from '@/pages/AuditLogs';
 import Login from '@/pages/Login';
+
+// ---------------------------------------------------------------------------
+// API base URL — points all generated client calls + handoff fetch to the
+// correct server.  In dev (Replit) the api-server is co-hosted; no base URL
+// needed.  In production (Railway) each service is a separate origin.
+//
+// VITE_API_URL must be an https:// URL when provided; reject anything else to
+// prevent accidental token leakage to an unintended origin.
+// ---------------------------------------------------------------------------
+const rawApiUrl = (import.meta.env.VITE_API_URL ?? '').trim().replace(/\/+$/, '');
+if (rawApiUrl && !/^https?:\/\/./.test(rawApiUrl)) {
+  throw new Error(`VITE_API_URL must be an absolute http(s) URL, got: "${rawApiUrl}"`);
+}
+const API_BASE = rawApiUrl;
+setBaseUrl(API_BASE || null);
 
 // Configure API client to send Bearer token on every request
 setAuthTokenGetter(() => getToken());
