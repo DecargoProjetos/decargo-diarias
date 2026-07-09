@@ -4,8 +4,14 @@ import { Switch, Route, Router as WouterRouter } from 'wouter';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { setAuthTokenGetter } from '@workspace/api-client-react';
+import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 import { getToken, setToken, PEOPLE_PORTAL_URL } from '@/lib/auth';
+
+// Point all API calls (including handoff) to the api-server.
+// In dev (Replit) the api-server is on the same host; VITE_API_URL is empty.
+// In production (Railway) VITE_API_URL = "https://workspaceapi-server-production.up.railway.app"
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+setBaseUrl(API_BASE || null);
 import { Building2, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NotFound from '@/pages/not-found';
@@ -71,7 +77,7 @@ function HandoffGate({ children }: { children: React.ReactNode }) {
   useState(() => {
     if (!pendingToken) return;
 
-    fetch('/api/auth/handoff', {
+    fetch(`${API_BASE}/api/auth/handoff`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: pendingToken }),
