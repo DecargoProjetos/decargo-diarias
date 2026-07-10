@@ -90,6 +90,19 @@ paths:
                 items:
                   $ref: "#/components/schemas/User"
 
+  /users/sync:
+    post:
+      operationId: syncUsers
+      tags: [users]
+      summary: Sync users (funcionários) from DECARGO People (admin only)
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSyncResult"
+
   /users/{id}:
     get:
       operationId: getUser
@@ -843,6 +856,19 @@ components:
         deactivated:
           type: integer
       required: [synced, created, updated, deactivated]
+
+    UserSyncResult:
+      type: object
+      properties:
+        synced:
+          type: integer
+        created:
+          type: integer
+        updated:
+          type: integer
+        skipped:
+          type: integer
+      required: [synced, created, updated, skipped]
 
     # ── DIÁRIAS ──────────────────────────────────────────────────────────
     Diaria:

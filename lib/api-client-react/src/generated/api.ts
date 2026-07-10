@@ -41,6 +41,7 @@ import type {
   Provider,
   ProviderMetrics,
   SyncResult,
+  UserSyncResult,
   Team,
   TeamInput,
   TeamMetrics,
@@ -1048,6 +1049,55 @@ export const useSyncProviders = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSyncProvidersMutationOptions(options));
+    }
+
+export const getSyncUsersUrl = () => {
+  return `/api/users/sync`
+}
+
+/**
+ * @summary Sync users (funcionários) from DECARGO People (admin only)
+ */
+export const syncUsers = async ( options?: RequestInit): Promise<UserSyncResult> => {
+  return customFetch<UserSyncResult>(getSyncUsersUrl(),
+  {
+    ...options,
+    method: 'POST'
+  }
+);}
+
+export const getSyncUsersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext> => {
+
+const mutationKey = ['syncUsers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncUsers>>, void> = () => {
+          return  syncUsers(requestOptions)
+        }
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncUsersMutationResult = NonNullable<Awaited<ReturnType<typeof syncUsers>>>
+    export type SyncUsersMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Sync users (funcionários) from DECARGO People (admin only)
+ */
+export const useSyncUsers = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncUsers>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSyncUsersMutationOptions(options));
     }
 
 export const getGetProviderUrl = (id: number,) => {

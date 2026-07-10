@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { useGetMe, useListUsers, useUpdateUser, useListTeams } from '@workspace/api-client-react';
+import { useGetMe, useListUsers, useUpdateUser, useListTeams, useSyncUsers } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { RefreshCw } from 'lucide-react';
 
 export default function UsersList() {
   const { data: currentUser } = useGetMe();
-  const { data: users, isLoading, refetch } = useListUsers();
+  const { data: users, isLoading, refetch } = useListUsers({ query: { enabled: currentUser?.role === 'admin' } });
   const { data: teams } = useListTeams();
   const updateUser = useUpdateUser();
+  const syncUsers = useSyncUsers();
   const { toast } = useToast();
 
   if (currentUser?.role !== 'admin') {
@@ -45,11 +48,30 @@ export default function UsersList() {
     });
   };
 
+  const handleSync = () => {
+    syncUsers.mutate(undefined, {
+      onSuccess: (result) => {
+        toast({
+          title: 'Sincronização concluída',
+          description: `${result.synced} funcionários processados — ${result.created} novos, ${result.updated} atualizados${result.skipped ? `, ${result.skipped} ignorados` : ''}.`,
+        });
+        refetch();
+      },
+      onError: () => toast({ title: 'Erro na sincronização', variant: 'destructive' }),
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Usuários</h1>
-        <p className="text-muted-foreground mt-1">Gerencie os acessos ao sistema.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Usuários</h1>
+          <p className="text-muted-foreground mt-1">Gerencie os acessos ao sistema.</p>
+        </div>
+        <Button onClick={handleSync} disabled={syncUsers.isPending} className="bg-indigo-600 hover:bg-indigo-700">
+          <RefreshCw className={`w-4 h-4 mr-2 ${syncUsers.isPending ? 'animate-spin' : ''}`} />
+          Sincronizar com DECARGO People
+        </Button>
       </div>
 
       <Card>

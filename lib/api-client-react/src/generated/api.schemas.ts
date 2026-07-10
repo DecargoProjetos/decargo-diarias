@@ -105,6 +105,13 @@ export interface SyncResult {
   deactivated: number;
 }
 
+export interface UserSyncResult {
+  synced: number;
+  created: number;
+  updated: number;
+  skipped: number;
+}
+
 export type DiariaStatus = typeof DiariaStatus[keyof typeof DiariaStatus];
 
 
