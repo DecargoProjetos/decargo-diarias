@@ -86,14 +86,24 @@ function HandoffGate({ children }: { children: React.ReactNode }) {
   useState(() => {
     if (!pendingToken) return;
 
-    fetch(`${API_BASE}/api/auth/handoff`, {
+    const handoffUrl = `${API_BASE}/api/auth/handoff`;
+    // eslint-disable-next-line no-console
+    console.log('[handoff] API_BASE =', JSON.stringify(API_BASE));
+    // eslint-disable-next-line no-console
+    console.log('[handoff] POST →', handoffUrl);
+
+    fetch(handoffUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: pendingToken }),
     })
       .then(async (res) => {
+        // eslint-disable-next-line no-console
+        console.log('[handoff] response status =', res.status, 'url =', res.url);
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
+          // eslint-disable-next-line no-console
+          console.error('[handoff] error body =', body);
           throw new Error(body?.error || `Falha no handoff (${res.status})`);
         }
         return res.json();
