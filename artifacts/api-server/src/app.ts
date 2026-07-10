@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -36,5 +36,20 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// 404 handler — keeps responses JSON for all unmatched routes
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// Centralised error handler — returns structured JSON instead of Express default HTML
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  logger.error({ err }, "Unhandled error");
+  const status = (err as any).status ?? (err as any).statusCode ?? 500;
+  const message =
+    process.env.NODE_ENV === "production" ? "Internal server error" : err.message;
+  res.status(status).json({ error: message });
+});
 
 export default app;
