@@ -11,7 +11,10 @@ import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
 export default function TeamsList() {
   const { data: user } = useGetMe();
   const { data: teams, isLoading, refetch } = useListTeams();
-  const { data: users } = useListUsers();
+  // Only fire the admin-only /api/users endpoint once we know the viewer is an
+  // admin; avoids a noisy 403 for gestor/prestador users who land here and see
+  // the "Acesso negado" screen before the role is confirmed.
+  const { data: users } = useListUsers({ query: { enabled: user?.role === 'admin' } });
   const { toast } = useToast();
   
   const createTeam = useCreateTeam();
