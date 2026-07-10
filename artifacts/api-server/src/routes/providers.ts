@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db, providersTable, teamsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
+import { fetchPrestadores } from "../lib/peopleClient";
 
 const router = Router();
 
@@ -41,20 +42,74 @@ router.get("/", requireAuth, async (req, res) => {
 
 // POST /api/providers/sync (admin)
 router.post("/sync", requireRole("admin"), async (req, res) => {
-  // Placeholder sync — in production, call the DECARGO People API
-  // For now, returns a no-op result
   const now = new Date();
-  req.log.info("Provider sync triggered (stub)");
+  req.log.info("Provider sync started");
+
+  const remote = await fetchPrestadores();
+
+  let created = 0;
+  let updated = 0;
+  let deactivated = 0;
+
+  // Upsert each remote provider
+  for (const p of remote) {
+    const decargoId = String(p.id_prestador);
+
+    const [existing] = await db
+      .select({ id: providersTable.id, name: providersTable.name, active: providersTable.active })
+      .from(providersTable)
+      .where(eq(providersTable.decargoId, decargoId))
+      .limit(1);
+
+    if (!existing) {
+      await db.insert(providersTable).values({
+        decargoId,
+        name: p.titular_do_contrato,
+        active: p.tem_contrato_ativo,
+        syncedAt: now,
+      });
+      created++;
+    } else {
+      await db
+        .update(providersTable)
+        .set({
+          name: p.titular_do_contrato,
+          active: p.tem_contrato_ativo,
+          syncedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(providersTable.id, existing.id));
+      updated++;
+    }
+  }
+
+  // Deactivate providers no longer returned by People
+  const remoteIds = new Set(remote.map((p) => String(p.id_prestador)));
+  const allLocal = await db
+    .select({ id: providersTable.id, decargoId: providersTable.decargoId, active: providersTable.active })
+    .from(providersTable);
+
+  for (const local of allLocal) {
+    if (!remoteIds.has(local.decargoId) && local.active) {
+      await db
+        .update(providersTable)
+        .set({ active: false, syncedAt: now, updatedAt: now })
+        .where(eq(providersTable.id, local.id));
+      deactivated++;
+    }
+  }
+
+  req.log.info({ created, updated, deactivated }, "Provider sync complete");
 
   await logAudit({
     entityType: "provider",
     entityId: 0,
     action: "sync",
     userId: req.currentUser!.id,
-    newValues: { timestamp: now },
+    newValues: { synced: remote.length, created, updated, deactivated, timestamp: now },
   });
 
-  res.json({ synced: 0, created: 0, updated: 0, deactivated: 0 });
+  res.json({ synced: remote.length, created, updated, deactivated });
 });
 
 // GET /api/providers/:id

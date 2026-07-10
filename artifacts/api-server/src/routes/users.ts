@@ -1,9 +1,85 @@
 import { Router } from "express";
 import { db, usersTable, teamsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
+import { logAudit } from "../lib/audit";
+import { fetchFuncionarios } from "../lib/peopleClient";
 
 const router = Router();
+
+// POST /api/users/sync (admin only)
+// Fetches all active funcionários from DECARGO People and upserts them into
+// the local users table.  Only name and email are updated for existing rows —
+// role and teamId remain under admin control.  New users receive the default
+// "prestador" role (least-privilege); admins promote them as needed.
+router.post("/sync", requireRole("admin"), async (req, res) => {
+  const now = new Date();
+  req.log.info("User sync started");
+
+  const remote = await fetchFuncionarios();
+
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const f of remote) {
+    const decargoId = String(f.id_funcionario);
+    const email = f.email_principal?.toLowerCase() ?? null;
+    const name = f.nome;
+
+    // Primary lookup by decargoId (id_funcionario), then by email so that users
+    // who have already logged in via handoff (decargoId = id_usuario) are not
+    // duplicated.
+    let [existing] = await db
+      .select({ id: usersTable.id, decargoId: usersTable.decargoId, name: usersTable.name, email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.decargoId, decargoId))
+      .limit(1);
+
+    if (!existing && email) {
+      [existing] = await db
+        .select({ id: usersTable.id, decargoId: usersTable.decargoId, name: usersTable.name, email: usersTable.email })
+        .from(usersTable)
+        .where(sql`lower(${usersTable.email}) = ${email}`)
+        .limit(1);
+    }
+
+    if (!existing) {
+      if (!email) {
+        // Cannot provision without an email — skip
+        skipped++;
+        continue;
+      }
+      await db.insert(usersTable).values({
+        decargoId,
+        name,
+        email,
+        role: "prestador",
+        active: true,
+      });
+      created++;
+    } else {
+      // Update name and email only; preserve role, teamId, and active flag
+      await db
+        .update(usersTable)
+        .set({ name, ...(email ? { email } : {}), updatedAt: now })
+        .where(eq(usersTable.id, existing.id));
+      updated++;
+    }
+  }
+
+  req.log.info({ created, updated, skipped }, "User sync complete");
+
+  await logAudit({
+    entityType: "user",
+    entityId: 0,
+    action: "sync",
+    userId: req.currentUser!.id,
+    newValues: { synced: remote.length, created, updated, skipped, timestamp: now },
+  });
+
+  res.json({ synced: remote.length, created, updated, skipped });
+});
 
 // GET /api/users (admin only)
 router.get("/", requireRole("admin"), async (req, res) => {

@@ -1,0 +1,66 @@
+Aqui está o quadro completo do que já existe hoje:
+
+1. Endpoints disponíveis
+Base URL em produção: a URL Railway do People (ex.: https://sistema-rh.up.railway.app).
+
+Endpoint	Protegido por	O que retorna
+GET /api/funcionarios	JWT de usuário com permissão funcionarios.pode_visualizar	Array paginado — tabela completa de funcionários + campos de admissão/status ativo
+GET /api/prestadores	JWT de usuário com permissão prestadores.pode_visualizar	Array completo + tem_contrato_ativo, data_inicio_contrato, data_fim_contrato
+GET /api/vinculos-ativos	JWT de qualquer usuário logado	Lista simplificada: { tipo, id, id_funcionario, nome } — todos os ativos (funcs + prestadores) sem paginação
+GET /central/acessos?email=	Header x-api-key: <CP_API_KEY>	Para um e-mail: acessos DECARGO ID + claims canônicos
+2. Autenticação
+Não existe OAuth2 client_credentials no People. O modelo atual é:
+
+JWT de usuário — você faz POST /api/auth/login com { login, senha } de uma conta de serviço, recebe um token JWT e envia como Authorization: Bearer <token> em cada request. Funciona para /api/funcionarios e /api/prestadores, mas o token expira e precisa renovar.
+x-api-key — somente o endpoint /central/acessos aceita isso hoje. Funciona com header x-api-key: <CP_API_KEY> (mesma chave do CP), sem expiração.
+Para um sync machine-to-machine robusto, a recomendação seria criar um endpoint dedicado protegido por x-api-key (igual ao /central/acessos) — assim não depende de sessão de usuário e nunca expira. Posso implementar isso se quiser.
+
+3. Formato de resposta
+GET /api/vinculos-ativos (mais simples, ideal para sync de "quem está ativo"):
+
+[
+  { "tipo": "FUNCIONARIO", "id": 42, "id_funcionario": 7, "nome": "João Silva (DECARGO)" },
+  { "tipo": "PRESTADOR",   "id": 15, "id_funcionario": null, "nome": "Transportes ABC" }
+]
+
+⚠️ Não inclui e-mail nem papel/role.
+
+GET /api/funcionarios?todos=false (ativos, paginado — inclui e-mail):
+
+{
+  "total": 120,
+  "data": [
+    {
+      "id_funcionario": 7,
+      "nome": "João Silva",
+      "cpf": "123.456.789-00",
+      "email_principal": "joao.silva@empresa.com",
+      "data_nascimento": "1985-03-15",
+      "ativo": true,
+      ...
+    }
+  ]
+}
+
+GET /api/prestadores?ativo=true:
+
+[
+  {
+    "id_prestador": 15,
+    "titular_do_contrato": "Transportes ABC",
+    "cnpj": "12.345.678/0001-99",
+    "tem_contrato_ativo": true,
+    "data_inicio_contrato": "2024-01-01",
+    "data_fim_contrato": null
+  }
+]
+
+Recomendação para o sync
+Depende do que o novo projeto precisa sincronizar:
+
+Cenário	Abordagem
+Só saber quem está ativo (por nome/ID)	GET /api/vinculos-ativos com JWT de conta de serviço
+Lista de funcionários com e-mail para provisionar contas	GET /api/funcionarios?todos=false&limit=100 paginado
+Sincronizar papéis DECARGO ID (quem tem acesso a qual app)	GET /central/acessos?email= com x-api-key (por e-mail)
+Sync completo sem gerenciar sessão JWT	Criar endpoint dedicado GET /central/pessoas-sync com x-api-key — posso implementar
+Me fala qual é o caso do novo projeto e qual dado exatamente ele precisa importar, que direciono a solução certa.

@@ -71,7 +71,9 @@ export default function TeamsList() {
     }
   };
 
-  const gestores = users?.filter(u => u.role === 'gestor' || u.role === 'admin') || [];
+  // Show all active users — any user can be designated as team manager.
+  // Role assignment happens separately in the Users admin page.
+  const gestores = users?.filter(u => u.active !== false) || [];
 
   return (
     <div className="space-y-6">
