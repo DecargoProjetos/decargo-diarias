@@ -200,21 +200,15 @@ export async function probeContratosEndpoints(): Promise<
     };
   }
 
-  // Round 2 showed the flat prestadores list already has contract dates
-  // (data_inicio_contrato / data_fim_contrato / tem_contrato_ativo) but NOT
-  // an "objeto do contrato" (Motorista/Ajudante/Transporte de Mercadorias)
-  // field, and every /contratos nested guess 404s. Try the single-record
-  // detail endpoint (may return richer data than the list) and the API's
-  // own docs/schema, which would settle this definitively instead of more
-  // guessing.
+  // Confirmed via the People web app's own Network tab: the "Contratos de
+  // Prestação" screen calls /api/prestadores/contratos-prestacao (the
+  // contract records, including "Objeto do Contrato") and
+  // /api/prestadores/objeto-contratual (likely the lookup list of possible
+  // "objeto do contrato" values). Probe both directly instead of guessing.
   const candidates = [
-    ...sampleIds.map((id) => `/api/prestadores/${id}`),
-    "/api/docs-json",
-    "/api/openapi.json",
-    "/openapi.json",
-    "/api/swagger.json",
-    "/swagger.json",
-    "/api/docs",
+    "/api/prestadores/contratos-prestacao?limit=3",
+    "/api/prestadores/contratos-prestacao",
+    "/api/prestadores/objeto-contratual",
   ];
 
   for (const path of candidates) {
