@@ -3,3 +3,5 @@
 - [Diarias stack](diarias-stack.md) — Express5 + Drizzle + pg Pool; pool exported from @workspace/db alongside db
 - [Diarias Railway deploy target](diarias-railway-deploy.md) — prod is Railway via GitHub, not Replit Deployments; a push doesn't prove it deployed — check Railway's Deployments tab
 - [Diarias People sync bugs](diarias-people-sync-bugs.md) — unguarded req.body access masked as generic 500; unvalidated login token shape masked as false 401s
+- [Diarias funcionario role](diarias-funcionario-role.md) — funcionario treated like prestador everywhere role-scoping/financials are checked; no provider record means scoped queries safely return empty
+- [Diarias hard-delete FK](diarias-hard-delete-fk.md) — diarias.created_by/provider_id have no ON DELETE rule; user/provider delete must catch FK violation and suggest deactivating instead
