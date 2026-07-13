@@ -15,7 +15,7 @@ import DiariasList from '@/pages/DiariasList';
 import DiariaForm from '@/pages/DiariaForm';
 import DiariaDetails from '@/pages/DiariaDetails';
 import TeamsList from '@/pages/TeamsList';
-import ProvidersList from '@/pages/ProvidersList';
+import PeopleList from '@/pages/PeopleList';
 import UsersList from '@/pages/UsersList';
 import Reports from '@/pages/Reports';
 import AuditLogs from '@/pages/AuditLogs';
@@ -157,7 +157,7 @@ function Router() {
         <Route path="/diarias/:id/editar" component={DiariaForm} />
         <Route path="/diarias/:id" component={DiariaDetails} />
         <Route path="/equipes" component={TeamsList} />
-        <Route path="/prestadores" component={ProvidersList} />
+        <Route path="/pessoas" component={PeopleList} />
         <Route path="/usuarios" component={UsersList} />
         <Route path="/relatorios" component={Reports} />
         <Route path="/auditoria" component={AuditLogs} />

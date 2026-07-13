@@ -41,7 +41,7 @@ export function Sidebar() {
     { name: 'Diárias', path: '/diarias', icon: FileText, roles: ['admin', 'gestor', 'prestador'] },
     { name: 'Relatórios', path: '/relatorios', icon: BarChart3, roles: ['admin', 'gestor'] },
     { name: 'Equipes', path: '/equipes', icon: Building2, roles: ['admin'] },
-    { name: 'Prestadores', path: '/prestadores', icon: UserSquare2, roles: ['admin'] },
+    { name: 'Pessoas', path: '/pessoas', icon: UserSquare2, roles: ['admin'] },
     { name: 'Usuários', path: '/usuarios', icon: Users, roles: ['admin'] },
     { name: 'Auditoria', path: '/auditoria', icon: ShieldAlert, roles: ['admin'] },
   ];
