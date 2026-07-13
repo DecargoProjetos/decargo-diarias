@@ -37,6 +37,8 @@ export * from './teamInput';
 export * from './teamMetrics';
 export * from './teamUpdate';
 export * from './user';
+export * from './userCreate';
+export * from './userCreateRole';
 export * from './userRole';
 export * from './userSyncResult';
 export * from './userSyncResultDebugAtivoBreakdown';

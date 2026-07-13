@@ -1,17 +1,21 @@
 import { useState } from 'react';
-import { useGetMe, useListUsers, useUpdateUser, useDeleteUser, useListTeams, useSyncUsers } from '@workspace/api-client-react';
+import { useGetMe, useListUsers, useCreateUser, useUpdateUser, useDeleteUser, useListTeams, useSyncUsers } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, Edit2, Trash2, Save, X } from 'lucide-react';
+import { RefreshCw, Edit2, Trash2, Save, X, UserPlus } from 'lucide-react';
+
+const EMPTY_NEW_USER = { name: '', email: '', role: 'prestador', teamId: '' };
 
 export default function UsersList() {
   const { data: currentUser } = useGetMe();
   const { data: users, isLoading, refetch } = useListUsers({ query: { enabled: currentUser?.role === 'admin' } });
   const { data: teams } = useListTeams();
+  const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
   const syncUsers = useSyncUsers();
@@ -19,6 +23,8 @@ export default function UsersList() {
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '' });
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newUser, setNewUser] = useState(EMPTY_NEW_USER);
 
   if (currentUser?.role !== 'admin') {
     return <div>Acesso negado.</div>;
@@ -79,6 +85,29 @@ export default function UsersList() {
     });
   };
 
+  const handleCreateUser = () => {
+    if (!newUser.name || !newUser.email || !newUser.role) return;
+    createUser.mutate(
+      {
+        data: {
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role as any,
+          teamId: newUser.teamId ? Number(newUser.teamId) : null,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast({ title: 'Usuário criado com sucesso.' });
+          setIsCreateOpen(false);
+          setNewUser(EMPTY_NEW_USER);
+          refetch();
+        },
+        onError: (err: any) => toast({ title: 'Erro ao criar usuário', description: err?.message, variant: 'destructive' }),
+      }
+    );
+  };
+
   const handleSync = () => {
     syncUsers.mutate(undefined, {
       onSuccess: (result) => {
@@ -99,11 +128,78 @@ export default function UsersList() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Usuários</h1>
           <p className="text-muted-foreground mt-1">Gerencie os acessos ao sistema.</p>
         </div>
-        <Button onClick={handleSync} disabled={syncUsers.isPending} className="bg-indigo-600 hover:bg-indigo-700">
-          <RefreshCw className={`w-4 h-4 mr-2 ${syncUsers.isPending ? 'animate-spin' : ''}`} />
-          Sincronizar com DECARGO People
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setNewUser(EMPTY_NEW_USER); setIsCreateOpen(true); }}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Novo usuário
+          </Button>
+          <Button onClick={handleSync} disabled={syncUsers.isPending} className="bg-indigo-600 hover:bg-indigo-700">
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncUsers.isPending ? 'animate-spin' : ''}`} />
+            Sincronizar com DECARGO People
+          </Button>
+        </div>
       </div>
+
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Nome</label>
+              <Input
+                value={newUser.name}
+                onChange={e => setNewUser({ ...newUser, name: e.target.value })}
+                placeholder="Nome completo"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">E-mail</label>
+              <Input
+                type="email"
+                value={newUser.email}
+                onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                placeholder="email@exemplo.com"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Papel</label>
+              <select
+                className="w-full h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
+                value={newUser.role}
+                onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+              >
+                <option value="admin">Administrador</option>
+                <option value="gestor">Gestor</option>
+                <option value="prestador">Prestador</option>
+                <option value="funcionario">Funcionário</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Equipe Alocada</label>
+              <select
+                className="w-full h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
+                value={newUser.teamId}
+                onChange={e => setNewUser({ ...newUser, teamId: e.target.value })}
+              >
+                <option value="">Nenhuma / Todas</option>
+                {teams?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={handleCreateUser}
+              disabled={!newUser.name || !newUser.email || createUser.isPending}
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              Criar usuário
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardContent className="p-0">

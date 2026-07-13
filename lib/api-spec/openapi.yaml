@@ -90,6 +90,30 @@ paths:
                 items:
                   $ref: "#/components/schemas/User"
 
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Manually create a user (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /users/sync:
     post:
       operationId: syncUsers
@@ -858,6 +882,22 @@ components:
           type: string
         email:
           type: string
+
+    UserCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, gestor, prestador, funcionario]
+        teamId:
+          type: ["integer", "null"]
+        active:
+          type: boolean
+      required: [name, email, role]
 
     # ── TEAMS ────────────────────────────────────────────────────────────
     Team:

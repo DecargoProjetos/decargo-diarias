@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Router } from "express";
 import { db, usersTable, teamsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
@@ -6,6 +7,8 @@ import { logAudit } from "../lib/audit";
 import { fetchFuncionarios } from "../lib/peopleClient";
 
 const router = Router();
+
+const VALID_ROLES = ["admin", "gestor", "prestador", "funcionario"];
 
 // POST /api/users/sync (admin only)
 // Fetches all active funcionários from DECARGO People and upserts them into
@@ -112,6 +115,64 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   }
 });
 
+// POST /api/users (admin only) — manual creation for people not yet synced
+// from DECARGO People (or who won't be, e.g. external collaborators). A
+// synthetic decargoId is assigned since the column is NOT NULL/UNIQUE; if
+// this person later logs in via DECARGO ID, auth.ts's email-fallback lookup
+// rebinds the row to their real decargoId automatically.
+router.post("/", requireRole("admin"), async (req, res) => {
+  const { name, email, role, teamId, active } = req.body as {
+    name?: string;
+    email?: string;
+    role?: string;
+    teamId?: number | null;
+    active?: boolean;
+  };
+
+  if (!name || !email || !role) {
+    res.status(400).json({ error: "Nome, e-mail e papel são obrigatórios." });
+    return;
+  }
+  if (!VALID_ROLES.includes(role)) {
+    res.status(400).json({ error: `Papel inválido. Use um de: ${VALID_ROLES.join(", ")}` });
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase();
+  const [existing] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(sql`lower(${usersTable.email}) = ${normalizedEmail}`)
+    .limit(1);
+
+  if (existing) {
+    res.status(409).json({ error: "Já existe um usuário com este e-mail." });
+    return;
+  }
+
+  const [created] = await db
+    .insert(usersTable)
+    .values({
+      decargoId: `manual-${randomUUID()}`,
+      name,
+      email: normalizedEmail,
+      role,
+      teamId: teamId ?? null,
+      active: active ?? true,
+    })
+    .returning();
+
+  await logAudit({
+    entityType: "user",
+    entityId: created.id,
+    action: "criado manualmente",
+    userId: req.currentUser!.id,
+    newValues: { name, email: normalizedEmail, role, teamId: teamId ?? null },
+  });
+
+  res.status(201).json(created);
+});
+
 // GET /api/users (admin only)
 router.get("/", requireRole("admin"), async (req, res) => {
   const users = await db
@@ -180,7 +241,6 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
     email?: string;
   };
 
-  const VALID_ROLES = ["admin", "gestor", "prestador", "funcionario"];
   if (role !== undefined && !VALID_ROLES.includes(role)) {
     res.status(400).json({ error: `Papel inválido. Use um de: ${VALID_ROLES.join(", ")}` });
     return;

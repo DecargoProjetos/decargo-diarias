@@ -62,6 +62,25 @@ export interface UserUpdate {
   email?: string;
 }
 
+export type UserCreateRole = typeof UserCreateRole[keyof typeof UserCreateRole];
+
+
+export const UserCreateRole = {
+  admin: 'admin',
+  gestor: 'gestor',
+  prestador: 'prestador',
+  funcionario: 'funcionario',
+} as const;
+
+export interface UserCreate {
+  name: string;
+  email: string;
+  role: UserCreateRole;
+  /** @nullable */
+  teamId?: number | null;
+  active?: boolean;
+}
+
 export interface Team {
   id: number;
   name: string;

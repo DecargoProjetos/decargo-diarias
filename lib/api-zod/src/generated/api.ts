@@ -60,6 +60,31 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem)
 
 
 /**
+ * @summary Manually create a user (admin only)
+ */
+export const CreateUserBody = zod.object({
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'gestor', 'prestador', 'funcionario']),
+  "teamId": zod.number().nullish(),
+  "active": zod.boolean().optional()
+})
+
+export const CreateUserResponse = zod.object({
+  "id": zod.number(),
+  "decargoId": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'gestor', 'prestador', 'funcionario']),
+  "teamId": zod.number().nullish(),
+  "teamName": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Sync users (funcionários) from DECARGO People (admin only)
  */
 export const SyncUsersResponse = zod.object({
