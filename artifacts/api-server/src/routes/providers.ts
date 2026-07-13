@@ -3,7 +3,7 @@ import { db, providersTable, teamsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
-import { fetchPrestadores } from "../lib/peopleClient";
+import { fetchPrestadores, probeContratosEndpoints } from "../lib/peopleClient";
 
 const router = Router();
 
@@ -115,6 +115,23 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
     req.log.error({ err }, "Provider sync failed");
     res.status(502).json({
       error: `Falha ao sincronizar prestadores: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+});
+
+// GET /api/providers/debug-contratos (admin only)
+// TEMP DEBUG: the user confirmed "objeto do contrato" lives in People's
+// "Contratos" section, which isn't part of /api/prestadores. This probes a
+// handful of plausible endpoint paths and reports which one(s) work, so we
+// can confirm the real path + field name without guessing blindly. Remove
+// this route once that's confirmed and the real filter is implemented.
+router.get("/debug-contratos", requireRole("admin"), async (_req, res) => {
+  try {
+    const results = await probeContratosEndpoints();
+    res.json(results);
+  } catch (err) {
+    res.status(502).json({
+      error: `Falha ao sondar endpoints de contratos: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
 });

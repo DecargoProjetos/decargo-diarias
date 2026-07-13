@@ -167,6 +167,41 @@ export async function fetchPrestadores(): Promise<Prestador[]> {
   return request<Prestador[]>("/api/prestadores?ativo=true");
 }
 
+// TEMP DEBUG: the user confirmed "objeto do contrato" (Motorista / Ajudante /
+// Transporte de Mercadorias) lives in the People "Contratos" section, which
+// isn't part of /api/prestadores. We don't know the exact path yet, so probe
+// a handful of plausible ones and report which succeed. Remove once the
+// right endpoint + field name is confirmed and the real filter is wired up.
+export async function probeContratosEndpoints(): Promise<
+  Record<string, { ok: true; sample: unknown } | { ok: false; error: string }>
+> {
+  const candidates = [
+    "/api/contratos?limit=3",
+    "/api/contratos?ativo=true&limit=3",
+    "/api/contrato?limit=3",
+    "/api/prestadores/contratos?limit=3",
+    "/api/contratos/prestadores?limit=3",
+  ];
+
+  const results: Record<string, { ok: true; sample: unknown } | { ok: false; error: string }> = {};
+
+  for (const path of candidates) {
+    try {
+      const data = await request<unknown>(path);
+      const sample = Array.isArray(data)
+        ? data.slice(0, 3)
+        : typeof data === "object" && data !== null && Array.isArray((data as Record<string, unknown>).data)
+          ? ((data as Record<string, unknown>).data as unknown[]).slice(0, 3)
+          : data;
+      results[path] = { ok: true, sample };
+    } catch (err) {
+      results[path] = { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  return results;
+}
+
 /** Clears the cached token (useful in tests or after a credential rotation). */
 export function clearToken(): void {
   _token = null;

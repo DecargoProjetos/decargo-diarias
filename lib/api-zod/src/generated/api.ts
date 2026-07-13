@@ -277,6 +277,12 @@ export const SyncProvidersResponse = zod.object({
 
 
 /**
+ * @summary TEMP DEBUG: probe candidate People Contratos endpoints (admin only)
+ */
+export const DebugContratosResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
  * @summary Get a provider by ID
  */
 export const GetProviderParams = zod.object({
