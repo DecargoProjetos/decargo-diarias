@@ -67,13 +67,18 @@ export default function PeopleList() {
       new Promise((resolve, reject) => syncUsers.mutate(undefined, { onSuccess: resolve, onError: reject })),
       new Promise((resolve, reject) => syncProviders.mutate(undefined, { onSuccess: resolve, onError: reject })),
     ]).then(([usersResult, providersResult]) => {
-      const failures = [usersResult, providersResult].filter(r => r.status === 'rejected').length;
-      if (failures === 0) {
+      const failures = [usersResult, providersResult].filter(
+        (r): r is PromiseRejectedResult => r.status === 'rejected'
+      );
+      if (failures.length === 0) {
         toast({ title: 'Sincronização concluída', description: 'Funcionários e prestadores atualizados a partir do DECARGO People.' });
-      } else if (failures === 2) {
-        toast({ title: 'Erro na sincronização', description: 'Não foi possível sincronizar com o DECARGO People.', variant: 'destructive' });
       } else {
-        toast({ title: 'Sincronização parcial', description: 'Um dos syncs falhou — verifique os logs.', variant: 'destructive' });
+        const details = failures.map(f => f.reason?.message).filter(Boolean).join(' | ');
+        toast({
+          title: failures.length === 2 ? 'Erro na sincronização' : 'Sincronização parcial',
+          description: details || 'Não foi possível sincronizar com o DECARGO People.',
+          variant: 'destructive',
+        });
       }
       refetchUsers();
       refetchProviders();

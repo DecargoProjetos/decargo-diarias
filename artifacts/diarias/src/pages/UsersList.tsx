@@ -57,7 +57,7 @@ export default function UsersList() {
         });
         refetch();
       },
-      onError: () => toast({ title: 'Erro na sincronização', variant: 'destructive' }),
+      onError: (err: any) => toast({ title: 'Erro na sincronização', description: err?.message, variant: 'destructive' }),
     });
   };
 

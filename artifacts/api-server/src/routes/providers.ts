@@ -48,7 +48,19 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   const force = Boolean((req.body as { force?: boolean }).force);
   req.log.info({ force }, "Provider sync started");
 
-  const remote = await fetchPrestadores();
+  let remote;
+  try {
+    remote = await fetchPrestadores();
+  } catch (err) {
+    req.log.error({ err }, "Provider sync failed to reach DECARGO People");
+    // Sync is admin-only, so it's safe to surface the upstream error detail
+    // here — it's what an admin needs to fix credentials/connectivity, and
+    // it never contains our own secrets (only the People API's own response).
+    res.status(502).json({
+      error: `Falha ao contatar DECARGO People: ${err instanceof Error ? err.message : String(err)}`,
+    });
+    return;
+  }
 
   // Safety circuit: refuse deactivation if the remote list looks suspicious.
   // An empty result almost always means an auth issue or upstream outage,
