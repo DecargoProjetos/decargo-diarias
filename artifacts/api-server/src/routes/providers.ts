@@ -51,6 +51,16 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   let remote;
   try {
     remote = await fetchPrestadores();
+    // Guard against an unexpected response shape (e.g. the endpoint switching
+    // to a paginated `{ data: [...] }` wrapper like /api/funcionarios). Without
+    // this check, a non-array response crashes further down (outside this
+    // try/catch, in the transaction loop) and surfaces as a generic masked
+    // 500 instead of a diagnosable message.
+    if (!Array.isArray(remote)) {
+      throw new Error(
+        `Resposta inesperada da People API (esperava uma lista): ${JSON.stringify(remote).slice(0, 300)}`
+      );
+    }
   } catch (err) {
     req.log.error({ err }, "Provider sync failed to reach DECARGO People");
     // Sync is admin-only, so it's safe to surface the upstream error detail
