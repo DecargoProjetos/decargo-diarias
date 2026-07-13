@@ -175,15 +175,39 @@ export async function fetchPrestadores(): Promise<Prestador[]> {
 export async function probeContratosEndpoints(): Promise<
   Record<string, { ok: true; sample: unknown } | { ok: false; error: string }>
 > {
+  const results: Record<string, { ok: true; sample: unknown } | { ok: false; error: string }> = {};
+
+  // The first round showed /api/prestadores/contratos hit a route that
+  // expects a numeric `id` (i.e. "contratos" was parsed as `:id`), which
+  // means "Contratos" is very likely a nested per-prestador resource
+  // (/api/prestadores/:id/contratos), not a flat top-level list. Fetch a
+  // couple of real prestador IDs first and probe that shape directly.
+  let sampleIds: number[] = [];
+  try {
+    const prestadores = await request<Prestador[]>("/api/prestadores?ativo=true");
+    sampleIds = prestadores.slice(0, 2).map((p) => p.id_prestador);
+    // Also surface the raw shape of a prestador record itself — in case
+    // "objeto do contrato" is actually already embedded there under a
+    // field name we haven't matched yet, rather than in a separate resource.
+    results["/api/prestadores?ativo=true (raw sample)"] = {
+      ok: true,
+      sample: prestadores.slice(0, 2),
+    };
+  } catch (err) {
+    results["/api/prestadores?ativo=true (raw sample)"] = {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
   const candidates = [
     "/api/contratos?limit=3",
-    "/api/contratos?ativo=true&limit=3",
     "/api/contrato?limit=3",
-    "/api/prestadores/contratos?limit=3",
-    "/api/contratos/prestadores?limit=3",
+    ...sampleIds.flatMap((id) => [
+      `/api/prestadores/${id}/contratos`,
+      `/api/prestadores/${id}/contrato`,
+    ]),
   ];
-
-  const results: Record<string, { ok: true; sample: unknown } | { ok: false; error: string }> = {};
 
   for (const path of candidates) {
     try {
