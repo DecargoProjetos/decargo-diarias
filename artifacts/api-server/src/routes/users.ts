@@ -25,6 +25,17 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   // details here instead (never our own secrets, only upstream/DB errors).
   try {
     const remote = await fetchFuncionarios();
+    // TEMP DEBUG: confirm whether `todos=false` already filters to active-only
+    // server-side, or whether we need to also filter by `ativo` client-side.
+    // Remove once confirmed.
+    req.log.info(
+      { total: remote.length, ativoCounts: remote.reduce((acc: Record<string, number>, f) => {
+        const key = String(f.ativo);
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {}) },
+      "User sync: ativo breakdown from People API"
+    );
 
     let created = 0;
     let updated = 0;

@@ -66,6 +66,11 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   // our own secrets, only the People API's response or Postgres' own error.
   try {
     const remote = await fetchPrestadores();
+    // TEMP DEBUG: dump the first couple of raw records so we can confirm the
+    // exact field names for "objeto do contrato" / active-status before
+    // adding the Motorista/Ajudante/Transporte de Mercadorias filter. Remove
+    // once confirmed.
+    req.log.info({ sample: remote.slice(0, 3) }, "Provider sync: raw sample from People API");
     // Guard against an unexpected response shape (e.g. the endpoint switching
     // to a paginated `{ data: [...] }` wrapper like /api/funcionarios).
     if (!Array.isArray(remote)) {

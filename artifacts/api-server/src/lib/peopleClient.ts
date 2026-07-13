@@ -41,6 +41,11 @@ export interface Prestador {
   tem_contrato_ativo: boolean;
   data_inicio_contrato: string | null;
   data_fim_contrato: string | null;
+  // TODO(temp): exact field name for "objeto do contrato" (Motorista /
+  // Ajudante / Transporte de Mercadorias) not yet confirmed against the
+  // real API response — allow arbitrary extra fields until confirmed via
+  // the debug log below, then tighten this type and remove the index sig.
+  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
