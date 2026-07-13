@@ -22,10 +22,6 @@ const baseUrl = (): string => {
 // Types
 // ---------------------------------------------------------------------------
 
-interface LoginResponse {
-  token: string;
-}
-
 export interface Funcionario {
   id_funcionario: number;
   nome: string;
@@ -89,9 +85,22 @@ async function login(): Promise<string> {
       throw new Error(`People API login failed: ${res.status} — ${text}`);
     }
 
-    const data = (await res.json()) as LoginResponse;
-    _token = data.token;
-    return data.token;
+    const data = (await res.json()) as Record<string, unknown>;
+    // Be defensive about the actual field name/shape — a wrong assumption
+    // here (e.g. `access_token` instead of `token`, or a nested `data.token`)
+    // would silently produce `Authorization: Bearer undefined`, which the
+    // People API rejects with the exact same "Token inválido ou expirado"
+    // seen from the data endpoints, making it indistinguishable from a real
+    // credentials/permission problem. Fail loudly instead, with the actual
+    // response keys, so a shape mismatch is diagnosable from logs alone.
+    const token = data["token"] ?? data["access_token"] ?? (data["data"] as Record<string, unknown> | undefined)?.["token"];
+    if (typeof token !== "string" || token.length === 0) {
+      throw new Error(
+        `People API login response did not contain a usable token. Response keys: ${JSON.stringify(Object.keys(data))}`
+      );
+    }
+    _token = token;
+    return token;
   })();
 
   try {
