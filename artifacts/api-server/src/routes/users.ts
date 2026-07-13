@@ -89,6 +89,12 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
 
     req.log.info({ created, updated, skipped }, "User sync complete");
 
+    const debugAtivoBreakdown = remote.reduce((acc: Record<string, number>, f) => {
+      const key = String(f.ativo);
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+
     await logAudit({
       entityType: "user",
       entityId: 0,
@@ -97,7 +103,7 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
       newValues: { synced: remote.length, created, updated, skipped, timestamp: now },
     });
 
-    res.json({ synced: remote.length, created, updated, skipped });
+    res.json({ synced: remote.length, created, updated, skipped, debugAtivoBreakdown });
   } catch (err) {
     req.log.error({ err }, "User sync failed");
     res.status(502).json({

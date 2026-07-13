@@ -116,13 +116,17 @@ export interface SyncResult {
   created: number;
   updated: number;
   deactivated: number;
+  debugSample?: unknown[];
 }
+
+export type UserSyncResultDebugAtivoBreakdown = {[key: string]: number};
 
 export interface UserSyncResult {
   synced: number;
   created: number;
   updated: number;
   skipped: number;
+  debugAtivoBreakdown?: UserSyncResultDebugAtivoBreakdown;
 }
 
 export type DiariaStatus = typeof DiariaStatus[keyof typeof DiariaStatus];

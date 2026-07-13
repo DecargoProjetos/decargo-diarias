@@ -6,10 +6,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface SyncResult {
-  synced: number;
-  created: number;
-  updated: number;
-  deactivated: number;
-  debugSample?: unknown[];
-}
+export type UserSyncResultDebugAtivoBreakdown = {[key: string]: number};

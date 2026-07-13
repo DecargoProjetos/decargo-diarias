@@ -5,10 +5,12 @@
  * Controle de Diárias de Prestadores de Serviços
  * OpenAPI spec version: 0.1.0
  */
+import type { UserSyncResultDebugAtivoBreakdown } from './userSyncResultDebugAtivoBreakdown';
 
 export interface UserSyncResult {
   synced: number;
   created: number;
   updated: number;
   skipped: number;
+  debugAtivoBreakdown?: UserSyncResultDebugAtivoBreakdown;
 }

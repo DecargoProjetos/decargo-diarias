@@ -176,7 +176,7 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
       newValues: { synced: remote.length, created, updated, deactivated, force, timestamp: now },
     });
 
-    res.json({ synced: remote.length, created, updated, deactivated });
+    res.json({ synced: remote.length, created, updated, deactivated, debugSample: remote.slice(0, 3) });
   } catch (err) {
     req.log.error({ err }, "Provider sync failed");
     res.status(502).json({

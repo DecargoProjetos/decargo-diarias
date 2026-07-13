@@ -943,6 +943,12 @@ components:
           type: integer
         deactivated:
           type: integer
+        # TEMP DEBUG: first 3 raw provider records from the People API, so we
+        # can confirm field names in the UI without needing Railway log
+        # search. Remove once the "objeto do contrato" filter is confirmed.
+        debugSample:
+          type: array
+          items: {}
       required: [synced, created, updated, deactivated]
 
     UserSyncResult:
@@ -956,6 +962,13 @@ components:
           type: integer
         skipped:
           type: integer
+        # TEMP DEBUG: counts of the "ativo" field's raw values from the
+        # People API, so we can confirm the field before adding an
+        # active-only filter. Remove once confirmed.
+        debugAtivoBreakdown:
+          type: object
+          additionalProperties:
+            type: integer
       required: [synced, created, updated, skipped]
 
     # ── DIÁRIAS ──────────────────────────────────────────────────────────

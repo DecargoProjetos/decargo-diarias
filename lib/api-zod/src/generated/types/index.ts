@@ -39,5 +39,6 @@ export * from './teamUpdate';
 export * from './user';
 export * from './userRole';
 export * from './userSyncResult';
+export * from './userSyncResultDebugAtivoBreakdown';
 export * from './userUpdate';
 export * from './userUpdateRole';

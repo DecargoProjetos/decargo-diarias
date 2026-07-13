@@ -66,7 +66,8 @@ export const SyncUsersResponse = zod.object({
   "synced": zod.number(),
   "created": zod.number(),
   "updated": zod.number(),
-  "skipped": zod.number()
+  "skipped": zod.number(),
+  "debugAtivoBreakdown": zod.record(zod.string(), zod.number()).optional()
 })
 
 
@@ -248,7 +249,8 @@ export const SyncProvidersResponse = zod.object({
   "synced": zod.number(),
   "created": zod.number(),
   "updated": zod.number(),
-  "deactivated": zod.number()
+  "deactivated": zod.number(),
+  "debugSample": zod.array(zod.unknown()).optional()
 })
 
 

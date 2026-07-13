@@ -48,6 +48,10 @@ export default function PeopleList() {
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: '', teamId: '' });
+  // TEMP DEBUG state — holds raw diagnostic fields returned by the last sync
+  // so they can be shown directly on the page. Remove alongside the debug
+  // fields on the backend once the sync filters are confirmed.
+  const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(null);
 
   if (!isAdmin) {
     return <div>Acesso negado. Apenas administradores.</div>;
@@ -141,9 +145,10 @@ export default function PeopleList() {
   const isLoading = usersLoading || providersLoading;
 
   const handleSync = () => {
+    setDebugInfo(null);
     Promise.allSettled([
-      new Promise((resolve, reject) => syncUsers.mutate(undefined, { onSuccess: resolve, onError: reject })),
-      new Promise((resolve, reject) => syncProviders.mutate(undefined, { onSuccess: resolve, onError: reject })),
+      new Promise<any>((resolve, reject) => syncUsers.mutate(undefined, { onSuccess: resolve, onError: reject })),
+      new Promise<any>((resolve, reject) => syncProviders.mutate(undefined, { onSuccess: resolve, onError: reject })),
     ]).then(([usersResult, providersResult]) => {
       const failures = [usersResult, providersResult].filter(
         (r): r is PromiseRejectedResult => r.status === 'rejected'
@@ -158,6 +163,13 @@ export default function PeopleList() {
           variant: 'destructive',
         });
       }
+      // TEMP DEBUG: surface the raw diagnostic fields directly in the page —
+      // Railway's log search has been unreliable for finding these, so show
+      // them here instead. Remove this block once the filters are confirmed.
+      const debug: Record<string, unknown> = {};
+      if (usersResult.status === 'fulfilled') debug.usuarios_ativoBreakdown = usersResult.value?.debugAtivoBreakdown;
+      if (providersResult.status === 'fulfilled') debug.prestadores_sample = providersResult.value?.debugSample;
+      setDebugInfo(debug);
       refetchAll();
     });
   };
@@ -176,6 +188,22 @@ export default function PeopleList() {
           Sincronizar com DECARGO People
         </Button>
       </div>
+
+      {debugInfo && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex justify-between items-start">
+              <p className="text-sm font-semibold text-amber-800">
+                Diagnóstico temporário da última sincronização (tire um print desta caixa)
+              </p>
+              <Button size="sm" variant="ghost" onClick={() => setDebugInfo(null)}>Fechar</Button>
+            </div>
+            <pre className="text-xs bg-white border border-amber-200 rounded p-3 overflow-auto max-h-96 whitespace-pre-wrap">
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-0">
