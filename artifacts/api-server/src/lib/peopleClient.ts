@@ -53,42 +53,65 @@ export interface Prestador {
 
 let _token: string | null = null;
 
-async function login(): Promise<void> {
-  const username = process.env.PEOPLE_SERVICE_LOGIN;
-  const password = process.env.PEOPLE_SERVICE_PASSWORD;
-  if (!username || !password) {
-    throw new Error(
-      "PEOPLE_SERVICE_LOGIN and PEOPLE_SERVICE_PASSWORD must be set for People API sync"
-    );
+// Sync endpoints for users and providers run concurrently (Promise.allSettled
+// on the frontend), so multiple `request()` calls can race to (re)login at
+// the same time. Without de-duping, one call's login can overwrite `_token`
+// out from under another call that already read it, or two logins can fire
+// in parallel — both symptoms present as spurious/inconsistent 401s from the
+// People API. `_loginPromise` ensures only one login is ever in flight, and
+// every request captures the token it actually obtained in a local variable
+// instead of re-reading the (possibly since-clobbered) module-level `_token`.
+let _loginPromise: Promise<string> | null = null;
+
+async function login(): Promise<string> {
+  if (_loginPromise) return _loginPromise;
+
+  _loginPromise = (async () => {
+    const username = process.env.PEOPLE_SERVICE_LOGIN;
+    const password = process.env.PEOPLE_SERVICE_PASSWORD;
+    if (!username || !password) {
+      throw new Error(
+        "PEOPLE_SERVICE_LOGIN and PEOPLE_SERVICE_PASSWORD must be set for People API sync"
+      );
+    }
+
+    const res = await fetch(`${baseUrl()}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // The People API's login schema requires `username` / `password` field
+      // names specifically — `login` / `senha` fail its zod validation with a
+      // 400 "Required" error even though the values are non-empty.
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "(no body)");
+      throw new Error(`People API login failed: ${res.status} — ${text}`);
+    }
+
+    const data = (await res.json()) as LoginResponse;
+    _token = data.token;
+    return data.token;
+  })();
+
+  try {
+    return await _loginPromise;
+  } finally {
+    _loginPromise = null;
   }
-
-  const res = await fetch(`${baseUrl()}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    // The People API's login schema requires `username` / `password` field
-    // names specifically — `login` / `senha` fail its zod validation with a
-    // 400 "Required" error even though the values are non-empty.
-    body: JSON.stringify({ username, password }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "(no body)");
-    throw new Error(`People API login failed: ${res.status} — ${text}`);
-  }
-
-  const data = (await res.json()) as LoginResponse;
-  _token = data.token;
 }
 
 async function request<T>(path: string, retried = false): Promise<T> {
-  if (!_token) await login();
+  const token = _token ?? (await login());
 
   const res = await fetch(`${baseUrl()}${path}`, {
-    headers: { Authorization: `Bearer ${_token!}` },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   if (res.status === 401 && !retried) {
-    _token = null;
+    // Only clear the shared token if it's still the one that just failed —
+    // a concurrent call may have already replaced it with a fresh one.
+    if (_token === token) _token = null;
     return request<T>(path, true);
   }
 
