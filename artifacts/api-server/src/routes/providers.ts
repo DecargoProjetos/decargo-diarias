@@ -45,7 +45,13 @@ router.get("/", requireAuth, async (req, res) => {
 // remote list drops unexpectedly (empty response or >50 % shrink).
 router.post("/sync", requireRole("admin"), async (req, res) => {
   const now = new Date();
-  const force = Boolean((req.body as { force?: boolean }).force);
+  // req.body is `undefined` (not `{}`) when the client sends no body and no
+  // `Content-Type: application/json` header — express.json() only populates
+  // req.body when that content type matches. The generated sync mutation
+  // sends no body at all, so this MUST be optional-chained; reading `.force`
+  // off `undefined` throws synchronously here, before the try/catch below,
+  // which used to produce an instant, un-logged, generic 500.
+  const force = Boolean((req.body as { force?: boolean } | undefined)?.force);
   req.log.info({ force }, "Provider sync started");
 
   // The whole handler body is wrapped in one try/catch so that ANY failure —
