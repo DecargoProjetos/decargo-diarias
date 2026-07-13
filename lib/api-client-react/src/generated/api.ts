@@ -40,13 +40,14 @@ import type {
   MessageResponse,
   Provider,
   ProviderMetrics,
+  ProviderUpdate,
   SyncResult,
-  UserSyncResult,
   Team,
   TeamInput,
   TeamMetrics,
   TeamUpdate,
   User,
+  UserSyncResult,
   UserUpdate
 } from './api.schemas';
 
@@ -379,6 +380,77 @@ export function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TErr
 
 
 
+export const getSyncUsersUrl = () => {
+
+
+
+
+  return `/api/users/sync`
+}
+
+/**
+ * @summary Sync users (funcionários) from DECARGO People (admin only)
+ */
+export const syncUsers = async ( options?: RequestInit): Promise<UserSyncResult> => {
+
+  return customFetch<UserSyncResult>(getSyncUsersUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSyncUsersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext> => {
+
+const mutationKey = ['syncUsers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncUsers>>, void> = () => {
+
+
+          return  syncUsers(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncUsersMutationResult = NonNullable<Awaited<ReturnType<typeof syncUsers>>>
+
+    export type SyncUsersMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Sync users (funcionários) from DECARGO People (admin only)
+ */
+export const useSyncUsers = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncUsers>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSyncUsersMutationOptions(options));
+    }
+
 export const getGetUserUrl = (id: number,) => {
 
 
@@ -465,7 +537,7 @@ export const getUpdateUserUrl = (id: number,) => {
 }
 
 /**
- * @summary Update user role or team (admin only)
+ * @summary Update user role, team, name, email or status (admin only)
  */
 export const updateUser = async (id: number,
     userUpdate: UserUpdate, options?: RequestInit): Promise<User> => {
@@ -515,7 +587,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UpdateUserMutationError = ErrorType<unknown>
 
     /**
- * @summary Update user role or team (admin only)
+ * @summary Update user role, team, name, email or status (admin only)
  */
 export const useUpdateUser = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,{id: number;data: BodyType<UserUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -526,6 +598,77 @@ export const useUpdateUser = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateUserMutationOptions(options));
+    }
+
+export const getDeleteUserUrl = (id: number,) => {
+
+
+
+
+  return `/api/users/${id}`
+}
+
+/**
+ * @summary Delete a user (admin only)
+ */
+export const deleteUser = async (id: number, options?: RequestInit): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getDeleteUserUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteUserMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteUser>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteUser(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteUserMutationResult = NonNullable<Awaited<ReturnType<typeof deleteUser>>>
+
+    export type DeleteUserMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a user (admin only)
+ */
+export const useDeleteUser = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteUser>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteUserMutationOptions(options));
     }
 
 export const getListTeamsUrl = () => {
@@ -1051,55 +1194,6 @@ export const useSyncProviders = <TError = ErrorType<unknown>,
       return useMutation(getSyncProvidersMutationOptions(options));
     }
 
-export const getSyncUsersUrl = () => {
-  return `/api/users/sync`
-}
-
-/**
- * @summary Sync users (funcionários) from DECARGO People (admin only)
- */
-export const syncUsers = async ( options?: RequestInit): Promise<UserSyncResult> => {
-  return customFetch<UserSyncResult>(getSyncUsersUrl(),
-  {
-    ...options,
-    method: 'POST'
-  }
-);}
-
-export const getSyncUsersMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext> => {
-
-const mutationKey = ['syncUsers'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncUsers>>, void> = () => {
-          return  syncUsers(requestOptions)
-        }
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SyncUsersMutationResult = NonNullable<Awaited<ReturnType<typeof syncUsers>>>
-    export type SyncUsersMutationError = ErrorType<unknown>
-
-    /**
- * @summary Sync users (funcionários) from DECARGO People (admin only)
- */
-export const useSyncUsers = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof syncUsers>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getSyncUsersMutationOptions(options));
-    }
-
 export const getGetProviderUrl = (id: number,) => {
 
 
@@ -1176,6 +1270,149 @@ export function useGetProvider<TData = Awaited<ReturnType<typeof getProvider>>, 
 
 
 
+
+export const getUpdateProviderUrl = (id: number,) => {
+
+
+
+
+  return `/api/providers/${id}`
+}
+
+/**
+ * @summary Update a provider's name, email, team or status (admin only)
+ */
+export const updateProvider = async (id: number,
+    providerUpdate: ProviderUpdate, options?: RequestInit): Promise<Provider> => {
+
+  return customFetch<Provider>(getUpdateProviderUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(providerUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateProviderMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProvider>>, TError,{id: number;data: BodyType<ProviderUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateProvider>>, TError,{id: number;data: BodyType<ProviderUpdate>}, TContext> => {
+
+const mutationKey = ['updateProvider'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateProvider>>, {id: number;data: BodyType<ProviderUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateProvider(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateProviderMutationResult = NonNullable<Awaited<ReturnType<typeof updateProvider>>>
+    export type UpdateProviderMutationBody = BodyType<ProviderUpdate>
+    export type UpdateProviderMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a provider's name, email, team or status (admin only)
+ */
+export const useUpdateProvider = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProvider>>, TError,{id: number;data: BodyType<ProviderUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateProvider>>,
+        TError,
+        {id: number;data: BodyType<ProviderUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateProviderMutationOptions(options));
+    }
+
+export const getDeleteProviderUrl = (id: number,) => {
+
+
+
+
+  return `/api/providers/${id}`
+}
+
+/**
+ * @summary Delete a provider (admin only)
+ */
+export const deleteProvider = async (id: number, options?: RequestInit): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getDeleteProviderUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteProviderMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProvider>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProvider>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteProvider'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProvider>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteProvider(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProviderMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProvider>>>
+
+    export type DeleteProviderMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a provider (admin only)
+ */
+export const useDeleteProvider = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProvider>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProvider>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteProviderMutationOptions(options));
+    }
 
 export const getListDiariasUrl = (params?: ListDiariasParams,) => {
   const normalizedParams = new URLSearchParams();

@@ -20,8 +20,10 @@ router.get("/diarias", requireAuth, async (req, res) => {
   if (me.role === "gestor") {
     conditions.push(`d.team_id = $${p++}`);
     params.push(me.teamId);
-  } else if (me.role === "prestador") {
-    conditions.push(`p.decargo_id = $${p++}`);
+  } else if (me.role !== "admin") {
+    // Prestadores/funcionários only see their own provider's data
+    // (funcionários have none, so this yields empty results — expected).
+    conditions.push(`p.decargo_id = ${p++}`);
     params.push(me.decargoId);
   }
 

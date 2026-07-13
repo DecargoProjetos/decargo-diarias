@@ -24,6 +24,7 @@ export const UserRole = {
   admin: 'admin',
   gestor: 'gestor',
   prestador: 'prestador',
+  funcionario: 'funcionario',
 } as const;
 
 export interface User {
@@ -49,6 +50,7 @@ export const UserUpdateRole = {
   admin: 'admin',
   gestor: 'gestor',
   prestador: 'prestador',
+  funcionario: 'funcionario',
 } as const;
 
 export interface UserUpdate {
@@ -56,6 +58,8 @@ export interface UserUpdate {
   /** @nullable */
   teamId?: number | null;
   active?: boolean;
+  name?: string;
+  email?: string;
 }
 
 export interface Team {
@@ -96,6 +100,15 @@ export interface Provider {
   active: boolean;
   /** @nullable */
   syncedAt?: string | null;
+}
+
+export interface ProviderUpdate {
+  name?: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  teamId?: number | null;
+  active?: boolean;
 }
 
 export interface SyncResult {

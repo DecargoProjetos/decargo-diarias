@@ -26,7 +26,7 @@ export default function Reports() {
 
   const exportMutation = useExportDiarias();
 
-  if (user?.role === 'prestador') {
+  if (user?.role === 'prestador' || user?.role === 'funcionario') {
     return <div>Acesso negado.</div>;
   }
 

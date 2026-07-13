@@ -1,20 +1,24 @@
 import { useState } from 'react';
-import { useGetMe, useListUsers, useUpdateUser, useListTeams, useSyncUsers } from '@workspace/api-client-react';
+import { useGetMe, useListUsers, useUpdateUser, useDeleteUser, useListTeams, useSyncUsers } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { Badge } from '@/components/ui/badge';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Edit2, Trash2, Save, X } from 'lucide-react';
 
 export default function UsersList() {
   const { data: currentUser } = useGetMe();
   const { data: users, isLoading, refetch } = useListUsers({ query: { enabled: currentUser?.role === 'admin' } });
   const { data: teams } = useListTeams();
   const updateUser = useUpdateUser();
+  const deleteUser = useDeleteUser();
   const syncUsers = useSyncUsers();
   const { toast } = useToast();
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '' });
 
   if (currentUser?.role !== 'admin') {
     return <div>Acesso negado.</div>;
@@ -45,6 +49,33 @@ export default function UsersList() {
         toast({ title: active ? 'Usuário ativado.' : 'Usuário desativado.' });
         refetch();
       }
+    });
+  };
+
+  const startEdit = (user: any) => {
+    setEditingId(user.id);
+    setEditForm({ name: user.name, email: user.email });
+  };
+
+  const handleSaveEdit = (id: number) => {
+    updateUser.mutate({ id, data: { name: editForm.name, email: editForm.email } }, {
+      onSuccess: () => {
+        toast({ title: 'Usuário atualizado.' });
+        setEditingId(null);
+        refetch();
+      },
+      onError: (err: any) => toast({ title: 'Erro ao atualizar', description: err?.message, variant: 'destructive' }),
+    });
+  };
+
+  const handleDelete = (id: number) => {
+    if (!confirm('Tem certeza que deseja excluir este usuário? Esta ação não pode ser desfeita.')) return;
+    deleteUser.mutate({ id }, {
+      onSuccess: () => {
+        toast({ title: 'Usuário excluído.' });
+        refetch();
+      },
+      onError: (err: any) => toast({ title: 'Erro ao excluir', description: err?.message, variant: 'destructive' }),
     });
   };
 
@@ -84,23 +115,41 @@ export default function UsersList() {
                 <TableHead>Equipe Alocada</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Acesso Desde</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center h-24">Carregando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center h-24">Carregando...</TableCell></TableRow>
               ) : users?.map(user => (
                 <TableRow key={user.id} className={!user.active ? 'opacity-50' : ''}>
                   <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                        {user.name.charAt(0)}
+                    {editingId === user.id ? (
+                      <div className="flex flex-col gap-1 max-w-xs">
+                        <Input
+                          value={editForm.name}
+                          onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                          placeholder="Nome"
+                          className="h-8"
+                        />
+                        <Input
+                          value={editForm.email}
+                          onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                          placeholder="E-mail"
+                          className="h-8"
+                        />
                       </div>
-                      <div>
-                        <div className="font-medium">{user.name}</div>
-                        <div className="text-xs text-muted-foreground">{user.email}</div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                          {user.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="font-medium">{user.name}</div>
+                          <div className="text-xs text-muted-foreground">{user.email}</div>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     <select 
@@ -112,6 +161,7 @@ export default function UsersList() {
                       <option value="admin">Administrador</option>
                       <option value="gestor">Gestor</option>
                       <option value="prestador">Prestador</option>
+                      <option value="funcionario">Funcionário</option>
                     </select>
                   </TableCell>
                   <TableCell>
@@ -136,6 +186,31 @@ export default function UsersList() {
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {formatDate(user.createdAt)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      {editingId === user.id ? (
+                        <>
+                          <Button size="icon" variant="ghost" onClick={() => setEditingId(null)}><X size={16} /></Button>
+                          <Button size="icon" variant="ghost" onClick={() => handleSaveEdit(user.id)} disabled={!editForm.name}><Save size={16} /></Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button size="icon" variant="ghost" onClick={() => startEdit(user)}>
+                            <Edit2 size={16} />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDelete(user.id)}
+                            disabled={user.id === currentUser.id}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

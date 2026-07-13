@@ -16,7 +16,9 @@ router.get("/summary", requireAuth, async (req, res) => {
   if (me.role === "gestor") {
     conditions.push(`d.team_id = $${p++}`);
     params.push(me.teamId);
-  } else if (me.role === "prestador") {
+  } else if (me.role !== "admin") {
+    // Prestadores/funcionários only see their own provider's data
+    // (funcionários have none, so this yields empty results — expected).
     conditions.push(`p.decargo_id = $${p++}`);
     params.push(me.decargoId);
   }
@@ -119,7 +121,9 @@ router.get("/by-provider", requireAuth, async (req, res) => {
   if (me.role === "gestor" && me.teamId) {
     conditions.push(`d.team_id = $${p++}`);
     params.push(me.teamId);
-  } else if (me.role === "prestador") {
+  } else if (me.role !== "admin") {
+    // Prestadores/funcionários only see their own provider's data
+    // (funcionários have none, so this yields empty results — expected).
     conditions.push(`p.decargo_id = $${p++}`);
     params.push(me.decargoId);
   }
@@ -169,7 +173,9 @@ router.get("/recent-activity", requireAuth, async (req, res) => {
   if (me.role === "gestor" && me.teamId) {
     conditions.push(`d.team_id = $${p++}`);
     params.push(me.teamId);
-  } else if (me.role === "prestador") {
+  } else if (me.role !== "admin") {
+    // Prestadores/funcionários only see their own provider's data
+    // (funcionários have none, so this yields empty results — expected).
     conditions.push(`p.decargo_id = $${p++}`);
     params.push(me.decargoId);
   }

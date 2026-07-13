@@ -11,7 +11,7 @@ export default function Dashboard() {
 
   if (isLoadingSummary || isLoadingActivity) return <div>Carregando dashboard...</div>;
 
-  const showFinancials = user?.role !== 'prestador';
+  const showFinancials = user?.role !== 'prestador' && user?.role !== 'funcionario';
 
   return (
     <div className="space-y-6">

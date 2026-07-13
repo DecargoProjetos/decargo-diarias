@@ -20,7 +20,7 @@ export default function DiariasList() {
     status: statusFilter === '' ? undefined : statusFilter,
   });
 
-  const showFinancials = user?.role !== 'prestador';
+  const showFinancials = user?.role !== 'prestador' && user?.role !== 'funcionario';
   const canCreate = user?.role === 'admin' || user?.role === 'gestor';
 
   return (

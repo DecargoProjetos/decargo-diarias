@@ -13,4 +13,5 @@ export const UserRole = {
   admin: 'admin',
   gestor: 'gestor',
   prestador: 'prestador',
+  funcionario: 'funcionario',
 } as const;

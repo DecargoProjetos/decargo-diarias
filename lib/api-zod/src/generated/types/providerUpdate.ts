@@ -5,13 +5,12 @@
  * Controle de Diárias de Prestadores de Serviços
  * OpenAPI spec version: 0.1.0
  */
-import type { UserUpdateRole } from './userUpdateRole';
 
-export interface UserUpdate {
-  role?: UserUpdateRole;
+export interface ProviderUpdate {
+  name?: string;
+  /** @nullable */
+  email?: string | null;
   /** @nullable */
   teamId?: number | null;
   active?: boolean;
-  name?: string;
-  email?: string;
 }

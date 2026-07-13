@@ -24,7 +24,7 @@ export const GetMeResponse = zod.object({
   "decargoId": zod.string(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'gestor', 'prestador']),
+  "role": zod.enum(['admin', 'gestor', 'prestador', 'funcionario']),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
@@ -49,7 +49,7 @@ export const ListUsersResponseItem = zod.object({
   "decargoId": zod.string(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'gestor', 'prestador']),
+  "role": zod.enum(['admin', 'gestor', 'prestador', 'funcionario']),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
@@ -57,6 +57,17 @@ export const ListUsersResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const ListUsersResponse = zod.array(ListUsersResponseItem)
+
+
+/**
+ * @summary Sync users (funcionários) from DECARGO People (admin only)
+ */
+export const SyncUsersResponse = zod.object({
+  "synced": zod.number(),
+  "created": zod.number(),
+  "updated": zod.number(),
+  "skipped": zod.number()
+})
 
 
 /**
@@ -71,7 +82,7 @@ export const GetUserResponse = zod.object({
   "decargoId": zod.string(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'gestor', 'prestador']),
+  "role": zod.enum(['admin', 'gestor', 'prestador', 'funcionario']),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
@@ -81,16 +92,18 @@ export const GetUserResponse = zod.object({
 
 
 /**
- * @summary Update user role or team (admin only)
+ * @summary Update user role, team, name, email or status (admin only)
  */
 export const UpdateUserParams = zod.object({
   "id": zod.coerce.number()
 })
 
 export const UpdateUserBody = zod.object({
-  "role": zod.enum(['admin', 'gestor', 'prestador']).optional(),
+  "role": zod.enum(['admin', 'gestor', 'prestador', 'funcionario']).optional(),
   "teamId": zod.number().nullish(),
-  "active": zod.boolean().optional()
+  "active": zod.boolean().optional(),
+  "name": zod.string().optional(),
+  "email": zod.string().optional()
 })
 
 export const UpdateUserResponse = zod.object({
@@ -98,12 +111,24 @@ export const UpdateUserResponse = zod.object({
   "decargoId": zod.string(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'gestor', 'prestador']),
+  "role": zod.enum(['admin', 'gestor', 'prestador', 'funcionario']),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "active": zod.boolean(),
   "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a user (admin only)
+ */
+export const DeleteUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteUserResponse = zod.object({
+  "message": zod.string()
 })
 
 
@@ -243,6 +268,44 @@ export const GetProviderResponse = zod.object({
   "teamName": zod.string().nullish(),
   "active": zod.boolean(),
   "syncedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Update a provider's name, email, team or status (admin only)
+ */
+export const UpdateProviderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateProviderBody = zod.object({
+  "name": zod.string().optional(),
+  "email": zod.string().nullish(),
+  "teamId": zod.number().nullish(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdateProviderResponse = zod.object({
+  "id": zod.number(),
+  "decargoId": zod.string(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "teamId": zod.number().nullish(),
+  "teamName": zod.string().nullish(),
+  "active": zod.boolean(),
+  "syncedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Delete a provider (admin only)
+ */
+export const DeleteProviderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteProviderResponse = zod.object({
+  "message": zod.string()
 })
 
 

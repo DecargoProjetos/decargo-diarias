@@ -40,7 +40,7 @@ export default function DiariaDetails() {
   if (isLoading) return <div>Carregando...</div>;
   if (!diaria) return <div>Diária não encontrada.</div>;
 
-  const showFinancials = user?.role !== 'prestador';
+  const showFinancials = user?.role !== 'prestador' && user?.role !== 'funcionario';
   const isAdmin = user?.role === 'admin';
   const isGestor = user?.role === 'gestor';
 

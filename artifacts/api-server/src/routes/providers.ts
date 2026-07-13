@@ -185,6 +185,76 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   }
 });
 
+// PATCH /api/providers/:id (admin only)
+router.patch("/:id", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.id);
+  const { name, email, teamId, active } = req.body as {
+    name?: string;
+    email?: string | null;
+    teamId?: number | null;
+    active?: boolean;
+  };
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (name !== undefined) updates.name = name;
+  if (email !== undefined) updates.email = email;
+  if (teamId !== undefined) updates.teamId = teamId;
+  if (active !== undefined) updates.active = active;
+
+  const [updated] = await db
+    .update(providersTable)
+    .set(updates)
+    .where(eq(providersTable.id, id))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Prestador não encontrado" });
+    return;
+  }
+
+  await logAudit({
+    entityType: "provider",
+    entityId: id,
+    action: "atualizado",
+    userId: req.currentUser!.id,
+    newValues: updates,
+  });
+
+  res.json(updated);
+});
+
+// DELETE /api/providers/:id (admin only)
+router.delete("/:id", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.id);
+
+  let deleted;
+  try {
+    [deleted] = await db.delete(providersTable).where(eq(providersTable.id, id)).returning();
+  } catch (err) {
+    // A provider with diárias linked to it cannot be hard-deleted (diarias.
+    // provider_id has no ON DELETE rule). Deactivate instead in that case.
+    req.log.error({ err }, "Provider delete failed");
+    res.status(409).json({
+      error: "Não é possível excluir: este prestador possui diárias no sistema. Desative em vez de excluir.",
+    });
+    return;
+  }
+
+  if (!deleted) {
+    res.status(404).json({ error: "Prestador não encontrado" });
+    return;
+  }
+
+  await logAudit({
+    entityType: "provider",
+    entityId: id,
+    action: "excluído",
+    userId: req.currentUser!.id,
+  });
+
+  res.json({ message: "Prestador excluído" });
+});
+
 // GET /api/providers/:id
 router.get("/:id", requireAuth, async (req, res) => {
   const me = req.currentUser!;

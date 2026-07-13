@@ -131,7 +131,7 @@ paths:
     patch:
       operationId: updateUser
       tags: [users]
-      summary: Update user role or team (admin only)
+      summary: Update user role, team, name, email or status (admin only)
       parameters:
         - name: id
           in: path
@@ -151,6 +151,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "409":
+          description: Cannot delete — user has related records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ── TEAMS ─────────────────────────────────────────────────────────────
   /teams:
@@ -307,6 +331,54 @@ paths:
                 $ref: "#/components/schemas/Provider"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateProvider
+      tags: [providers]
+      summary: Update a provider's name, email, team or status (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderUpdate"
+      responses:
+        "200":
+          description: Updated provider
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+
+    delete:
+      operationId: deleteProvider
+      tags: [providers]
+      summary: Delete a provider (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "409":
+          description: Cannot delete — provider has related records
           content:
             application/json:
               schema:
@@ -758,7 +830,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, gestor, prestador]
+          enum: [admin, gestor, prestador, funcionario]
         teamId:
           type: ["integer", "null"]
         teamName:
@@ -777,11 +849,15 @@ components:
       properties:
         role:
           type: string
-          enum: [admin, gestor, prestador]
+          enum: [admin, gestor, prestador, funcionario]
         teamId:
           type: ["integer", "null"]
         active:
           type: boolean
+        name:
+          type: string
+        email:
+          type: string
 
     # ── TEAMS ────────────────────────────────────────────────────────────
     Team:
@@ -843,6 +919,18 @@ components:
           type: ["string", "null"]
           format: date-time
       required: [id, decargoId, name, active]
+
+    ProviderUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+        teamId:
+          type: ["integer", "null"]
+        active:
+          type: boolean
 
     SyncResult:
       type: object

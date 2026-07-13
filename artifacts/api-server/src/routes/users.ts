@@ -166,16 +166,26 @@ router.get("/:id", requireAuth, async (req, res) => {
 // PATCH /api/users/:id (admin only)
 router.patch("/:id", requireRole("admin"), async (req, res) => {
   const id = Number(req.params.id);
-  const { role, teamId, active } = req.body as {
+  const { role, teamId, active, name, email } = req.body as {
     role?: string;
     teamId?: number | null;
     active?: boolean;
+    name?: string;
+    email?: string;
   };
+
+  const VALID_ROLES = ["admin", "gestor", "prestador", "funcionario"];
+  if (role !== undefined && !VALID_ROLES.includes(role)) {
+    res.status(400).json({ error: `Papel inválido. Use um de: ${VALID_ROLES.join(", ")}` });
+    return;
+  }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (role !== undefined) updates.role = role;
   if (teamId !== undefined) updates.teamId = teamId;
   if (active !== undefined) updates.active = active;
+  if (name !== undefined) updates.name = name;
+  if (email !== undefined) updates.email = email;
 
   const [updated] = await db
     .update(usersTable)
@@ -187,7 +197,56 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
     res.status(404).json({ error: "Usuário não encontrado" });
     return;
   }
+
+  await logAudit({
+    entityType: "user",
+    entityId: id,
+    action: "atualizado",
+    userId: req.currentUser!.id,
+    newValues: updates,
+  });
+
   res.json(updated);
+});
+
+// DELETE /api/users/:id (admin only)
+router.delete("/:id", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.id);
+  const me = req.currentUser!;
+
+  if (id === me.id) {
+    res.status(400).json({ error: "Você não pode excluir a própria conta." });
+    return;
+  }
+
+  let deleted;
+  try {
+    [deleted] = await db.delete(usersTable).where(eq(usersTable.id, id)).returning();
+  } catch (err) {
+    // `diarias.created_by` has no ON DELETE rule (RESTRICT by default), so a
+    // user who created at least one diária cannot be hard-deleted — surface
+    // that as a clear message instead of a generic 500; desativar (active:
+    // false) via PATCH is the supported way to retire such an account.
+    req.log.error({ err }, "User delete failed");
+    res.status(409).json({
+      error: "Não é possível excluir: este usuário criou diárias no sistema. Desative o acesso em vez de excluir.",
+    });
+    return;
+  }
+
+  if (!deleted) {
+    res.status(404).json({ error: "Usuário não encontrado" });
+    return;
+  }
+
+  await logAudit({
+    entityType: "user",
+    entityId: id,
+    action: "excluído",
+    userId: me.id,
+  });
+
+  res.json({ message: "Usuário excluído" });
 });
 
 export default router;

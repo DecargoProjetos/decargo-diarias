@@ -47,8 +47,10 @@ async function getDiariaById(id: number, userId: number, role: string, teamId: n
   if (!row) return null;
 
   // Record-level access control
-  if (role === "prestador") {
-    // Prestadores may only see diárias linked to their provider record
+  if (role !== "admin" && role !== "gestor") {
+    // Prestadores/funcionários may only see diárias linked to their provider
+    // record (funcionários have none, so they see nothing here — expected,
+    // since diárias belong to prestadores).
     if (String(row.providerDecargoId) !== String(decargoId)) {
       return null;
     }
@@ -80,19 +82,21 @@ router.get("/", requireAuth, async (req, res) => {
 
   // Role-based filter
   if (me.role === "gestor") {
-    conditions.push(`d.team_id = $${p++}`);
+    conditions.push(`d.team_id = ${p++}`);
     params.push(me.teamId);
-  } else if (me.role === "prestador") {
-    conditions.push(`p.decargo_id = $${p++}`);
+  } else if (me.role !== "admin") {
+    // Prestadores/funcionários only see diárias linked to their own provider
+    // record (funcionários have none, so they see an empty list — expected).
+    conditions.push(`p.decargo_id = ${p++}`);
     params.push(me.decargoId);
   }
 
-  if (status) { conditions.push(`d.status = $${p++}`); params.push(status); }
-  if (providerId) { conditions.push(`d.provider_id = $${p++}`); params.push(Number(providerId)); }
-  if (teamId && me.role === "admin") { conditions.push(`d.team_id = $${p++}`); params.push(Number(teamId)); }
-  if (managerId) { conditions.push(`d.manager_id = $${p++}`); params.push(Number(managerId)); }
-  if (startDate) { conditions.push(`d.work_date >= $${p++}`); params.push(startDate); }
-  if (endDate) { conditions.push(`d.work_date <= $${p++}`); params.push(endDate); }
+  if (status) { conditions.push(`d.status = ${p++}`); params.push(status); }
+  if (providerId) { conditions.push(`d.provider_id = ${p++}`); params.push(Number(providerId)); }
+  if (teamId && me.role === "admin") { conditions.push(`d.team_id = ${p++}`); params.push(Number(teamId)); }
+  if (managerId) { conditions.push(`d.manager_id = ${p++}`); params.push(Number(managerId)); }
+  if (startDate) { conditions.push(`d.work_date >= ${p++}`); params.push(startDate); }
+  if (endDate) { conditions.push(`d.work_date <= ${p++}`); params.push(endDate); }
 
   const where = conditions.join(" AND ");
 

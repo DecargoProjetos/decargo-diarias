@@ -37,8 +37,8 @@ export function Sidebar() {
   };
 
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['admin', 'gestor', 'prestador'] },
-    { name: 'Diárias', path: '/diarias', icon: FileText, roles: ['admin', 'gestor', 'prestador'] },
+    { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['admin', 'gestor', 'prestador', 'funcionario'] },
+    { name: 'Diárias', path: '/diarias', icon: FileText, roles: ['admin', 'gestor', 'prestador', 'funcionario'] },
     { name: 'Relatórios', path: '/relatorios', icon: BarChart3, roles: ['admin', 'gestor'] },
     { name: 'Equipes', path: '/equipes', icon: Building2, roles: ['admin'] },
     { name: 'Pessoas', path: '/pessoas', icon: UserSquare2, roles: ['admin'] },
