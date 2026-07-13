@@ -167,7 +167,10 @@ export default function PeopleList() {
       // Railway's log search has been unreliable for finding these, so show
       // them here instead. Remove this block once the filters are confirmed.
       const debug: Record<string, unknown> = {};
-      if (usersResult.status === 'fulfilled') debug.usuarios_ativoBreakdown = usersResult.value?.debugAtivoBreakdown;
+      if (usersResult.status === 'fulfilled') {
+        debug.usuarios_ativoBreakdown = usersResult.value?.debugAtivoBreakdown;
+        debug.usuarios_sample = usersResult.value?.debugSample;
+      }
       if (providersResult.status === 'fulfilled') debug.prestadores_sample = providersResult.value?.debugSample;
       setDebugInfo(debug);
       refetchAll();

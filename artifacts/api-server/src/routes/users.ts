@@ -30,7 +30,8 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
     const remote = await fetchFuncionarios();
     // TEMP DEBUG: confirm whether `todos=false` already filters to active-only
     // server-side, or whether we need to also filter by `ativo` client-side.
-    // Remove once confirmed.
+    // `ativo` came back `undefined` for every record — dump a raw sample too
+    // so we can see the real field name. Remove once confirmed.
     req.log.info(
       { total: remote.length, ativoCounts: remote.reduce((acc: Record<string, number>, f) => {
         const key = String(f.ativo);
@@ -39,6 +40,7 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
       }, {}) },
       "User sync: ativo breakdown from People API"
     );
+    req.log.info({ sample: remote.slice(0, 3) }, "User sync: raw sample from People API");
 
     let created = 0;
     let updated = 0;
@@ -106,7 +108,7 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
       newValues: { synced: remote.length, created, updated, skipped, timestamp: now },
     });
 
-    res.json({ synced: remote.length, created, updated, skipped, debugAtivoBreakdown });
+    res.json({ synced: remote.length, created, updated, skipped, debugAtivoBreakdown, debugSample: remote.slice(0, 3) });
   } catch (err) {
     req.log.error({ err }, "User sync failed");
     res.status(502).json({

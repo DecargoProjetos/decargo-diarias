@@ -1,0 +1,73 @@
+{
+  "usuarios_ativoBreakdown": {
+    "undefined": 32
+  },
+  "prestadores_sample": [
+    {
+      "id_prestador": 2,
+      "gestao_do_contrato": "O titular é o gestor do contrato",
+      "titular_do_contrato": "Abimael de Carvalho Oliveira",
+      "cpf": "07659603701",
+      "numero_rg": "105440010",
+      "orgao_emissao_do_rg": "IFP-RJ",
+      "data_de_nascimento": "1978-08-29",
+      "cnpj": "61931951000179",
+      "nome_empresarial": "61.931.951 Abimael de Carvalho Oliveira",
+      "nome_fantasia": "Não possui Nome Fantasia",
+      "data_de_abertura": "2025-07-26",
+      "telefone_principal": null,
+      "telefone_contato": null,
+      "email": null,
+      "ativo": true,
+      "createdAt": "2026-05-04T16:44:48.700Z",
+      "updatedAt": "2026-05-04T16:44:48.700Z",
+      "data_inicio_contrato": "2025-08-11",
+      "data_fim_contrato": null,
+      "tem_contrato_ativo": true
+    },
+    {
+      "id_prestador": 3,
+      "gestao_do_contrato": "O titular é o gestor do contrato",
+      "titular_do_contrato": "Abraao Viana Gama Izac",
+      "cpf": "13130547711",
+      "numero_rg": "277397634",
+      "orgao_emissao_do_rg": "DETRAN-RJ",
+      "data_de_nascimento": "2001-04-23",
+      "cnpj": "52828026000126",
+      "nome_empresarial": "52.828.026 Abraao Viana Gama Izac",
+      "nome_fantasia": "Não possui Nome Fantasia",
+      "data_de_abertura": "2023-11-08",
+      "telefone_principal": null,
+      "telefone_contato": null,
+      "email": null,
+      "ativo": true,
+      "createdAt": "2026-05-04T16:44:49.610Z",
+      "updatedAt": "2026-05-04T16:44:49.610Z",
+      "data_inicio_contrato": "2025-11-10",
+      "data_fim_contrato": null,
+      "tem_contrato_ativo": true
+    },
+    {
+      "id_prestador": 4,
+      "gestao_do_contrato": "O titular é o gestor do contrato",
+      "titular_do_contrato": "Acacio Laureano da Silva Junior",
+      "cpf": "09597500701",
+      "numero_rg": "125545251",
+      "orgao_emissao_do_rg": "DIC-RJ",
+      "data_de_nascimento": "1981-07-19",
+      "cnpj": "62766432000165",
+      "nome_empresarial": "62.766.432 Acacio Laureano da Silva",
+      "nome_fantasia": "Não possui Nome Fantasia",
+      "data_de_abertura": "2025-09-17",
+      "telefone_principal": null,
+      "telefone_contato": null,
+      "email": null,
+      "ativo": true,
+      "createdAt": "2026-05-04T16:44:50.367Z",
+      "updatedAt": "2026-05-04T16:44:50.367Z",
+      "data_inicio_contrato": "2025-10-13",
+      "data_fim_contrato": null,
+      "tem_contrato_ativo": true
+    }
+  ]
+}

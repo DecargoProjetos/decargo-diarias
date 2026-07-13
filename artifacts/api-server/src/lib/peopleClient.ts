@@ -27,6 +27,10 @@ export interface Funcionario {
   nome: string;
   email_principal: string | null;
   ativo: boolean;
+  // TEMP DEBUG: `ativo` came back `undefined` for every record in
+  // production — allow arbitrary extra fields so the raw sample dump below
+  // can reveal the real field name. Remove once confirmed.
+  [key: string]: unknown;
 }
 
 interface FuncionarioPage {

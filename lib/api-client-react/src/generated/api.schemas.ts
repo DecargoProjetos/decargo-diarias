@@ -146,6 +146,7 @@ export interface UserSyncResult {
   updated: number;
   skipped: number;
   debugAtivoBreakdown?: UserSyncResultDebugAtivoBreakdown;
+  debugSample?: unknown[];
 }
 
 export type DiariaStatus = typeof DiariaStatus[keyof typeof DiariaStatus];

@@ -1009,6 +1009,11 @@ components:
           type: object
           additionalProperties:
             type: integer
+        # TEMP DEBUG: first 3 raw funcionário records from the People API.
+        # Remove once the real "ativo" field name is confirmed.
+        debugSample:
+          type: array
+          items: {}
       required: [synced, created, updated, skipped]
 
     # ── DIÁRIAS ──────────────────────────────────────────────────────────

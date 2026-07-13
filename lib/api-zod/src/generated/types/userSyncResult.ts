@@ -13,4 +13,5 @@ export interface UserSyncResult {
   updated: number;
   skipped: number;
   debugAtivoBreakdown?: UserSyncResultDebugAtivoBreakdown;
+  debugSample?: unknown[];
 }
