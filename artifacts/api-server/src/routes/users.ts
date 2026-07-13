@@ -16,81 +16,83 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   const now = new Date();
   req.log.info("User sync started");
 
-  let remote;
+  // The whole handler body is wrapped in one try/catch — not just the initial
+  // fetch — so any failure (reaching the People API, or a DB error while
+  // upserting) is caught here and answered with a diagnosable message.
+  // Express 5 auto-forwards rejected async handlers to the global error
+  // middleware, which replaces the message with a generic "Internal server
+  // error" in production; this route is admin-only, so it's safe to surface
+  // details here instead (never our own secrets, only upstream/DB errors).
   try {
-    remote = await fetchFuncionarios();
-  } catch (err) {
-    req.log.error({ err }, "User sync failed to reach DECARGO People");
-    // Sync is admin-only, so it's safe to surface the upstream error detail
-    // here — it's what an admin needs to fix credentials/connectivity, and
-    // it never contains our own secrets (only the People API's own response).
-    res.status(502).json({
-      error: `Falha ao contatar DECARGO People: ${err instanceof Error ? err.message : String(err)}`,
-    });
-    return;
-  }
+    const remote = await fetchFuncionarios();
 
-  let created = 0;
-  let updated = 0;
-  let skipped = 0;
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
 
-  for (const f of remote) {
-    const decargoId = String(f.id_funcionario);
-    const email = f.email_principal?.toLowerCase() ?? null;
-    const name = f.nome;
+    for (const f of remote) {
+      const decargoId = String(f.id_funcionario);
+      const email = f.email_principal?.toLowerCase() ?? null;
+      const name = f.nome;
 
-    // Primary lookup by decargoId (id_funcionario), then by email so that users
-    // who have already logged in via handoff (decargoId = id_usuario) are not
-    // duplicated.
-    let [existing] = await db
-      .select({ id: usersTable.id, decargoId: usersTable.decargoId, name: usersTable.name, email: usersTable.email })
-      .from(usersTable)
-      .where(eq(usersTable.decargoId, decargoId))
-      .limit(1);
-
-    if (!existing && email) {
-      [existing] = await db
+      // Primary lookup by decargoId (id_funcionario), then by email so that users
+      // who have already logged in via handoff (decargoId = id_usuario) are not
+      // duplicated.
+      let [existing] = await db
         .select({ id: usersTable.id, decargoId: usersTable.decargoId, name: usersTable.name, email: usersTable.email })
         .from(usersTable)
-        .where(sql`lower(${usersTable.email}) = ${email}`)
+        .where(eq(usersTable.decargoId, decargoId))
         .limit(1);
-    }
 
-    if (!existing) {
-      if (!email) {
-        // Cannot provision without an email — skip
-        skipped++;
-        continue;
+      if (!existing && email) {
+        [existing] = await db
+          .select({ id: usersTable.id, decargoId: usersTable.decargoId, name: usersTable.name, email: usersTable.email })
+          .from(usersTable)
+          .where(sql`lower(${usersTable.email}) = ${email}`)
+          .limit(1);
       }
-      await db.insert(usersTable).values({
-        decargoId,
-        name,
-        email,
-        role: "prestador",
-        active: true,
-      });
-      created++;
-    } else {
-      // Update name and email only; preserve role, teamId, and active flag
-      await db
-        .update(usersTable)
-        .set({ name, ...(email ? { email } : {}), updatedAt: now })
-        .where(eq(usersTable.id, existing.id));
-      updated++;
+
+      if (!existing) {
+        if (!email) {
+          // Cannot provision without an email — skip
+          skipped++;
+          continue;
+        }
+        await db.insert(usersTable).values({
+          decargoId,
+          name,
+          email,
+          role: "prestador",
+          active: true,
+        });
+        created++;
+      } else {
+        // Update name and email only; preserve role, teamId, and active flag
+        await db
+          .update(usersTable)
+          .set({ name, ...(email ? { email } : {}), updatedAt: now })
+          .where(eq(usersTable.id, existing.id));
+        updated++;
+      }
     }
+
+    req.log.info({ created, updated, skipped }, "User sync complete");
+
+    await logAudit({
+      entityType: "user",
+      entityId: 0,
+      action: "sync",
+      userId: req.currentUser!.id,
+      newValues: { synced: remote.length, created, updated, skipped, timestamp: now },
+    });
+
+    res.json({ synced: remote.length, created, updated, skipped });
+  } catch (err) {
+    req.log.error({ err }, "User sync failed");
+    res.status(502).json({
+      error: `Falha ao sincronizar usuários: ${err instanceof Error ? err.message : String(err)}`,
+    });
   }
-
-  req.log.info({ created, updated, skipped }, "User sync complete");
-
-  await logAudit({
-    entityType: "user",
-    entityId: 0,
-    action: "sync",
-    userId: req.currentUser!.id,
-    newValues: { synced: remote.length, created, updated, skipped, timestamp: now },
-  });
-
-  res.json({ synced: remote.length, created, updated, skipped });
 });
 
 // GET /api/users (admin only)
