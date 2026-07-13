@@ -54,9 +54,9 @@ export interface Prestador {
 let _token: string | null = null;
 
 async function login(): Promise<void> {
-  const loginVal = process.env.PEOPLE_SERVICE_LOGIN;
-  const senha = process.env.PEOPLE_SERVICE_PASSWORD;
-  if (!loginVal || !senha) {
+  const username = process.env.PEOPLE_SERVICE_LOGIN;
+  const password = process.env.PEOPLE_SERVICE_PASSWORD;
+  if (!username || !password) {
     throw new Error(
       "PEOPLE_SERVICE_LOGIN and PEOPLE_SERVICE_PASSWORD must be set for People API sync"
     );
@@ -65,7 +65,10 @@ async function login(): Promise<void> {
   const res = await fetch(`${baseUrl()}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ login: loginVal, senha }),
+    // The People API's login schema requires `username` / `password` field
+    // names specifically — `login` / `senha` fail its zod validation with a
+    // 400 "Required" error even though the values are non-empty.
+    body: JSON.stringify({ username, password }),
   });
 
   if (!res.ok) {
