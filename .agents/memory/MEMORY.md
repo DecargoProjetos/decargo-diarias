@@ -2,3 +2,4 @@
 - [Diarias auth design](diarias-auth-design.md) — OIDC via DECARGO ID; prestador access control must check decargoId against provider record
 - [Diarias stack](diarias-stack.md) — Express5 + Drizzle + pg Pool; pool exported from @workspace/db alongside db
 - [Diarias Railway deploy target](diarias-railway-deploy.md) — prod is Railway via GitHub, not Replit Deployments; a push doesn't prove it deployed — check Railway's Deployments tab
+- [Diarias People sync bugs](diarias-people-sync-bugs.md) — unguarded req.body access masked as generic 500; unvalidated login token shape masked as false 401s
