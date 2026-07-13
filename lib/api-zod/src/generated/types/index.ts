@@ -41,6 +41,5 @@ export * from './userCreate';
 export * from './userCreateRole';
 export * from './userRole';
 export * from './userSyncResult';
-export * from './userSyncResultDebugAtivoBreakdown';
 export * from './userUpdate';
 export * from './userUpdateRole';

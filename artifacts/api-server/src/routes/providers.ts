@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, providersTable, teamsTable } from "@workspace/db";
-import { eq, count } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { fetchPrestadores } from "../lib/peopleClient";
@@ -8,9 +8,14 @@ import { fetchPrestadores } from "../lib/peopleClient";
 const router = Router();
 
 // GET /api/providers
+// By default returns ALL providers (active and inactive) so the admin
+// management screen ("Pessoas") can keep showing inactive people instead of
+// them disappearing. Pass `activeOnly=true` for operational pickers (e.g.
+// the new-diária form) that must only offer active providers.
 router.get("/", requireAuth, async (req, res) => {
   const me = req.currentUser!;
   const teamId = req.query.teamId ? Number(req.query.teamId) : undefined;
+  const activeOnly = req.query.activeOnly === "true";
 
   let query = db
     .select({
@@ -30,35 +35,24 @@ router.get("/", requireAuth, async (req, res) => {
   // Gestores only see their own team's providers
   const effectiveTeamId = me.role === "gestor" ? (me.teamId ?? -1) : teamId;
 
-  if (effectiveTeamId !== undefined) {
-    query = query.where(eq(providersTable.teamId, effectiveTeamId));
-  } else {
-    query = query.where(eq(providersTable.active, true));
-  }
+  const conditions = [];
+  if (effectiveTeamId !== undefined) conditions.push(eq(providersTable.teamId, effectiveTeamId));
+  if (activeOnly) conditions.push(eq(providersTable.active, true));
+  if (conditions.length > 0) query = query.where(and(...conditions));
 
   const providers = await query.orderBy(providersTable.name);
   res.json(providers);
 });
 
 // POST /api/providers/sync (admin)
-// Body: { force?: boolean }  — pass force=true to allow deactivation when the
-// remote list drops unexpectedly (empty response or >50 % shrink).
 router.post("/sync", requireRole("admin"), async (req, res) => {
   const now = new Date();
-  // req.body is `undefined` (not `{}`) when the client sends no body and no
-  // `Content-Type: application/json` header — express.json() only populates
-  // req.body when that content type matches. The generated sync mutation
-  // sends no body at all, so this MUST be optional-chained; reading `.force`
-  // off `undefined` throws synchronously here, before the try/catch below,
-  // which used to produce an instant, un-logged, generic 500.
-  const force = Boolean((req.body as { force?: boolean } | undefined)?.force);
-  req.log.info({ force }, "Provider sync started");
+  req.log.info("Provider sync started");
 
   // The whole handler body is wrapped in one try/catch so that ANY failure —
   // reaching the People API, an unexpected response shape, or a DB error
-  // while upserting/deactivating — is caught here and answered with a
-  // diagnosable message. Without this, an error thrown after the initial
-  // fetch (e.g. a DB constraint violation inside the transaction) bubbles
+  // while inserting — is caught here and answered with a diagnosable
+  // message. Without this, an error thrown after the initial fetch bubbles
   // past this route entirely: Express 5 auto-forwards rejected async
   // handlers to the global error middleware, which replaces the message
   // with a generic "Internal server error" in production. Sync is
@@ -66,11 +60,6 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   // our own secrets, only the People API's response or Postgres' own error.
   try {
     const remote = await fetchPrestadores();
-    // TEMP DEBUG: dump the first couple of raw records so we can confirm the
-    // exact field names for "objeto do contrato" / active-status before
-    // adding the Motorista/Ajudante/Transporte de Mercadorias filter. Remove
-    // once confirmed.
-    req.log.info({ sample: remote.slice(0, 3) }, "Provider sync: raw sample from People API");
     // Guard against an unexpected response shape (e.g. the endpoint switching
     // to a paginated `{ data: [...] }` wrapper like /api/funcionarios).
     if (!Array.isArray(remote)) {
@@ -79,104 +68,49 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
       );
     }
 
-    // Safety circuit: refuse deactivation if the remote list looks suspicious.
-    // An empty result almost always means an auth issue or upstream outage,
-    // not a real "everyone was removed" event.
-    if (remote.length === 0 && !force) {
-      req.log.warn("Provider sync aborted: remote returned 0 providers. Pass force=true to override.");
-      res.status(422).json({
-        error: "Remote returned 0 providers — possible upstream outage. Pass force=true to override.",
-      });
-      return;
-    }
+    let created = 0;
+    let skipped = 0;
 
-    // Check for suspicious shrinkage (> 50% drop in active count).
-    const [{ activeCount }] = await db
-      .select({ activeCount: count() })
-      .from(providersTable)
-      .where(eq(providersTable.active, true));
+    // Sync is additive-only: an existing local row (matched by decargoId) is
+    // left completely untouched — no name/active updates. This guarantees
+    // (a) nothing is duplicated, (b) a manual deactivation in the app is
+    // never resurrected by a later sync just because the contract is still
+    // active in DECARGO People, and (c) sync does no unnecessary writes for
+    // providers already on file.
+    for (const p of remote) {
+      const decargoId = String(p.id_prestador);
 
-    const activeLocal = Number(activeCount ?? 0);
-    if (activeLocal > 0 && remote.length < activeLocal * 0.5 && !force) {
-      req.log.warn(
-        { remoteCount: remote.length, localActive: activeLocal },
-        "Provider sync aborted: remote count dropped by >50%. Pass force=true to override."
-      );
-      res.status(422).json({
-        error: `Remote returned ${remote.length} providers but ${activeLocal} are active locally — suspicious drop. Pass force=true to override.`,
-      });
-      return;
-    }
+      const [existing] = await db
+        .select({ id: providersTable.id })
+        .from(providersTable)
+        .where(eq(providersTable.decargoId, decargoId))
+        .limit(1);
 
-    // Run upserts + deactivations in a single transaction so a mid-run failure
-    // leaves no partial state.
-    const { created, updated, deactivated } = await db.transaction(async (tx) => {
-      let created = 0;
-      let updated = 0;
-      let deactivated = 0;
-
-      // Upsert each remote provider
-      for (const p of remote) {
-        const decargoId = String(p.id_prestador);
-
-        const [existing] = await tx
-          .select({ id: providersTable.id })
-          .from(providersTable)
-          .where(eq(providersTable.decargoId, decargoId))
-          .limit(1);
-
-        if (!existing) {
-          await tx.insert(providersTable).values({
-            decargoId,
-            name: p.titular_do_contrato,
-            active: p.tem_contrato_ativo ?? false,
-            syncedAt: now,
-          });
-          created++;
-        } else {
-          await tx
-            .update(providersTable)
-            .set({
-              name: p.titular_do_contrato,
-              active: p.tem_contrato_ativo ?? false,
-              syncedAt: now,
-              updatedAt: now,
-            })
-            .where(eq(providersTable.id, existing.id));
-          updated++;
-        }
+      if (existing) {
+        skipped++;
+        continue;
       }
 
-      // Deactivate providers no longer returned by People
-      const remoteIds = new Set(remote.map((p) => String(p.id_prestador)));
-      const allLocal = await tx
-        .select({ id: providersTable.id, decargoId: providersTable.decargoId, active: providersTable.active })
-        .from(providersTable);
+      await db.insert(providersTable).values({
+        decargoId,
+        name: p.titular_do_contrato,
+        active: p.tem_contrato_ativo ?? false,
+        syncedAt: now,
+      });
+      created++;
+    }
 
-      for (const local of allLocal) {
-        if (!remoteIds.has(local.decargoId) && local.active) {
-          await tx
-            .update(providersTable)
-            .set({ active: false, syncedAt: now, updatedAt: now })
-            .where(eq(providersTable.id, local.id));
-          deactivated++;
-        }
-      }
-
-      return { created, updated, deactivated };
-    });
-
-    req.log.info({ created, updated, deactivated }, "Provider sync complete");
+    req.log.info({ created, skipped }, "Provider sync complete");
 
     await logAudit({
       entityType: "provider",
       entityId: 0,
       action: "sync",
       userId: req.currentUser!.id,
-      newValues: { synced: remote.length, created, updated, deactivated, force, timestamp: now },
+      newValues: { synced: remote.length, created, skipped, timestamp: now },
     });
 
-    res.json({ synced: remote.length, created, updated, deactivated, debugSample: remote.slice(0, 3) });
+    res.json({ synced: remote.length, created, skipped });
   } catch (err) {
     req.log.error({ err }, "Provider sync failed");
     res.status(502).json({

@@ -6,10 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Sync is additive-only: it creates providers that don't exist locally yet (matched by decargoId) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.
+ */
 export interface SyncResult {
   synced: number;
   created: number;
-  updated: number;
-  deactivated: number;
-  debugSample?: unknown[];
+  skipped: number;
 }

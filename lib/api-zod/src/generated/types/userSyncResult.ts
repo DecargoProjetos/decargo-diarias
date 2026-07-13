@@ -5,13 +5,12 @@
  * Controle de Diárias de Prestadores de Serviços
  * OpenAPI spec version: 0.1.0
  */
-import type { UserSyncResultDebugAtivoBreakdown } from './userSyncResultDebugAtivoBreakdown';
 
+/**
+ * Sync is additive-only: it creates users that don't exist locally yet (matched by decargoId or email) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.
+ */
 export interface UserSyncResult {
   synced: number;
   created: number;
-  updated: number;
   skipped: number;
-  debugAtivoBreakdown?: UserSyncResultDebugAtivoBreakdown;
-  debugSample?: unknown[];
 }

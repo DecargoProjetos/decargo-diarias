@@ -1127,7 +1127,7 @@ export const getListProvidersUrl = (params?: ListProvidersParams,) => {
 }
 
 /**
- * @summary List active service providers
+ * @summary List service providers
  */
 export const listProviders = async (params?: ListProvidersParams, options?: RequestInit): Promise<Provider[]> => {
 
@@ -1174,7 +1174,7 @@ export type ListProvidersQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List active service providers
+ * @summary List service providers
  */
 
 export function useListProviders<TData = Awaited<ReturnType<typeof listProviders>>, TError = ErrorType<unknown>>(

@@ -26,11 +26,10 @@ export interface Funcionario {
   id_funcionario: number;
   nome: string;
   email_principal: string | null;
-  ativo: boolean;
-  // TEMP DEBUG: `ativo` came back `undefined` for every record in
-  // production — allow arbitrary extra fields so the raw sample dump below
-  // can reveal the real field name. Remove once confirmed.
-  [key: string]: unknown;
+  // NOTE: the People API has no `ativo` field on funcionários — the real
+  // employment-status signal is `demitido` (true once terminated). A
+  // funcionário is considered active when `demitido` is false.
+  demitido: boolean;
 }
 
 interface FuncionarioPage {

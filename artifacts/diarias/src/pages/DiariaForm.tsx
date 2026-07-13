@@ -23,7 +23,9 @@ export default function DiariaForm() {
   
   const { data: user } = useGetMe();
   const { data: teams } = useListTeams();
-  const { data: providers } = useListProviders();
+  // Only offer active providers when creating a new diária — inactive
+  // providers must not be selectable for new operational records.
+  const { data: providers } = useListProviders({ activeOnly: true });
   
   const { data: existingDiaria, isLoading: isLoadingExisting } = useGetDiaria(
     Number(id), 

@@ -1,0 +1,38 @@
+Gostaria de fazer algumas observações e ajustes relacionados ao processo de sincronização e à seção **Pessoas**.
+
+### 1. Processo de Sincronização
+
+Atualmente, ao acionar a opção **Sincronizar**, o sistema parece realizar a sincronização completa de todos os registros novamente.
+
+Conforme solicitado anteriormente, verifique se o processo está sincronizando apenas os novos registros que ainda não existem na base de dados local.
+
+Objetivos:
+
+* Evitar a recriação ou atualização desnecessária de registros já sincronizados.
+* Melhorar o desempenho do processo de sincronização.
+* Reduzir o risco de duplicidades e inconsistências.
+* Garantir que apenas novos nomes sejam incluídos na lista durante a sincronização.
+
+### 2. Comportamento dos Registros Inativos
+
+Na seção **Pessoas**, quando um registro é inativado, ele desaparece completamente da lista.
+
+Como consequência, ao executar uma nova sincronização, o sistema entende que aquela pessoa não existe mais na base local e a importa novamente.
+
+Solicito a seguinte alteração:
+
+* Quando uma pessoa for inativada, ela deverá permanecer cadastrada no sistema com status **Inativo**.
+* Pessoas inativas não deverão ser exibidas nas listas de seleção utilizadas na configuração de equipes ou em outros processos operacionais.
+* Pessoas inativas não deverão ser sincronizadas novamente, mesmo que continuem existindo na origem dos dados.
+* O processo de sincronização deverá verificar se o registro já existe localmente, independentemente de estar ativo ou inativo.
+* Caso o registro já exista, o sistema não deverá criar um novo cadastro.
+
+### Resultado Esperado
+
+* A sincronização incluirá apenas novos registros.
+* Pessoas inativadas permanecerão no histórico do sistema.
+* Pessoas inativas não poderão ser selecionadas em cadastros operacionais.
+* O sistema evitará a recriação de registros anteriormente inativados.
+* O histórico e a rastreabilidade dos dados serão preservados.
+
+Após a implementação, realizar testes de sincronização e apresentar um resumo das alterações efetuadas e dos resultados obtidos.

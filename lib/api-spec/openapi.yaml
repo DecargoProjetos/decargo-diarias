@@ -306,12 +306,17 @@ paths:
     get:
       operationId: listProviders
       tags: [providers]
-      summary: List active service providers
+      summary: List service providers
       parameters:
         - name: teamId
           in: query
           schema:
             type: ["integer", "null"]
+        - name: activeOnly
+          in: query
+          description: When true, only active providers are returned. Defaults to false (all providers, including inactive).
+          schema:
+            type: boolean
       responses:
         "200":
           description: List of providers
@@ -974,47 +979,35 @@ components:
 
     SyncResult:
       type: object
+      description: >-
+        Sync is additive-only: it creates providers that don't exist locally
+        yet (matched by decargoId) and never touches existing rows, so a
+        manual deactivation (or any other admin edit) in the app is never
+        overwritten by a later sync.
       properties:
         synced:
           type: integer
         created:
-          type: integer
-        updated:
-          type: integer
-        deactivated:
-          type: integer
-        # TEMP DEBUG: first 3 raw provider records from the People API, so we
-        # can confirm field names in the UI without needing Railway log
-        # search. Remove once the "objeto do contrato" filter is confirmed.
-        debugSample:
-          type: array
-          items: {}
-      required: [synced, created, updated, deactivated]
-
-    UserSyncResult:
-      type: object
-      properties:
-        synced:
-          type: integer
-        created:
-          type: integer
-        updated:
           type: integer
         skipped:
           type: integer
-        # TEMP DEBUG: counts of the "ativo" field's raw values from the
-        # People API, so we can confirm the field before adding an
-        # active-only filter. Remove once confirmed.
-        debugAtivoBreakdown:
-          type: object
-          additionalProperties:
-            type: integer
-        # TEMP DEBUG: first 3 raw funcionário records from the People API.
-        # Remove once the real "ativo" field name is confirmed.
-        debugSample:
-          type: array
-          items: {}
-      required: [synced, created, updated, skipped]
+      required: [synced, created, skipped]
+
+    UserSyncResult:
+      type: object
+      description: >-
+        Sync is additive-only: it creates users that don't exist locally yet
+        (matched by decargoId or email) and never touches existing rows, so a
+        manual deactivation (or any other admin edit) in the app is never
+        overwritten by a later sync.
+      properties:
+        synced:
+          type: integer
+        created:
+          type: integer
+        skipped:
+          type: integer
+      required: [synced, created, skipped]
 
     # ── DIÁRIAS ──────────────────────────────────────────────────────────
     Diaria:

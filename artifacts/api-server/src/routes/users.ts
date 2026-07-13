@@ -16,7 +16,6 @@ const VALID_ROLES = ["admin", "gestor", "prestador", "funcionario"];
 // role and teamId remain under admin control.  New users receive the default
 // "prestador" role (least-privilege); admins promote them as needed.
 router.post("/sync", requireRole("admin"), async (req, res) => {
-  const now = new Date();
   req.log.info("User sync started");
 
   // The whole handler body is wrapped in one try/catch — not just the initial
@@ -28,87 +27,70 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   // details here instead (never our own secrets, only upstream/DB errors).
   try {
     const remote = await fetchFuncionarios();
-    // TEMP DEBUG: confirm whether `todos=false` already filters to active-only
-    // server-side, or whether we need to also filter by `ativo` client-side.
-    // `ativo` came back `undefined` for every record — dump a raw sample too
-    // so we can see the real field name. Remove once confirmed.
-    req.log.info(
-      { total: remote.length, ativoCounts: remote.reduce((acc: Record<string, number>, f) => {
-        const key = String(f.ativo);
-        acc[key] = (acc[key] ?? 0) + 1;
-        return acc;
-      }, {}) },
-      "User sync: ativo breakdown from People API"
-    );
-    req.log.info({ sample: remote.slice(0, 3) }, "User sync: raw sample from People API");
 
     let created = 0;
-    let updated = 0;
     let skipped = 0;
 
+    // Sync is additive-only: an existing local row (matched by decargoId or,
+    // failing that, by email) is left completely untouched — no name/email/
+    // active updates. This guarantees (a) nothing is duplicated, (b) a
+    // manual deactivation in the app is never resurrected by a later sync
+    // just because the person is still active in DECARGO People, and (c)
+    // sync does no unnecessary writes for people already on file.
     for (const f of remote) {
       const decargoId = String(f.id_funcionario);
       const email = f.email_principal?.toLowerCase() ?? null;
       const name = f.nome;
 
-      // Primary lookup by decargoId (id_funcionario), then by email so that users
-      // who have already logged in via handoff (decargoId = id_usuario) are not
-      // duplicated.
       let [existing] = await db
-        .select({ id: usersTable.id, decargoId: usersTable.decargoId, name: usersTable.name, email: usersTable.email })
+        .select({ id: usersTable.id })
         .from(usersTable)
         .where(eq(usersTable.decargoId, decargoId))
         .limit(1);
 
       if (!existing && email) {
         [existing] = await db
-          .select({ id: usersTable.id, decargoId: usersTable.decargoId, name: usersTable.name, email: usersTable.email })
+          .select({ id: usersTable.id })
           .from(usersTable)
           .where(sql`lower(${usersTable.email}) = ${email}`)
           .limit(1);
       }
 
-      if (!existing) {
-        if (!email) {
-          // Cannot provision without an email — skip
-          skipped++;
-          continue;
-        }
-        await db.insert(usersTable).values({
-          decargoId,
-          name,
-          email,
-          role: "prestador",
-          active: true,
-        });
-        created++;
-      } else {
-        // Update name and email only; preserve role, teamId, and active flag
-        await db
-          .update(usersTable)
-          .set({ name, ...(email ? { email } : {}), updatedAt: now })
-          .where(eq(usersTable.id, existing.id));
-        updated++;
+      if (existing) {
+        skipped++;
+        continue;
       }
+
+      if (!email) {
+        // Cannot provision without an email — skip
+        skipped++;
+        continue;
+      }
+
+      await db.insert(usersTable).values({
+        decargoId,
+        name,
+        email,
+        role: "prestador",
+        // `demitido` (terminated) is the real employment-status field from
+        // the People API — there is no `ativo` field. A newly-synced person
+        // who already shows up as terminated is created inactive.
+        active: !f.demitido,
+      });
+      created++;
     }
 
-    req.log.info({ created, updated, skipped }, "User sync complete");
-
-    const debugAtivoBreakdown = remote.reduce((acc: Record<string, number>, f) => {
-      const key = String(f.ativo);
-      acc[key] = (acc[key] ?? 0) + 1;
-      return acc;
-    }, {});
+    req.log.info({ created, skipped }, "User sync complete");
 
     await logAudit({
       entityType: "user",
       entityId: 0,
       action: "sync",
       userId: req.currentUser!.id,
-      newValues: { synced: remote.length, created, updated, skipped, timestamp: now },
+      newValues: { synced: remote.length, created, skipped, timestamp: new Date() },
     });
 
-    res.json({ synced: remote.length, created, updated, skipped, debugAtivoBreakdown, debugSample: remote.slice(0, 3) });
+    res.json({ synced: remote.length, created, skipped });
   } catch (err) {
     req.log.error({ err }, "User sync failed");
     res.status(502).json({

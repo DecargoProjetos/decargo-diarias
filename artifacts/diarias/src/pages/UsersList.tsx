@@ -113,7 +113,7 @@ export default function UsersList() {
       onSuccess: (result) => {
         toast({
           title: 'Sincronização concluída',
-          description: `${result.synced} funcionários processados — ${result.created} novos, ${result.updated} atualizados${result.skipped ? `, ${result.skipped} ignorados` : ''}.`,
+          description: `${result.synced} funcionários processados — ${result.created} novos${result.skipped ? `, ${result.skipped} já existentes (ignorados)` : ''}.`,
         });
         refetch();
       },

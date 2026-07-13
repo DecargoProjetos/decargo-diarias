@@ -90,11 +90,8 @@ export const CreateUserResponse = zod.object({
 export const SyncUsersResponse = zod.object({
   "synced": zod.number(),
   "created": zod.number(),
-  "updated": zod.number(),
-  "skipped": zod.number(),
-  "debugAtivoBreakdown": zod.record(zod.string(), zod.number()).optional(),
-  "debugSample": zod.array(zod.unknown()).optional()
-})
+  "skipped": zod.number()
+}).describe('Sync is additive-only: it creates users that don\'t exist locally yet (matched by decargoId or email) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.')
 
 
 /**
@@ -249,10 +246,11 @@ export const DeleteTeamResponse = zod.object({
 
 
 /**
- * @summary List active service providers
+ * @summary List service providers
  */
 export const ListProvidersQueryParams = zod.object({
-  "teamId": zod.coerce.number().nullish()
+  "teamId": zod.coerce.number().nullish(),
+  "activeOnly": zod.coerce.boolean().optional().describe('When true, only active providers are returned. Defaults to false (all providers, including inactive).')
 })
 
 export const ListProvidersResponseItem = zod.object({
@@ -274,10 +272,8 @@ export const ListProvidersResponse = zod.array(ListProvidersResponseItem)
 export const SyncProvidersResponse = zod.object({
   "synced": zod.number(),
   "created": zod.number(),
-  "updated": zod.number(),
-  "deactivated": zod.number(),
-  "debugSample": zod.array(zod.unknown()).optional()
-})
+  "skipped": zod.number()
+}).describe('Sync is additive-only: it creates providers that don\'t exist locally yet (matched by decargoId) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.')
 
 
 /**

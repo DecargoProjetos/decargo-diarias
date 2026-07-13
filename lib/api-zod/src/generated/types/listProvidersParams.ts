@@ -11,4 +11,8 @@ export type ListProvidersParams = {
  * @nullable
  */
 teamId?: number | null;
+/**
+ * When true, only active providers are returned. Defaults to false (all providers, including inactive).
+ */
+activeOnly?: boolean;
 };

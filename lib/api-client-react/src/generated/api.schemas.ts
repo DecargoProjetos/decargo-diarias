@@ -130,23 +130,22 @@ export interface ProviderUpdate {
   active?: boolean;
 }
 
+/**
+ * Sync is additive-only: it creates providers that don't exist locally yet (matched by decargoId) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.
+ */
 export interface SyncResult {
   synced: number;
   created: number;
-  updated: number;
-  deactivated: number;
-  debugSample?: unknown[];
+  skipped: number;
 }
 
-export type UserSyncResultDebugAtivoBreakdown = {[key: string]: number};
-
+/**
+ * Sync is additive-only: it creates users that don't exist locally yet (matched by decargoId or email) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.
+ */
 export interface UserSyncResult {
   synced: number;
   created: number;
-  updated: number;
   skipped: number;
-  debugAtivoBreakdown?: UserSyncResultDebugAtivoBreakdown;
-  debugSample?: unknown[];
 }
 
 export type DiariaStatus = typeof DiariaStatus[keyof typeof DiariaStatus];
@@ -342,6 +341,10 @@ export type ListProvidersParams = {
  * @nullable
  */
 teamId?: number | null;
+/**
+ * When true, only active providers are returned. Defaults to false (all providers, including inactive).
+ */
+activeOnly?: boolean;
 };
 
 export type ListDiariasParams = {
