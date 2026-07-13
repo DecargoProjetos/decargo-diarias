@@ -43,6 +43,11 @@ If mismatch → return null → 404. The decargoId in local JWT = String(claims.
 2. Frontend: clearToken() removes from sessionStorage
 3. Redirect to PEOPLE_PORTAL_URL (https://app.decargopeople.com.br)
 
+## DECARGO People service-account login (for backend-to-backend sync)
+POST /api/auth/login on People expects body `{ username, password }` — NOT `{ login, senha }`.
+Sending the wrong field names returns HTTP 400 with a zod "Required" error per field, which is
+easy to misread as a credentials problem. Confirmed working field names: `username`, `password`.
+
 ## Armadilhas
 - If HandoffGate fails, render error screen — NOT the app (would cause redirect loop)
 - Token expires in 90s from People — if POST /handoff returns 401, user re-does login flow
