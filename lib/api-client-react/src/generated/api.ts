@@ -408,7 +408,7 @@ export const createUser = async (userCreate: UserCreate, options?: RequestInit):
 
 
 
-export const getCreateUserMutationOptions = <TError = ErrorType<ErrorResponse>,
+export const getCreateUserMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError,{data: BodyType<UserCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError,{data: BodyType<UserCreate>}, TContext> => {
 
@@ -437,12 +437,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type CreateUserMutationResult = NonNullable<Awaited<ReturnType<typeof createUser>>>
     export type CreateUserMutationBody = BodyType<UserCreate>
-    export type CreateUserMutationError = ErrorType<ErrorResponse>
+    export type CreateUserMutationError = ErrorType<unknown>
 
     /**
  * @summary Manually create a user (admin only)
  */
-export const useCreateUser = <TError = ErrorType<ErrorResponse>,
+export const useCreateUser = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError,{data: BodyType<UserCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createUser>>,

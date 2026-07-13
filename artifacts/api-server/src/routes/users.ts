@@ -129,8 +129,34 @@ router.post("/", requireRole("admin"), async (req, res) => {
     .where(sql`lower(${usersTable.email}) = ${normalizedEmail}`)
     .limit(1);
 
+  // A pessoa já existe (veio de sync ou de um cadastro manual anterior) —
+  // em vez de bloquear com um erro de duplicidade, atualizamos o registro
+  // existente com os dados informados no formulário. Isso evita duplicar a
+  // pessoa na lista e permite corrigir/promover alguém já cadastrado
+  // simplesmente reenviando o formulário de "novo usuário" com o mesmo
+  // e-mail.
   if (existing) {
-    res.status(409).json({ error: "Já existe um usuário com este e-mail." });
+    const [updated] = await db
+      .update(usersTable)
+      .set({
+        name,
+        role,
+        teamId: teamId ?? null,
+        active: active ?? true,
+        updatedAt: new Date(),
+      })
+      .where(eq(usersTable.id, existing.id))
+      .returning();
+
+    await logAudit({
+      entityType: "user",
+      entityId: updated.id,
+      action: "atualizado via cadastro manual (e-mail já existente)",
+      userId: req.currentUser!.id,
+      newValues: { name, email: normalizedEmail, role, teamId: teamId ?? null, active: active ?? true },
+    });
+
+    res.status(200).json(updated);
     return;
   }
 

@@ -107,12 +107,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
-        "409":
-          description: Email already in use
+        "200":
+          description: >-
+            An existing user was found with this email — it was updated in
+            place (name/role/team/active) instead of creating a duplicate.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/User"
 
   /users/sync:
     post:
