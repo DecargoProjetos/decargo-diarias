@@ -17,10 +17,19 @@ have no way to get a "yes" in CI, so they're silently dropped instead of
 applied.
 
 **How to apply:** `lib/db/package.json` has both a `push` and a `push-force`
-script (`drizzle-kit push --force`). Railway's `buildCommand` (in
-`artifacts/api-server/railway.json`) should use `push-force`, not `push`, so
-every deploy always fully syncs the schema. If a "column does not exist" /
-500 bug ever appears only in production and not in dev, suspect schema drift
-first — check whether a schema column was added recently (`git log` on the
-relevant `lib/db/src/schema/*.ts` file) and whether the build command uses
-`--force`.
+script (`drizzle-kit push --force`). If a "column does not exist" / 500 bug
+ever appears only in production and not in dev, suspect schema drift first —
+check whether a schema column was added recently (`git log` on the relevant
+`lib/db/src/schema/*.ts` file).
+
+**Railway ignores `railway.json` for this service.** The api-server's
+Railway service has a Custom Start Command set directly in the dashboard
+(Settings → Deploy), which takes priority over both `build.buildCommand`
+and `deploy.startCommand` in the repo's `railway.json` — edits to that file
+silently have no effect (confirmed via Deploy Logs: container went straight
+to `node ./dist/index.mjs`, no schema step ran, despite railway.json saying
+otherwise). The fix that actually works: edit the **dashboard's Custom Start
+Command** directly to
+`pnpm --filter @workspace/db run push-force && pnpm --filter @workspace/api-server run start`.
+Don't trust a `railway.json` edit alone for this service — verify with a
+fresh Deploy Log after redeploying.
