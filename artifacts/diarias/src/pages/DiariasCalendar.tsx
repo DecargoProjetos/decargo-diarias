@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   useGetMe,
-  useListDiarias,
+  listDiarias,
   useListProviders,
   useCreateDiaria,
   useUpdateDiaria,
@@ -73,10 +74,25 @@ export default function DiariasCalendar() {
     return days;
   }, [rangeStart, rangeEnd]);
 
-  const { data: diariasData, isLoading, refetch } = useListDiarias({
-    startDate: toDateKey(rangeStart),
-    endDate: toDateKey(rangeEnd),
-    pageSize: 100,
+  // GET /diarias caps pageSize at 100 server-side, so a single page can
+  // silently drop entries for a busy month/team. Page through the full
+  // result set for the visible range instead of trusting one request.
+  const startDateKey = toDateKey(rangeStart);
+  const endDateKey = toDateKey(rangeEnd);
+  const { data: allDiarias, isLoading, refetch } = useQuery({
+    queryKey: ['diariasRange', startDateKey, endDateKey],
+    queryFn: async () => {
+      const pageSize = 100;
+      let page = 1;
+      const collected: Diaria[] = [];
+      while (true) {
+        const res = await listDiarias({ startDate: startDateKey, endDate: endDateKey, page, pageSize });
+        collected.push(...res.data);
+        if (page >= res.totalPages || res.data.length === 0) break;
+        page += 1;
+      }
+      return collected;
+    },
   });
 
   // Only fetch the (potentially team-scoped) provider picker when the user
@@ -88,13 +104,13 @@ export default function DiariasCalendar() {
 
   const diariasByDay = useMemo(() => {
     const map = new Map<string, Diaria[]>();
-    for (const diaria of diariasData?.data ?? []) {
+    for (const diaria of allDiarias ?? []) {
       const key = diaria.workDate.split('T')[0];
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(diaria);
     }
     return map;
-  }, [diariasData]);
+  }, [allDiarias]);
 
   const navigate = (dir: 1 | -1) => {
     setAnchorDate(prev => {

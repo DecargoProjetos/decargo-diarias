@@ -1,0 +1,200 @@
+### Análise de Diárias (Aprovação, Reprovação e Exportação)
+
+Precisamos criar uma nova seção denominada **Análise de Diárias**, destinada à aprovação, reprovação e exportação das diárias para o sistema DECARGO People.
+
+### Controle de Acesso
+
+O acesso a esta tela deverá ser restrito exclusivamente aos usuários com perfil de **Administrador**.
+
+Somente administradores poderão:
+
+* Visualizar a tela de Análise de Diárias.
+* Aprovar diárias.
+* Reprovar diárias.
+* Informar a data de pagamento.
+* Selecionar registros para exportação.
+* Realizar a exportação para o DECARGO People.
+
+### Dashboard Resumido
+
+No topo da tela deverá existir um painel com indicadores gerenciais contendo:
+
+* Quantidade de diárias pendentes de aprovação.
+* Quantidade de diárias aprovadas.
+* Quantidade de diárias reprovadas.
+* Quantidade de diárias exportadas.
+* Valor total pendente de aprovação.
+* Valor total aprovado.
+* Valor total disponível para exportação.
+* Valor total exportado.
+
+### Campos Exibidos na Tela
+
+A tela deverá apresentar os seguintes campos:
+
+* Nome do prestador.
+* Equipe.
+* Data trabalhada.
+* Valor da diária.
+
+  * O valor deverá ser preenchido automaticamente com base no valor cadastrado na seção Pessoas.
+* Data de pagamento.
+
+  * Campo preenchido manualmente pelo administrador.
+* Status.
+
+  * Pendente.
+  * Aprovada.
+  * Reprovada.
+  * Exportada.
+  * Paga.
+* Motivo da reprovação.
+* Anotações.
+* Data de criação do registro.
+* Usuário responsável pelo lançamento.
+* Data da aprovação.
+* Usuário responsável pela aprovação.
+* Data da exportação.
+* Usuário responsável pela exportação.
+
+### Aprovação e Reprovação
+
+O administrador deverá poder:
+
+* Aprovar uma diária individualmente.
+* Reprovar uma diária individualmente.
+* Aprovar múltiplas diárias simultaneamente.
+* Reprovar múltiplas diárias simultaneamente.
+* Aprovar todas as diárias filtradas.
+* Reprovar todas as diárias filtradas.
+
+Ao reprovar uma diária, o preenchimento do campo **Motivo da Reprovação** deverá ser obrigatório.
+
+Todas as ações deverão ser registradas em log de auditoria.
+
+### Exportação para o DECARGO People
+
+As diárias aprovadas deverão ficar disponíveis para exportação para:
+
+**DECARGO People > Folha Mensal > Diárias Extras**
+
+A exportação deverá ser realizada manualmente pelo administrador.
+
+O sistema deverá permitir:
+
+* Selecionar registros individualmente.
+* Selecionar múltiplos registros.
+* Selecionar todos os registros disponíveis para exportação.
+* Desmarcar registros selecionados.
+* Exportação em lote.
+
+### Validações Antes da Exportação
+
+Antes de permitir a exportação, o sistema deverá validar obrigatoriamente:
+
+* Se a diária está aprovada.
+* Se a data de pagamento foi preenchida.
+* Se o registro ainda não foi exportado anteriormente.
+* Se todos os campos obrigatórios estão preenchidos.
+
+Caso alguma validação falhe, o sistema deverá exibir uma mensagem informando o motivo do bloqueio.
+
+### Campos Exportados
+
+Durante a exportação, deverão ser enviados os seguintes dados:
+
+* Nome (equivalente ao campo Prestador no DECARGO People).
+* Data trabalhada.
+* Valor da diária.
+* Data de pagamento.
+* Anotações.
+
+### Filtros da Tela
+
+A tela deverá possuir os seguintes filtros:
+
+#### Filtro por Nome
+
+* Campo de pesquisa livre.
+* A pesquisa deverá localizar qualquer ocorrência do texto digitado dentro do nome.
+* A pesquisa deverá funcionar independentemente da posição do texto dentro do nome.
+
+Exemplos:
+
+* "Maria" → Maria Eduarda, Ana Maria, Maria Clara.
+* "Silva" → João Silva, Maria da Silva.
+* "Edu" → Eduardo, Maria Eduarda, Carlos Eduardo.
+
+#### Filtro por Equipe
+
+* Lista de seleção das equipes cadastradas.
+
+#### Filtro por Período Trabalhado
+
+* Data Inicial.
+* Data Final.
+
+O sistema deverá retornar apenas os registros dentro do período informado.
+
+#### Filtro por Valor da Diária
+
+Permitir filtrar:
+
+* Valor exato.
+* Valor mínimo.
+* Valor máximo.
+* Faixa de valores.
+
+#### Filtro por Status
+
+Permitir filtrar por:
+
+* Pendente.
+* Aprovada.
+* Reprovada.
+* Exportada.
+* Paga.
+
+### Histórico e Auditoria
+
+Todas as ações realizadas deverão ser registradas em log de auditoria contendo:
+
+* Usuário responsável.
+* Data e hora da ação.
+* Tipo da ação executada.
+* Dados anteriores e posteriores à alteração.
+* Aprovação realizada.
+* Reprovação realizada.
+* Exportação realizada.
+
+### Histórico de Aprovações
+
+Cada diária deverá possuir um histórico completo contendo:
+
+* Quem criou o registro.
+* Quem aprovou.
+* Quem reprovou.
+* Quem exportou.
+* Data e hora de cada ação.
+* Justificativas registradas.
+
+### Bloqueio Pós-Exportação
+
+Após a exportação para o DECARGO People:
+
+* Os campos financeiros não poderão mais ser alterados.
+* O status não poderá ser modificado sem autorização administrativa específica.
+* Toda tentativa de alteração deverá ser registrada em auditoria.
+
+### Resultado Esperado
+
+* Centralização do processo de aprovação e reprovação.
+* Controle administrativo completo das exportações.
+* Aprovação e exportação em lote.
+* Maior rastreabilidade das operações.
+* Integração segura com o DECARGO People.
+* Redução de erros operacionais.
+* Preservação da integridade das informações financeiras.
+* Facilidade para localizar, aprovar e exportar registros através dos filtros avançados.
+
+Após a implementação, realizar testes completos dos fluxos de aprovação, reprovação, filtros, auditoria, exportação individual e exportação em lote, apresentando um relatório detalhado contendo as alterações realizadas, os testes executados e os resultados obtidos.
