@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useGetMe, useListTeams, useCreateTeam, useUpdateTeam, useDeleteTeam, useListUsers } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+
+// Normaliza para comparar nomes ignorando acentos/caixa, já que a pesquisa
+// deve casar qualquer parte do nome, não só o início.
+const normalize = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 
 export default function TeamsList() {
   const { data: user } = useGetMe();
@@ -23,6 +31,9 @@ export default function TeamsList() {
 
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
   const [formData, setFormData] = useState({ name: '', managerId: '' });
+
+  const [searchName, setSearchName] = useState('');
+  const [filterManagerId, setFilterManagerId] = useState<'todos' | string>('todos');
 
   if (user?.role !== 'admin') {
     return <div>Acesso negado. Apenas administradores.</div>;
@@ -78,6 +89,23 @@ export default function TeamsList() {
   // Role assignment happens separately in the Users admin page.
   const gestores = users?.filter(u => u.active !== false) || [];
 
+  // Only offer managers who are actually assigned to at least one team in the
+  // filter dropdown — filtering by a manager with no teams would always show
+  // an empty list, which is confusing.
+  const managersWithTeams = useMemo(() => {
+    const ids = new Set((teams ?? []).map(t => t.managerId).filter((id): id is number => id != null));
+    return gestores.filter(g => ids.has(g.id));
+  }, [teams, gestores]);
+
+  const filteredTeams = useMemo(() => {
+    const normalizedSearch = normalize(searchName.trim());
+    return (teams ?? []).filter(team => {
+      if (filterManagerId !== 'todos' && team.managerId?.toString() !== filterManagerId) return false;
+      if (normalizedSearch && !normalize(team.name).includes(normalizedSearch)) return false;
+      return true;
+    });
+  }, [teams, searchName, filterManagerId]);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -89,6 +117,27 @@ export default function TeamsList() {
           <Plus className="w-4 h-4 mr-2" /> Nova Equipe
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+            <Input
+              placeholder="Pesquisar por nome da equipe..."
+              value={searchName}
+              onChange={e => setSearchName(e.target.value)}
+              className="h-9 sm:max-w-xs"
+            />
+            <select
+              className="h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
+              value={filterManagerId}
+              onChange={e => setFilterManagerId(e.target.value)}
+            >
+              <option value="todos">Todos os gestores</option>
+              {managersWithTeams.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-0">
@@ -107,6 +156,14 @@ export default function TeamsList() {
               {isLoading && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center h-24">Carregando...</TableCell>
+                </TableRow>
+              )}
+
+              {!isLoading && filteredTeams.length === 0 && editingId !== 'new' && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                    Nenhuma equipe encontrada com os filtros selecionados.
+                  </TableCell>
                 </TableRow>
               )}
               
@@ -140,7 +197,7 @@ export default function TeamsList() {
                 </TableRow>
               )}
 
-              {teams?.map(team => (
+              {filteredTeams.map(team => (
                 <TableRow key={team.id}>
                   <TableCell>#{team.id}</TableCell>
                   {editingId === team.id ? (
