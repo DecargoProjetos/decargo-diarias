@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useGetMe, useListUsers, useCreateUser, useUpdateUser, useDeleteUser, useListTeams, useSyncUsers } from '@workspace/api-client-react';
+import { useMemo, useState } from 'react';
+import { useGetMe, useListUsers, useCreateUser, useUpdateUser, useDeleteUser, useSyncUsers } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,12 +9,19 @@ import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { RefreshCw, Edit2, Trash2, Save, X, UserPlus } from 'lucide-react';
 
-const EMPTY_NEW_USER = { name: '', email: '', role: 'prestador', teamId: '' };
+const EMPTY_NEW_USER = { name: '', email: '', role: 'prestador' };
+
+// Normaliza para comparar nomes ignorando acentos/caixa, já que a pesquisa
+// deve casar "Edu" com "Eduarda", "Eduardo" etc. em qualquer posição do nome.
+const normalize = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 
 export default function UsersList() {
   const { data: currentUser } = useGetMe();
   const { data: users, isLoading, refetch } = useListUsers({ query: { enabled: currentUser?.role === 'admin' } });
-  const { data: teams } = useListTeams();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
@@ -26,24 +33,29 @@ export default function UsersList() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newUser, setNewUser] = useState(EMPTY_NEW_USER);
 
+  const [searchName, setSearchName] = useState('');
+  const [filterRole, setFilterRole] = useState<'todos' | string>('todos');
+  const [filterStatus, setFilterStatus] = useState<'todos' | 'ativo' | 'inativo'>('todos');
+
   if (currentUser?.role !== 'admin') {
     return <div>Acesso negado.</div>;
   }
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = normalize(searchName.trim());
+    return (users ?? []).filter(user => {
+      if (filterRole !== 'todos' && user.role !== filterRole) return false;
+      if (filterStatus === 'ativo' && !user.active) return false;
+      if (filterStatus === 'inativo' && user.active) return false;
+      if (normalizedSearch && !normalize(user.name).includes(normalizedSearch)) return false;
+      return true;
+    });
+  }, [users, searchName, filterRole, filterStatus]);
 
   const handleRoleChange = (id: number, newRole: any) => {
     updateUser.mutate({ id, data: { role: newRole } }, {
       onSuccess: () => {
         toast({ title: 'Papel atualizado.' });
-        refetch();
-      }
-    });
-  };
-
-  const handleTeamChange = (id: number, newTeamId: string) => {
-    const teamId = newTeamId === '' ? null : Number(newTeamId);
-    updateUser.mutate({ id, data: { teamId } }, {
-      onSuccess: () => {
-        toast({ title: 'Equipe atualizada.' });
         refetch();
       }
     });
@@ -93,7 +105,6 @@ export default function UsersList() {
           name: newUser.name,
           email: newUser.email,
           role: newUser.role as any,
-          teamId: newUser.teamId ? Number(newUser.teamId) : null,
         },
       },
       {
@@ -179,17 +190,6 @@ export default function UsersList() {
                 <option value="funcionario">Funcionário</option>
               </select>
             </div>
-            <div>
-              <label className="text-sm font-medium">Equipe Alocada</label>
-              <select
-                className="w-full h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
-                value={newUser.teamId}
-                onChange={e => setNewUser({ ...newUser, teamId: e.target.value })}
-              >
-                <option value="">Nenhuma / Todas</option>
-                {teams?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancelar</Button>
@@ -205,13 +205,45 @@ export default function UsersList() {
       </Dialog>
 
       <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+            <Input
+              placeholder="Pesquisar por nome..."
+              value={searchName}
+              onChange={e => setSearchName(e.target.value)}
+              className="h-9 sm:max-w-xs"
+            />
+            <select
+              className="h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
+              value={filterRole}
+              onChange={e => setFilterRole(e.target.value)}
+            >
+              <option value="todos">Todos os papéis</option>
+              <option value="admin">Administrador</option>
+              <option value="gestor">Gestor</option>
+              <option value="prestador">Prestador</option>
+              <option value="funcionario">Funcionário</option>
+            </select>
+            <select
+              className="h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value as 'todos' | 'ativo' | 'inativo')}
+            >
+              <option value="todos">Todos os status</option>
+              <option value="ativo">Ativo</option>
+              <option value="inativo">Inativo</option>
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Usuário</TableHead>
                 <TableHead>Papel</TableHead>
-                <TableHead>Equipe Alocada</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Acesso Desde</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -219,8 +251,10 @@ export default function UsersList() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center h-24">Carregando...</TableCell></TableRow>
-              ) : users?.map(user => (
+                <TableRow><TableCell colSpan={5} className="text-center h-24">Carregando...</TableCell></TableRow>
+              ) : filteredUsers.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">Nenhum usuário encontrado com os filtros selecionados.</TableCell></TableRow>
+              ) : filteredUsers.map(user => (
                 <TableRow key={user.id} className={!user.active ? 'opacity-50' : ''}>
                   <TableCell>
                     {editingId === user.id ? (
@@ -261,17 +295,6 @@ export default function UsersList() {
                       <option value="gestor">Gestor</option>
                       <option value="prestador">Prestador</option>
                       <option value="funcionario">Funcionário</option>
-                    </select>
-                  </TableCell>
-                  <TableCell>
-                    <select 
-                      className="h-8 rounded border border-input bg-background px-2 text-sm shadow-sm w-48"
-                      value={user.teamId?.toString() || ''}
-                      onChange={e => handleTeamChange(user.id, e.target.value)}
-                      disabled={user.role === 'admin'}
-                    >
-                      <option value="">Nenhuma / Todas</option>
-                      {teams?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                   </TableCell>
                   <TableCell>
