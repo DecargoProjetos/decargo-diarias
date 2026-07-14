@@ -8,3 +8,4 @@
 - [Diarias People API fields](diarias-people-api-fields.md) — funcionario active status is `demitido` (inverted), not `ativo`; prestador uses `tem_contrato_ativo`
 - [Diarias sync additive-only](diarias-sync-additive-only.md) — /users/sync and /providers/sync only insert new rows, never update existing ones — preserves manual deactivation
 - [Diarias People Contratos endpoint](diarias-people-contratos-endpoint.md) — contratos-prestacao is a BFF/session-only route, not reachable via the JWT sync integration even with admin creds
+- [Diarias Railway schema drift](diarias-railway-schema-drift.md) — Railway build must run `drizzle-kit push --force`; plain `push` can silently skip columns in non-interactive CI, causing prod-only 500s
