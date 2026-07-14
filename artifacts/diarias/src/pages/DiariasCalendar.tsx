@@ -28,8 +28,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn, formatCurrency, statusColors, statusLabels } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Plus, Edit2, X, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Edit2, X, Save, Trash2 } from 'lucide-react';
 import { Link } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
 
@@ -45,6 +46,13 @@ const EDITABLE_STATUSES = ['pendente_aprovacao', 'solicitacao_correcao'];
 const toDateKey = (date: Date): string => format(date, 'yyyy-MM-dd');
 const truncateTime = (value: string | null | undefined): string | null =>
   value ? value.slice(0, 5) : null;
+
+// Linha da grade de lançamento em lote de "Nova Diária" (estilo planilha).
+// `key` é só um id de UI (não persiste), usado para identificar a linha
+// entre re-renders enquanto o registro ainda não foi salvo no backend.
+type GridRow = { key: string; providerId: string; startTime: string; endTime: string; observations: string };
+let gridRowSeq = 0;
+const makeEmptyGridRow = (): GridRow => ({ key: `grid-${++gridRowSeq}`, providerId: '', startTime: '', endTime: '', observations: '' });
 
 export default function DiariasCalendar() {
   const { data: user } = useGetMe();
@@ -335,12 +343,12 @@ function DayAgenda({
   const updateMutation = useUpdateDiaria();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [createForm, setCreateForm] = useState({ providerId: '', startTime: '', endTime: '', observations: '' });
+  const [gridRows, setGridRows] = useState<GridRow[]>([makeEmptyGridRow()]);
+  const [isSavingGrid, setIsSavingGrid] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ startTime: '', endTime: '', observations: '' });
 
   const showFinancials = user.role !== 'prestador' && user.role !== 'funcionario';
-  const selectedProvider = providers?.find(p => p.id === Number(createForm.providerId));
 
   const canEdit = (d: Diaria) => {
     if (!EDITABLE_STATUSES.includes(d.status)) return false;
@@ -349,49 +357,92 @@ function DayAgenda({
     return false;
   };
 
-  const resetCreateForm = () => setCreateForm({ providerId: '', startTime: '', endTime: '', observations: '' });
+  const resetGrid = () => setGridRows([makeEmptyGridRow()]);
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProvider) return;
+  // Estilo "planilha do Access": quem preenche o Nome da última linha ganha
+  // automaticamente uma nova linha vazia embaixo, sem precisar clicar em nada.
+  const updateGridRow = (key: string, patch: Partial<GridRow>) => {
+    setGridRows(rows => {
+      const index = rows.findIndex(r => r.key === key);
+      if (index === -1) return rows;
+      const next = rows.map(r => (r.key === key ? { ...r, ...patch } : r));
+      const isLastRow = index === rows.length - 1;
+      if (isLastRow && patch.providerId && patch.providerId !== '') {
+        next.push(makeEmptyGridRow());
+      }
+      return next;
+    });
+  };
 
-    if (selectedProvider.dailyRate == null) {
+  const removeGridRow = (key: string) => {
+    setGridRows(rows => {
+      const next = rows.filter(r => r.key !== key);
+      return next.length > 0 ? next : [makeEmptyGridRow()];
+    });
+  };
+
+  const handleSaveGrid = async () => {
+    const filledRows = gridRows.filter(r => r.providerId !== '');
+    if (filledRows.length === 0) {
+      toast({ title: 'Selecione ao menos uma pessoa para lançar.', variant: 'destructive' });
+      return;
+    }
+
+    for (const row of filledRows) {
+      const provider = providers?.find(p => p.id === Number(row.providerId));
+      if (!provider) continue;
+      if (provider.dailyRate == null) {
+        toast({
+          title: 'Valor da diária não definido',
+          description: `Configure o Valor da Diária de ${provider.name} em Pessoas antes de lançar.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!(provider.teamId ?? user.teamId)) {
+        toast({ title: `${provider.name} não está vinculado a uma equipe.`, variant: 'destructive' });
+        return;
+      }
+    }
+
+    setIsSavingGrid(true);
+    const results = await Promise.allSettled(
+      filledRows.map(row => {
+        const provider = providers!.find(p => p.id === Number(row.providerId))!;
+        return createMutation.mutateAsync({
+          data: {
+            providerId: provider.id,
+            teamId: provider.teamId ?? user.teamId!,
+            workDate: dateKey,
+            startTime: row.startTime || null,
+            endTime: row.endTime || null,
+            value: provider.dailyRate!,
+            observations: row.observations || null,
+          },
+        });
+      }),
+    );
+    setIsSavingGrid(false);
+
+    const failedRows = filledRows.filter((_, i) => results[i].status === 'rejected');
+    const successCount = filledRows.length - failedRows.length;
+
+    if (successCount > 0) {
+      toast({ title: `${successCount} diária${successCount > 1 ? 's' : ''} registrada${successCount > 1 ? 's' : ''}.` });
+      onChanged();
+    }
+    if (failedRows.length > 0) {
+      const firstError = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
       toast({
-        title: 'Valor da diária não definido',
-        description: 'Configure o Valor da Diária deste prestador em Pessoas antes de lançar.',
+        title: `Erro ao registrar ${failedRows.length} diária${failedRows.length > 1 ? 's' : ''}`,
+        description: firstError?.reason?.message,
         variant: 'destructive',
       });
-      return;
+      setGridRows([...failedRows, makeEmptyGridRow()]);
+    } else {
+      setShowCreateForm(false);
+      resetGrid();
     }
-
-    const teamId = selectedProvider.teamId ?? user.teamId;
-    if (!teamId) {
-      toast({ title: 'Este prestador não está vinculado a uma equipe.', variant: 'destructive' });
-      return;
-    }
-
-    createMutation.mutate(
-      {
-        data: {
-          providerId: selectedProvider.id,
-          teamId,
-          workDate: dateKey,
-          startTime: createForm.startTime || null,
-          endTime: createForm.endTime || null,
-          value: selectedProvider.dailyRate,
-          observations: createForm.observations || null,
-        },
-      },
-      {
-        onSuccess: () => {
-          toast({ title: 'Diária registrada.' });
-          setShowCreateForm(false);
-          resetCreateForm();
-          onChanged();
-        },
-        onError: (err: any) => toast({ title: 'Erro ao registrar diária', description: err?.message, variant: 'destructive' }),
-      },
-    );
   };
 
   const startEdit = (d: Diaria) => {
@@ -501,57 +552,96 @@ function DayAgenda({
       {canCreate && (
         showCreateForm ? (
           <Card className="border-dashed">
-            <CardContent className="p-3">
-              <form onSubmit={handleCreate} className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Nome *</label>
-                  <select
-                    required
-                    value={createForm.providerId}
-                    onChange={e => setCreateForm({ ...createForm, providerId: e.target.value })}
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                  >
-                    <option value="" disabled>Selecione uma pessoa ativa</option>
-                    {providers?.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Horário Inicial</label>
-                    <Input type="time" value={createForm.startTime} onChange={e => setCreateForm({ ...createForm, startTime: e.target.value })} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Horário Final</label>
-                    <Input type="time" value={createForm.endTime} onChange={e => setCreateForm({ ...createForm, endTime: e.target.value })} />
-                  </div>
-                </div>
-                {selectedProvider && (
-                  <p className="text-xs text-muted-foreground">
-                    Valor da diária: {selectedProvider.dailyRate != null
-                      ? formatCurrency(selectedProvider.dailyRate)
-                      : 'não definido — configure em Pessoas antes de lançar'}
-                  </p>
-                )}
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Observações</label>
-                  <textarea
-                    className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={createForm.observations}
-                    onChange={e => setCreateForm({ ...createForm, observations: e.target.value })}
-                    placeholder="Opcional"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button type="button" size="sm" variant="ghost" onClick={() => { setShowCreateForm(false); resetCreateForm(); }}>
+            <CardContent className="p-3 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Preencha uma linha por pessoa. Uma nova linha em branco aparece
+                automaticamente assim que você escolhe um nome.
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[160px]">Nome *</TableHead>
+                    <TableHead className="w-[110px]">Horário Inicial</TableHead>
+                    <TableHead className="w-[110px]">Horário Final</TableHead>
+                    <TableHead className="min-w-[160px]">Observações</TableHead>
+                    <TableHead className="w-[36px]" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gridRows.map(row => {
+                    const rowProvider = providers?.find(p => p.id === Number(row.providerId));
+                    return (
+                      <TableRow key={row.key}>
+                        <TableCell className="p-1 align-top">
+                          <select
+                            value={row.providerId}
+                            onChange={e => updateGridRow(row.key, { providerId: e.target.value })}
+                            className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm"
+                          >
+                            <option value="">Selecione</option>
+                            {providers?.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                          {rowProvider && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {rowProvider.dailyRate != null ? formatCurrency(rowProvider.dailyRate) : 'valor não definido'}
+                            </p>
+                          )}
+                        </TableCell>
+                        <TableCell className="p-1 align-top">
+                          <Input
+                            type="time"
+                            className="h-8"
+                            value={row.startTime}
+                            onChange={e => updateGridRow(row.key, { startTime: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell className="p-1 align-top">
+                          <Input
+                            type="time"
+                            className="h-8"
+                            value={row.endTime}
+                            onChange={e => updateGridRow(row.key, { endTime: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell className="p-1 align-top">
+                          <Input
+                            className="h-8"
+                            placeholder="Opcional"
+                            value={row.observations}
+                            onChange={e => updateGridRow(row.key, { observations: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell className="p-1 align-top">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeGridRow(row.key)}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <div className="flex justify-between items-center">
+                <Button type="button" size="sm" variant="ghost" onClick={() => setGridRows(rows => [...rows, makeEmptyGridRow()])}>
+                  <Plus size={14} className="mr-1" /> Adicionar linha
+                </Button>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant="ghost" onClick={() => { setShowCreateForm(false); resetGrid(); }}>
                     Cancelar
                   </Button>
-                  <Button type="submit" size="sm" disabled={createMutation.isPending}>
-                    Salvar
+                  <Button type="button" size="sm" onClick={handleSaveGrid} disabled={isSavingGrid}>
+                    <Save size={14} className="mr-1" /> Salvar
                   </Button>
                 </div>
-              </form>
+              </div>
             </CardContent>
           </Card>
         ) : (
