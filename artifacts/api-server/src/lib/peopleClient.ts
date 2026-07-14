@@ -44,11 +44,6 @@ export interface Prestador {
   tem_contrato_ativo: boolean;
   data_inicio_contrato: string | null;
   data_fim_contrato: string | null;
-  // TODO(temp): exact field name for "objeto do contrato" (Motorista /
-  // Ajudante / Transporte de Mercadorias) not yet confirmed against the
-  // real API response — allow arbitrary extra fields until confirmed via
-  // the debug log below, then tighten this type and remove the index sig.
-  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -165,67 +160,6 @@ export async function fetchFuncionarios(): Promise<Funcionario[]> {
 /** Returns all active prestadores (endpoint returns full list, no paging). */
 export async function fetchPrestadores(): Promise<Prestador[]> {
   return request<Prestador[]>("/api/prestadores?ativo=true");
-}
-
-// TEMP DEBUG: the user confirmed "objeto do contrato" (Motorista / Ajudante /
-// Transporte de Mercadorias) lives in the People "Contratos" section, which
-// isn't part of /api/prestadores. We don't know the exact path yet, so probe
-// a handful of plausible ones and report which succeed. Remove once the
-// right endpoint + field name is confirmed and the real filter is wired up.
-export async function probeContratosEndpoints(): Promise<
-  Record<string, { ok: true; sample: unknown } | { ok: false; error: string }>
-> {
-  const results: Record<string, { ok: true; sample: unknown } | { ok: false; error: string }> = {};
-
-  // The first round showed /api/prestadores/contratos hit a route that
-  // expects a numeric `id` (i.e. "contratos" was parsed as `:id`), which
-  // means "Contratos" is very likely a nested per-prestador resource
-  // (/api/prestadores/:id/contratos), not a flat top-level list. Fetch a
-  // couple of real prestador IDs first and probe that shape directly.
-  let sampleIds: number[] = [];
-  try {
-    const prestadores = await request<Prestador[]>("/api/prestadores?ativo=true");
-    sampleIds = prestadores.slice(0, 2).map((p) => p.id_prestador);
-    // Also surface the raw shape of a prestador record itself — in case
-    // "objeto do contrato" is actually already embedded there under a
-    // field name we haven't matched yet, rather than in a separate resource.
-    results["/api/prestadores?ativo=true (raw sample)"] = {
-      ok: true,
-      sample: prestadores.slice(0, 2),
-    };
-  } catch (err) {
-    results["/api/prestadores?ativo=true (raw sample)"] = {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-
-  // Confirmed via the People web app's own Network tab: the "Contratos de
-  // Prestação" screen calls /api/prestadores/contratos-prestacao (the
-  // contract records, including "Objeto do Contrato") and
-  // /api/prestadores/objeto-contratual (likely the lookup list of possible
-  // "objeto do contrato" values). Probe both directly instead of guessing.
-  const candidates = [
-    "/api/prestadores/contratos-prestacao?limit=3",
-    "/api/prestadores/contratos-prestacao",
-    "/api/prestadores/objeto-contratual",
-  ];
-
-  for (const path of candidates) {
-    try {
-      const data = await request<unknown>(path);
-      const sample = Array.isArray(data)
-        ? data.slice(0, 3)
-        : typeof data === "object" && data !== null && Array.isArray((data as Record<string, unknown>).data)
-          ? ((data as Record<string, unknown>).data as unknown[]).slice(0, 3)
-          : data;
-      results[path] = { ok: true, sample };
-    } catch (err) {
-      results[path] = { ok: false, error: err instanceof Error ? err.message : String(err) };
-    }
-  }
-
-  return results;
 }
 
 /** Clears the cached token (useful in tests or after a credential rotation). */

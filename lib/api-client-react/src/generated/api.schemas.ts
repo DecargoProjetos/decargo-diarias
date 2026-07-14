@@ -347,8 +347,6 @@ teamId?: number | null;
 activeOnly?: boolean;
 };
 
-export type DebugContratos200 = { [key: string]: unknown };
-
 export type ListDiariasParams = {
 /**
  * @nullable

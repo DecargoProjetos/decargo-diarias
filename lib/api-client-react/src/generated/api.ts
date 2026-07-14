@@ -23,7 +23,6 @@ import type {
   ActivityItem,
   AuditPage,
   DashboardSummary,
-  DebugContratos200,
   Diaria,
   DiariaActionNote,
   DiariaInput,
@@ -1266,83 +1265,6 @@ export const useSyncProviders = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getSyncProvidersMutationOptions(options));
     }
-
-export const getDebugContratosUrl = () => {
-
-
-
-
-  return `/api/providers/debug-contratos`
-}
-
-/**
- * @summary TEMP DEBUG: probe candidate People Contratos endpoints (admin only)
- */
-export const debugContratos = async ( options?: RequestInit): Promise<DebugContratos200> => {
-
-  return customFetch<DebugContratos200>(getDebugContratosUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getDebugContratosQueryKey = () => {
-    return [
-    `/api/providers/debug-contratos`
-    ] as const;
-    }
-
-
-export const getDebugContratosQueryOptions = <TData = Awaited<ReturnType<typeof debugContratos>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof debugContratos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getDebugContratosQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof debugContratos>>> = ({ signal }) => debugContratos({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof debugContratos>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type DebugContratosQueryResult = NonNullable<Awaited<ReturnType<typeof debugContratos>>>
-export type DebugContratosQueryError = ErrorType<unknown>
-
-
-/**
- * @summary TEMP DEBUG: probe candidate People Contratos endpoints (admin only)
- */
-
-export function useDebugContratos<TData = Awaited<ReturnType<typeof debugContratos>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof debugContratos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getDebugContratosQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
 
 export const getGetProviderUrl = (id: number,) => {
 

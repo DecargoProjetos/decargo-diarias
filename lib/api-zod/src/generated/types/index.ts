@@ -10,7 +10,6 @@ export * from './activityItem';
 export * from './auditLog';
 export * from './auditPage';
 export * from './dashboardSummary';
-export * from './debugContratos200';
 export * from './diaria';
 export * from './diariaActionNote';
 export * from './diariaInput';

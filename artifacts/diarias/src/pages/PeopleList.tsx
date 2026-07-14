@@ -3,7 +3,6 @@ import {
   useGetMe, useListUsers, useListProviders, useListTeams,
   useSyncUsers, useSyncProviders,
   useUpdateUser, useDeleteUser, useUpdateProvider, useDeleteProvider,
-  useDebugContratos,
 } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,18 +48,6 @@ export default function PeopleList() {
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: '', teamId: '' });
-  // TEMP DEBUG: holds the raw probe results from /providers/debug-contratos
-  // so we can find the real "Contratos" endpoint + "objeto do contrato"
-  // field. Remove alongside the debug route/button once confirmed.
-  const [showContratosDebug, setShowContratosDebug] = useState(false);
-  const { data: contratosDebug, isFetching: isProbingContratos, refetch: refetchContratosDebug } = useDebugContratos({
-    query: { enabled: false, queryKey: ['debugContratos'] },
-  });
-
-  const handleProbeContratos = () => {
-    setShowContratosDebug(true);
-    refetchContratosDebug();
-  };
 
   if (!isAdmin) {
     return <div>Acesso negado. Apenas administradores.</div>;
@@ -193,32 +180,12 @@ export default function PeopleList() {
           <p className="text-muted-foreground mt-1">Funcionários e prestadores sincronizados com DECARGO People.</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={handleProbeContratos} disabled={isProbingContratos} variant="outline">
-            <RefreshCw className={`w-4 h-4 mr-2 ${isProbingContratos ? 'animate-spin' : ''}`} />
-            Sondar Contratos (debug)
-          </Button>
           <Button onClick={handleSync} disabled={isSyncing} className="bg-indigo-600 hover:bg-indigo-700">
             <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
             Sincronizar com DECARGO People
           </Button>
         </div>
       </div>
-
-      {showContratosDebug && (
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="p-4 space-y-2">
-            <div className="flex justify-between items-start">
-              <p className="text-sm font-semibold text-amber-800">
-                Diagnóstico temporário — sondagem de endpoints de Contratos (tire um print desta caixa)
-              </p>
-              <Button size="sm" variant="ghost" onClick={() => setShowContratosDebug(false)}>Fechar</Button>
-            </div>
-            <pre className="text-xs bg-white border border-amber-200 rounded p-3 overflow-auto max-h-96 whitespace-pre-wrap">
-              {isProbingContratos ? 'Sondando...' : JSON.stringify(contratosDebug, null, 2)}
-            </pre>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardContent className="p-0">

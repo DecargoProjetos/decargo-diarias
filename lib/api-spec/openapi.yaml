@@ -342,22 +342,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/SyncResult"
 
-  # TEMP DEBUG: probe candidate "Contratos" endpoints to find where "objeto
-  # do contrato" lives. Remove once confirmed.
-  /providers/debug-contratos:
-    get:
-      operationId: debugContratos
-      tags: [providers]
-      summary: "TEMP DEBUG: probe candidate People Contratos endpoints (admin only)"
-      responses:
-        "200":
-          description: Probe results
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-
   /providers/{id}:
     get:
       operationId: getProvider
