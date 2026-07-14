@@ -7,9 +7,7 @@
  */
 import type { BulkActionFailure } from './bulkActionFailure';
 
-export interface ExportResult {
-  exported: number;
-  integrationRef: string;
-  exportedAt: Date;
-  skipped?: BulkActionFailure[];
+export interface BulkActionResult {
+  succeeded: number[];
+  failed: BulkActionFailure[];
 }

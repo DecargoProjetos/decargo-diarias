@@ -18,6 +18,7 @@ import TeamsList from '@/pages/TeamsList';
 import PeopleList from '@/pages/PeopleList';
 import UsersList from '@/pages/UsersList';
 import Reports from '@/pages/Reports';
+import AnaliseDiarias from '@/pages/AnaliseDiarias';
 import AuditLogs from '@/pages/AuditLogs';
 import Login from '@/pages/Login';
 
@@ -160,6 +161,7 @@ function Router() {
         <Route path="/pessoas" component={PeopleList} />
         <Route path="/usuarios" component={UsersList} />
         <Route path="/relatorios" component={Reports} />
+        <Route path="/analise-diarias" component={AnaliseDiarias} />
         <Route path="/auditoria" component={AuditLogs} />
         <Route component={NotFound} />
       </Switch>

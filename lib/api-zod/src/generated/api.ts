@@ -347,6 +347,10 @@ export const ListDiariasQueryParams = zod.object({
   "managerId": zod.coerce.number().nullish(),
   "startDate": zod.date().nullish(),
   "endDate": zod.date().nullish(),
+  "name": zod.coerce.string().nullish().describe('Filtra por nome do prestador (busca parcial, case-insensitive)'),
+  "minValue": zod.coerce.number().nullish(),
+  "maxValue": zod.coerce.number().nullish(),
+  "value": zod.coerce.number().nullish().describe('Valor exato da diária'),
   "page": zod.coerce.number().nullish(),
   "pageSize": zod.coerce.number().nullish()
 })
@@ -400,6 +404,128 @@ export const CreateDiariaBody = zod.object({
 })
 
 export const CreateDiariaResponse = zod.object({
+  "id": zod.number(),
+  "providerId": zod.number(),
+  "providerName": zod.string(),
+  "teamId": zod.number(),
+  "teamName": zod.string(),
+  "managerId": zod.number().nullish(),
+  "managerName": zod.string().nullish(),
+  "workDate": zod.coerce.date(),
+  "startTime": zod.string().nullish().describe('Horário inicial no formato HH:mm'),
+  "endTime": zod.string().nullish().describe('Horário final no formato HH:mm'),
+  "value": zod.number().nullish().describe('Null when viewer is a provider (no financial visibility)'),
+  "paymentDate": zod.coerce.date().nullish(),
+  "observations": zod.string().nullish(),
+  "status": zod.enum(['pendente_aprovacao', 'em_analise', 'aprovada', 'rejeitada', 'solicitacao_correcao', 'disponivel_exportacao', 'exportada', 'paga', 'cancelada']),
+  "actionNote": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "createdByName": zod.string(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "approvedByName": zod.string().nullish(),
+  "exportedAt": zod.coerce.date().nullish(),
+  "exportedByName": zod.string().nullish(),
+  "integrationId": zod.string().nullish(),
+  "paidAt": zod.coerce.date().nullish(),
+  "cancelledAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Dashboard indicators for the Análise de Diárias screen (admin only)
+ */
+export const GetDiariasAnaliseSummaryQueryParams = zod.object({
+  "name": zod.coerce.string().nullish(),
+  "teamId": zod.coerce.number().nullish(),
+  "startDate": zod.date().nullish(),
+  "endDate": zod.date().nullish(),
+  "minValue": zod.coerce.number().nullish(),
+  "maxValue": zod.coerce.number().nullish(),
+  "value": zod.coerce.number().nullish()
+})
+
+export const GetDiariasAnaliseSummaryResponse = zod.object({
+  "pendentesCount": zod.number(),
+  "pendentesValue": zod.number(),
+  "aprovadasCount": zod.number(),
+  "aprovadasValue": zod.number(),
+  "reprovadasCount": zod.number(),
+  "reprovadasValue": zod.number(),
+  "exportadasCount": zod.number(),
+  "exportadasValue": zod.number()
+})
+
+
+/**
+ * @summary List all daily rate IDs matching the current filters, unpaginated (admin only, used for "select all filtered")
+ */
+export const ListDiariaIdsQueryParams = zod.object({
+  "status": zod.coerce.string().nullish(),
+  "name": zod.coerce.string().nullish(),
+  "providerId": zod.coerce.number().nullish(),
+  "teamId": zod.coerce.number().nullish(),
+  "managerId": zod.coerce.number().nullish(),
+  "startDate": zod.date().nullish(),
+  "endDate": zod.date().nullish(),
+  "minValue": zod.coerce.number().nullish(),
+  "maxValue": zod.coerce.number().nullish(),
+  "value": zod.coerce.number().nullish()
+})
+
+export const ListDiariaIdsResponse = zod.object({
+  "ids": zod.array(zod.number()),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Approve multiple daily rates at once (admin only)
+ */
+export const BulkApproveDiariasBody = zod.object({
+  "diariaIds": zod.array(zod.number())
+})
+
+export const BulkApproveDiariasResponse = zod.object({
+  "succeeded": zod.array(zod.number()),
+  "failed": zod.array(zod.object({
+  "id": zod.number(),
+  "reason": zod.string()
+}))
+})
+
+
+/**
+ * @summary Reject multiple daily rates at once (admin only). A rejection reason is required.
+ */
+
+
+
+export const BulkRejectDiariasBody = zod.object({
+  "diariaIds": zod.array(zod.number()),
+  "note": zod.string().min(1)
+})
+
+export const BulkRejectDiariasResponse = zod.object({
+  "succeeded": zod.array(zod.number()),
+  "failed": zod.array(zod.object({
+  "id": zod.number(),
+  "reason": zod.string()
+}))
+})
+
+
+/**
+ * @summary Set/update the payment date of a daily rate (admin only, blocked after export)
+ */
+export const SetDiariaPaymentDateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SetDiariaPaymentDateBody = zod.object({
+  "paymentDate": zod.coerce.date()
+})
+
+export const SetDiariaPaymentDateResponse = zod.object({
   "id": zod.number(),
   "providerId": zod.number(),
   "providerName": zod.string(),
@@ -707,7 +833,11 @@ export const ExportDiariasBody = zod.object({
 export const ExportDiariasResponse = zod.object({
   "exported": zod.number(),
   "integrationRef": zod.string(),
-  "exportedAt": zod.coerce.date()
+  "exportedAt": zod.coerce.date(),
+  "skipped": zod.array(zod.object({
+  "id": zod.number(),
+  "reason": zod.string()
+})).optional()
 })
 
 

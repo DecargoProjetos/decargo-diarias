@@ -5,13 +5,16 @@
  * Controle de Diárias de Prestadores de Serviços
  * OpenAPI spec version: 0.1.0
  */
-import type { ListDiariasStatus } from './listDiariasStatus';
 
-export type ListDiariasParams = {
+export type ListDiariaIdsParams = {
 /**
  * @nullable
  */
-status?: ListDiariasStatus;
+status?: string | null;
+/**
+ * @nullable
+ */
+name?: string | null;
 /**
  * @nullable
  */
@@ -33,11 +36,6 @@ startDate?: Date | null;
  */
 endDate?: Date | null;
 /**
- * Filtra por nome do prestador (busca parcial, case-insensitive)
- * @nullable
- */
-name?: string | null;
-/**
  * @nullable
  */
 minValue?: number | null;
@@ -46,16 +44,7 @@ minValue?: number | null;
  */
 maxValue?: number | null;
 /**
- * Valor exato da diária
  * @nullable
  */
 value?: number | null;
-/**
- * @nullable
- */
-page?: number | null;
-/**
- * @nullable
- */
-pageSize?: number | null;
 };

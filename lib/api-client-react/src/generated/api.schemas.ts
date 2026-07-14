@@ -264,10 +264,51 @@ export interface ExportInput {
   diariaIds: number[];
 }
 
+export interface BulkActionFailure {
+  id: number;
+  reason: string;
+}
+
 export interface ExportResult {
   exported: number;
   integrationRef: string;
   exportedAt: string;
+  skipped?: BulkActionFailure[];
+}
+
+export interface BulkIdsInput {
+  diariaIds: number[];
+}
+
+export interface BulkRejectInput {
+  diariaIds: number[];
+  /** @minLength 1 */
+  note: string;
+}
+
+export interface BulkActionResult {
+  succeeded: number[];
+  failed: BulkActionFailure[];
+}
+
+export interface PaymentDateInput {
+  paymentDate: string;
+}
+
+export interface DiariaIdsResult {
+  ids: number[];
+  total: number;
+}
+
+export interface DiariasAnaliseSummary {
+  pendentesCount: number;
+  pendentesValue: number;
+  aprovadasCount: number;
+  aprovadasValue: number;
+  reprovadasCount: number;
+  reprovadasValue: number;
+  exportadasCount: number;
+  exportadasValue: number;
 }
 
 export interface DiariasPage {
@@ -404,6 +445,24 @@ startDate?: string | null;
  */
 endDate?: string | null;
 /**
+ * Filtra por nome do prestador (busca parcial, case-insensitive)
+ * @nullable
+ */
+name?: string | null;
+/**
+ * @nullable
+ */
+minValue?: number | null;
+/**
+ * @nullable
+ */
+maxValue?: number | null;
+/**
+ * Valor exato da diária
+ * @nullable
+ */
+value?: number | null;
+/**
  * @nullable
  */
 page?: number | null;
@@ -427,6 +486,80 @@ export const ListDiariasStatus = {
   paga: 'paga',
   cancelada: 'cancelada',
 } as const;
+
+export type GetDiariasAnaliseSummaryParams = {
+/**
+ * @nullable
+ */
+name?: string | null;
+/**
+ * @nullable
+ */
+teamId?: number | null;
+/**
+ * @nullable
+ */
+startDate?: string | null;
+/**
+ * @nullable
+ */
+endDate?: string | null;
+/**
+ * @nullable
+ */
+minValue?: number | null;
+/**
+ * @nullable
+ */
+maxValue?: number | null;
+/**
+ * @nullable
+ */
+value?: number | null;
+};
+
+export type ListDiariaIdsParams = {
+/**
+ * @nullable
+ */
+status?: string | null;
+/**
+ * @nullable
+ */
+name?: string | null;
+/**
+ * @nullable
+ */
+providerId?: number | null;
+/**
+ * @nullable
+ */
+teamId?: number | null;
+/**
+ * @nullable
+ */
+managerId?: number | null;
+/**
+ * @nullable
+ */
+startDate?: string | null;
+/**
+ * @nullable
+ */
+endDate?: string | null;
+/**
+ * @nullable
+ */
+minValue?: number | null;
+/**
+ * @nullable
+ */
+maxValue?: number | null;
+/**
+ * @nullable
+ */
+value?: number | null;
+};
 
 export type ListAuditLogsParams = {
 /**

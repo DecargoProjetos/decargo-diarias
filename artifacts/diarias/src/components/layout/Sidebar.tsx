@@ -12,7 +12,8 @@ import {
   ShieldAlert,
   LogOut,
   Building2,
-  Menu
+  Menu,
+  ClipboardCheck
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -40,6 +41,7 @@ export function Sidebar() {
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['admin', 'gestor', 'prestador', 'funcionario'] },
     { name: 'Diárias', path: '/diarias', icon: FileText, roles: ['admin', 'gestor', 'prestador', 'funcionario'] },
     { name: 'Relatórios', path: '/relatorios', icon: BarChart3, roles: ['admin', 'gestor'] },
+    { name: 'Análise de Diárias', path: '/analise-diarias', icon: ClipboardCheck, roles: ['admin'] },
     { name: 'Equipes', path: '/equipes', icon: Building2, roles: ['admin'] },
     { name: 'Pessoas', path: '/pessoas', icon: UserSquare2, roles: ['admin'] },
     { name: 'Usuários', path: '/usuarios', icon: Users, roles: ['admin'] },

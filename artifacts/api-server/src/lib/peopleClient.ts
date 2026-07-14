@@ -166,3 +166,96 @@ export async function fetchPrestadores(): Promise<Prestador[]> {
 export function clearToken(): void {
   _token = null;
 }
+
+// ---------------------------------------------------------------------------
+// Diárias export (outbound push) — Análise de Diárias > DECARGO People
+// ---------------------------------------------------------------------------
+//
+// Unlike the sync helpers above, this does NOT use the service-account JWT
+// login flow. It authenticates with a static shared secret
+// (PEOPLE_INTEGRATION_KEY) sent as the `x-api-key` header, per the
+// integration contract documented in the People project's
+// docs/integration/diarias-push.md.
+
+export interface DiariaExportItem {
+  id_prestador: number;
+  dia_trabalhado: string;
+  valor_diaria: number;
+  data_pagamento: string;
+  anotacoes_gerais?: string;
+  /**
+   * Not sent to the People API — stripped before the request body is built.
+   * Carried through so the caller can map People's per-item errors (which
+   * only reference id_prestador/dia_trabalhado) back to our local diária id.
+   */
+  __localId: number;
+}
+
+export interface DiariaExportError {
+  [key: string]: unknown;
+  __localId?: number;
+}
+
+export interface DiariaExportResult {
+  total: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: DiariaExportError[];
+}
+
+const INTEGRATION_BATCH_SIZE = 500;
+
+function integrationApiKey(): string {
+  const key = process.env.PEOPLE_INTEGRATION_KEY;
+  if (!key) throw new Error("PEOPLE_INTEGRATION_KEY not set");
+  return key;
+}
+
+/**
+ * Pushes a batch of diárias to DECARGO People > Folha Mensal > Diárias
+ * Extras via POST /api/integration/diarias, chunking at 500 items per
+ * request (the documented limit) and merging results/errors across chunks.
+ * Each error item is tagged back with `__localId` when it can be matched by
+ * position, so callers can tell which local diária a given error belongs to.
+ */
+export async function pushDiariasToPeople(items: DiariaExportItem[]): Promise<DiariaExportResult> {
+  const apiKey = integrationApiKey();
+  const merged: DiariaExportResult = { total: 0, inserted: 0, updated: 0, skipped: 0, errors: [] };
+
+  for (let i = 0; i < items.length; i += INTEGRATION_BATCH_SIZE) {
+    const chunk = items.slice(i, i + INTEGRATION_BATCH_SIZE);
+    const payload = chunk.map(({ __localId: _localId, ...rest }) => rest);
+
+    const res = await fetch(`${baseUrl()}/api/integration/diarias`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+      body: JSON.stringify({ diarias: payload }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "(no body)");
+      throw new Error(`People API /api/integration/diarias → ${res.status}: ${text}`);
+    }
+
+    const data = (await res.json()) as DiariaExportResult;
+    merged.total += data.total ?? chunk.length;
+    merged.inserted += data.inserted ?? 0;
+    merged.updated += data.updated ?? 0;
+    merged.skipped += data.skipped ?? 0;
+
+    // The People API's error entries don't carry our local id — tag each by
+    // matching id_prestador + dia_trabalhado back to the chunk we just sent,
+    // since that pair is unique within a single export request.
+    for (const err of data.errors ?? []) {
+      const match = chunk.find(
+        (c) =>
+          String((err as Record<string, unknown>).id_prestador) === String(c.id_prestador) &&
+          String((err as Record<string, unknown>).dia_trabalhado) === String(c.dia_trabalhado),
+      );
+      merged.errors.push({ ...err, __localId: match?.__localId });
+    }
+  }
+
+  return merged;
+}

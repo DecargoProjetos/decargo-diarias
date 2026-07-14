@@ -459,6 +459,24 @@ paths:
           schema:
             type: ["string", "null"]
             format: date
+        - name: name
+          in: query
+          description: Filtra por nome do prestador (busca parcial, case-insensitive)
+          schema:
+            type: ["string", "null"]
+        - name: minValue
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: maxValue
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: value
+          in: query
+          description: Valor exato da diária
+          schema:
+            type: ["number", "null"]
         - name: page
           in: query
           schema:
@@ -492,6 +510,175 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Diaria"
+
+  /diarias/summary:
+    get:
+      operationId: getDiariasAnaliseSummary
+      tags: [diarias]
+      summary: Dashboard indicators for the Análise de Diárias screen (admin only)
+      parameters:
+        - name: name
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: teamId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: startDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+        - name: minValue
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: maxValue
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: value
+          in: query
+          schema:
+            type: ["number", "null"]
+      responses:
+        "200":
+          description: Summary indicators
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiariasAnaliseSummary"
+
+  /diarias/ids:
+    get:
+      operationId: listDiariaIds
+      tags: [diarias]
+      summary: List all daily rate IDs matching the current filters, unpaginated (admin only, used for "select all filtered")
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: name
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: providerId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: teamId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: managerId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: startDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: ["string", "null"]
+            format: date
+        - name: minValue
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: maxValue
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: value
+          in: query
+          schema:
+            type: ["number", "null"]
+      responses:
+        "200":
+          description: Matching IDs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiariaIdsResult"
+
+  /diarias/bulk-approve:
+    post:
+      operationId: bulkApproveDiarias
+      tags: [diarias]
+      summary: Approve multiple daily rates at once (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkIdsInput"
+      responses:
+        "200":
+          description: Bulk approval result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkActionResult"
+
+  /diarias/bulk-reject:
+    post:
+      operationId: bulkRejectDiarias
+      tags: [diarias]
+      summary: Reject multiple daily rates at once (admin only). A rejection reason is required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkRejectInput"
+      responses:
+        "200":
+          description: Bulk rejection result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkActionResult"
+
+  /diarias/{id}/payment-date:
+    patch:
+      operationId: setDiariaPaymentDate
+      tags: [diarias]
+      summary: Set/update the payment date of a daily rate (admin only, blocked after export)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentDateInput"
+      responses:
+        "200":
+          description: Updated daily rate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diaria"
+        "400":
+          description: Blocked (already exported/paid, or invalid state)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /diarias/{id}:
     get:
@@ -1167,7 +1354,102 @@ components:
         exportedAt:
           type: string
           format: date-time
+        skipped:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkActionFailure"
       required: [exported, integrationRef, exportedAt]
+
+    BulkIdsInput:
+      type: object
+      properties:
+        diariaIds:
+          type: array
+          items:
+            type: integer
+      required: [diariaIds]
+
+    BulkRejectInput:
+      type: object
+      properties:
+        diariaIds:
+          type: array
+          items:
+            type: integer
+        note:
+          type: string
+          minLength: 1
+      required: [diariaIds, note]
+
+    BulkActionFailure:
+      type: object
+      properties:
+        id:
+          type: integer
+        reason:
+          type: string
+      required: [id, reason]
+
+    BulkActionResult:
+      type: object
+      properties:
+        succeeded:
+          type: array
+          items:
+            type: integer
+        failed:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkActionFailure"
+      required: [succeeded, failed]
+
+    PaymentDateInput:
+      type: object
+      properties:
+        paymentDate:
+          type: string
+          format: date
+      required: [paymentDate]
+
+    DiariaIdsResult:
+      type: object
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+        total:
+          type: integer
+      required: [ids, total]
+
+    DiariasAnaliseSummary:
+      type: object
+      properties:
+        pendentesCount:
+          type: integer
+        pendentesValue:
+          type: number
+        aprovadasCount:
+          type: integer
+        aprovadasValue:
+          type: number
+        reprovadasCount:
+          type: integer
+        reprovadasValue:
+          type: number
+        exportadasCount:
+          type: integer
+        exportadasValue:
+          type: number
+      required:
+        - pendentesCount
+        - pendentesValue
+        - aprovadasCount
+        - aprovadasValue
+        - reprovadasCount
+        - reprovadasValue
+        - exportadasCount
+        - exportadasValue
 
     DiariasPage:
       type: object

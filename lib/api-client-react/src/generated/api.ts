@@ -22,22 +22,30 @@ import type {
 import type {
   ActivityItem,
   AuditPage,
+  BulkActionResult,
+  BulkIdsInput,
+  BulkRejectInput,
   DashboardSummary,
   Diaria,
   DiariaActionNote,
+  DiariaIdsResult,
   DiariaInput,
   DiariaUpdate,
+  DiariasAnaliseSummary,
   DiariasPage,
   DiariasReport,
   ErrorResponse,
   ExportInput,
   ExportResult,
+  GetDiariasAnaliseSummaryParams,
   GetReportDiariasParams,
   HealthStatus,
   ListAuditLogsParams,
+  ListDiariaIdsParams,
   ListDiariasParams,
   ListProvidersParams,
   MessageResponse,
+  PaymentDateInput,
   Provider,
   ProviderMetrics,
   ProviderUpdate,
@@ -1639,6 +1647,388 @@ export const useCreateDiaria = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateDiariaMutationOptions(options));
+    }
+
+export const getGetDiariasAnaliseSummaryUrl = (params?: GetDiariasAnaliseSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/diarias/summary?${stringifiedParams}` : `/api/diarias/summary`
+}
+
+/**
+ * @summary Dashboard indicators for the Análise de Diárias screen (admin only)
+ */
+export const getDiariasAnaliseSummary = async (params?: GetDiariasAnaliseSummaryParams, options?: RequestInit): Promise<DiariasAnaliseSummary> => {
+
+  return customFetch<DiariasAnaliseSummary>(getGetDiariasAnaliseSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDiariasAnaliseSummaryQueryKey = (params?: GetDiariasAnaliseSummaryParams,) => {
+    return [
+    `/api/diarias/summary`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDiariasAnaliseSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getDiariasAnaliseSummary>>, TError = ErrorType<unknown>>(params?: GetDiariasAnaliseSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDiariasAnaliseSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDiariasAnaliseSummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDiariasAnaliseSummary>>> = ({ signal }) => getDiariasAnaliseSummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDiariasAnaliseSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDiariasAnaliseSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getDiariasAnaliseSummary>>>
+export type GetDiariasAnaliseSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Dashboard indicators for the Análise de Diárias screen (admin only)
+ */
+
+export function useGetDiariasAnaliseSummary<TData = Awaited<ReturnType<typeof getDiariasAnaliseSummary>>, TError = ErrorType<unknown>>(
+ params?: GetDiariasAnaliseSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDiariasAnaliseSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDiariasAnaliseSummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListDiariaIdsUrl = (params?: ListDiariaIdsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/diarias/ids?${stringifiedParams}` : `/api/diarias/ids`
+}
+
+/**
+ * @summary List all daily rate IDs matching the current filters, unpaginated (admin only, used for "select all filtered")
+ */
+export const listDiariaIds = async (params?: ListDiariaIdsParams, options?: RequestInit): Promise<DiariaIdsResult> => {
+
+  return customFetch<DiariaIdsResult>(getListDiariaIdsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDiariaIdsQueryKey = (params?: ListDiariaIdsParams,) => {
+    return [
+    `/api/diarias/ids`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDiariaIdsQueryOptions = <TData = Awaited<ReturnType<typeof listDiariaIds>>, TError = ErrorType<unknown>>(params?: ListDiariaIdsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiariaIds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDiariaIdsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDiariaIds>>> = ({ signal }) => listDiariaIds(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDiariaIds>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDiariaIdsQueryResult = NonNullable<Awaited<ReturnType<typeof listDiariaIds>>>
+export type ListDiariaIdsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all daily rate IDs matching the current filters, unpaginated (admin only, used for "select all filtered")
+ */
+
+export function useListDiariaIds<TData = Awaited<ReturnType<typeof listDiariaIds>>, TError = ErrorType<unknown>>(
+ params?: ListDiariaIdsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiariaIds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDiariaIdsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getBulkApproveDiariasUrl = () => {
+
+
+
+
+  return `/api/diarias/bulk-approve`
+}
+
+/**
+ * @summary Approve multiple daily rates at once (admin only)
+ */
+export const bulkApproveDiarias = async (bulkIdsInput: BulkIdsInput, options?: RequestInit): Promise<BulkActionResult> => {
+
+  return customFetch<BulkActionResult>(getBulkApproveDiariasUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkIdsInput)
+  }
+);}
+
+
+
+
+
+export const getBulkApproveDiariasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkApproveDiarias>>, TError,{data: BodyType<BulkIdsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkApproveDiarias>>, TError,{data: BodyType<BulkIdsInput>}, TContext> => {
+
+const mutationKey = ['bulkApproveDiarias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkApproveDiarias>>, {data: BodyType<BulkIdsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkApproveDiarias(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkApproveDiariasMutationResult = NonNullable<Awaited<ReturnType<typeof bulkApproveDiarias>>>
+    export type BulkApproveDiariasMutationBody = BodyType<BulkIdsInput>
+    export type BulkApproveDiariasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Approve multiple daily rates at once (admin only)
+ */
+export const useBulkApproveDiarias = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkApproveDiarias>>, TError,{data: BodyType<BulkIdsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkApproveDiarias>>,
+        TError,
+        {data: BodyType<BulkIdsInput>},
+        TContext
+      > => {
+      return useMutation(getBulkApproveDiariasMutationOptions(options));
+    }
+
+export const getBulkRejectDiariasUrl = () => {
+
+
+
+
+  return `/api/diarias/bulk-reject`
+}
+
+/**
+ * @summary Reject multiple daily rates at once (admin only). A rejection reason is required.
+ */
+export const bulkRejectDiarias = async (bulkRejectInput: BulkRejectInput, options?: RequestInit): Promise<BulkActionResult> => {
+
+  return customFetch<BulkActionResult>(getBulkRejectDiariasUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkRejectInput)
+  }
+);}
+
+
+
+
+
+export const getBulkRejectDiariasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkRejectDiarias>>, TError,{data: BodyType<BulkRejectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkRejectDiarias>>, TError,{data: BodyType<BulkRejectInput>}, TContext> => {
+
+const mutationKey = ['bulkRejectDiarias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkRejectDiarias>>, {data: BodyType<BulkRejectInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkRejectDiarias(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkRejectDiariasMutationResult = NonNullable<Awaited<ReturnType<typeof bulkRejectDiarias>>>
+    export type BulkRejectDiariasMutationBody = BodyType<BulkRejectInput>
+    export type BulkRejectDiariasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Reject multiple daily rates at once (admin only). A rejection reason is required.
+ */
+export const useBulkRejectDiarias = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkRejectDiarias>>, TError,{data: BodyType<BulkRejectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkRejectDiarias>>,
+        TError,
+        {data: BodyType<BulkRejectInput>},
+        TContext
+      > => {
+      return useMutation(getBulkRejectDiariasMutationOptions(options));
+    }
+
+export const getSetDiariaPaymentDateUrl = (id: number,) => {
+
+
+
+
+  return `/api/diarias/${id}/payment-date`
+}
+
+/**
+ * @summary Set/update the payment date of a daily rate (admin only, blocked after export)
+ */
+export const setDiariaPaymentDate = async (id: number,
+    paymentDateInput: PaymentDateInput, options?: RequestInit): Promise<Diaria> => {
+
+  return customFetch<Diaria>(getSetDiariaPaymentDateUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(paymentDateInput)
+  }
+);}
+
+
+
+
+
+export const getSetDiariaPaymentDateMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDiariaPaymentDate>>, TError,{id: number;data: BodyType<PaymentDateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setDiariaPaymentDate>>, TError,{id: number;data: BodyType<PaymentDateInput>}, TContext> => {
+
+const mutationKey = ['setDiariaPaymentDate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setDiariaPaymentDate>>, {id: number;data: BodyType<PaymentDateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setDiariaPaymentDate(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetDiariaPaymentDateMutationResult = NonNullable<Awaited<ReturnType<typeof setDiariaPaymentDate>>>
+    export type SetDiariaPaymentDateMutationBody = BodyType<PaymentDateInput>
+    export type SetDiariaPaymentDateMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Set/update the payment date of a daily rate (admin only, blocked after export)
+ */
+export const useSetDiariaPaymentDate = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDiariaPaymentDate>>, TError,{id: number;data: BodyType<PaymentDateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setDiariaPaymentDate>>,
+        TError,
+        {id: number;data: BodyType<PaymentDateInput>},
+        TContext
+      > => {
+      return useMutation(getSetDiariaPaymentDateMutationOptions(options));
     }
 
 export const getGetDiariaUrl = (id: number,) => {
