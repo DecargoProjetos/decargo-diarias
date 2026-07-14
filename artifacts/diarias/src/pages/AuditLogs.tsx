@@ -18,6 +18,20 @@ export default function AuditLogs() {
     return <div>Acesso negado. Apenas administradores.</div>;
   }
 
+  // `newValues`/`oldValues` chegam do backend como coluna jsonb — o driver do
+  // Postgres já entrega um objeto JS, nunca uma string. Renderizar o objeto
+  // direto no JSX quebra o React (erro #31: "objects are not valid as a
+  // React child"), então serializamos para texto aqui antes de exibir.
+  const formatDetails = (value: unknown): string => {
+    if (value == null) return '-';
+    if (typeof value === 'string') return value;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  };
+
   const formatAction = (action: string) => {
     switch (action) {
       case 'CREATE': return <span className="text-emerald-600 font-medium">CRIAÇÃO</span>;
@@ -62,8 +76,8 @@ export default function AuditLogs() {
                     <TableCell>{log.entityType} #{log.entityId}</TableCell>
                     <TableCell className="max-w-md truncate">
                       {log.newValues ? (
-                        <div className="truncate" title={log.newValues}>
-                          {log.newValues}
+                        <div className="truncate" title={formatDetails(log.newValues)}>
+                          {formatDetails(log.newValues)}
                         </div>
                       ) : '-'}
                     </TableCell>
