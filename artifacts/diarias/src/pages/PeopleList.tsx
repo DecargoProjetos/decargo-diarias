@@ -93,7 +93,11 @@ export default function PeopleList() {
   }
 
   const rows = useMemo<PersonRow[]>(() => {
-    const fromUsers: PersonRow[] = (users ?? []).map(u => ({
+    // Prestadores são representados exclusivamente pela linha de `providers`
+    // (é lá que vive o Valor da Diária). O backend garante que todo usuário
+    // com papel "prestador" tenha uma linha de provider correspondente, então
+    // omitimos esse papel aqui para não duplicar a pessoa na lista.
+    const fromUsers: PersonRow[] = (users ?? []).filter(u => u.role !== 'prestador').map(u => ({
       key: `user-${u.id}`,
       tipo: roleToTipo(u.role),
       sourceId: u.id,

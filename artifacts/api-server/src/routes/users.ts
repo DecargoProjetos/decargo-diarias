@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
-import { db, usersTable, teamsTable } from "@workspace/db";
+import { db, usersTable, providersTable, teamsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
@@ -9,6 +9,45 @@ import { fetchFuncionarios } from "../lib/peopleClient";
 const router = Router();
 
 const VALID_ROLES = ["admin", "gestor", "prestador", "funcionario"];
+
+// Diárias e o Valor da Diária vivem exclusivamente na tabela `providers` —
+// um usuário com papel "prestador" só ganha acesso a esse campo (e aparece
+// no seletor de "Nova Diária") se também existir uma linha correspondente
+// em `providers`. Prestadores sincronizados do DECARGO People já recebem
+// essa linha via /api/providers/sync; esta função cobre o caso de alguém
+// cadastrado (ou promovido a "prestador") manualmente pela tela de
+// Usuários, que de outra forma nunca ganharia essa linha. É idempotente e
+// só cria — nunca atualiza um registro de provider já existente, seguindo
+// o mesmo princípio "sync é aditivo" usado no resto do sistema.
+async function ensureProviderForPrestador(user: {
+  decargoId: string;
+  name: string;
+  email: string | null;
+  teamId: number | null;
+  active: boolean;
+}) {
+  const normalizedEmail = user.email?.toLowerCase() ?? null;
+
+  const [existing] = await db
+    .select({ id: providersTable.id })
+    .from(providersTable)
+    .where(
+      normalizedEmail
+        ? sql`${providersTable.decargoId} = ${user.decargoId} OR lower(${providersTable.email}) = ${normalizedEmail}`
+        : eq(providersTable.decargoId, user.decargoId)
+    )
+    .limit(1);
+
+  if (existing) return;
+
+  await db.insert(providersTable).values({
+    decargoId: user.decargoId,
+    name: user.name,
+    email: normalizedEmail,
+    teamId: user.teamId,
+    active: user.active,
+  });
+}
 
 // POST /api/users/sync (admin only)
 // Fetches all active funcionários from DECARGO People and upserts them into
@@ -156,6 +195,10 @@ router.post("/", requireRole("admin"), async (req, res) => {
       newValues: { name, email: normalizedEmail, role, teamId: teamId ?? null, active: active ?? true },
     });
 
+    if (updated.role === "prestador") {
+      await ensureProviderForPrestador(updated);
+    }
+
     res.status(200).json(updated);
     return;
   }
@@ -171,6 +214,10 @@ router.post("/", requireRole("admin"), async (req, res) => {
       active: active ?? true,
     })
     .returning();
+
+  if (created.role === "prestador") {
+    await ensureProviderForPrestador(created);
+  }
 
   await logAudit({
     entityType: "user",
@@ -201,6 +248,16 @@ router.get("/", requireRole("admin"), async (req, res) => {
     .from(usersTable)
     .leftJoin(teamsTable, eq(usersTable.teamId, teamsTable.id))
     .orderBy(usersTable.name);
+
+  // Self-heals prestador users created before ensureProviderForPrestador
+  // existed (or created some other way that skipped it) — every listing of
+  // Usuários/Pessoas is a chance to backfill any missing provider row, so
+  // people already stuck without a Valor da Diária field get fixed on the
+  // next page load instead of needing a re-edit.
+  await Promise.all(
+    users.filter(u => u.role === "prestador").map(u => ensureProviderForPrestador(u))
+  );
+
   res.json(users);
 });
 
@@ -272,6 +329,10 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
   if (!updated) {
     res.status(404).json({ error: "Usuário não encontrado" });
     return;
+  }
+
+  if (updated.role === "prestador") {
+    await ensureProviderForPrestador(updated);
   }
 
   await logAudit({
