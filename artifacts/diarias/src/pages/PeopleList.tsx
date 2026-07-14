@@ -32,11 +32,20 @@ type PersonRow = {
   email: string | null | undefined;
   teamId: number | null | undefined;
   teamName: string | null | undefined;
-  // Só existe para prestadores — funcionários não recebem diárias, então o
-  // campo fica undefined para eles e a UI mostra "-" nesse caso.
+  // Só existe para prestadores (ou pessoas cadastradas manualmente que
+  // também ganharam uma linha de provider) — quem não pode receber
+  // diárias não tem esse campo e a UI mostra "-" nesse caso.
   dailyRate: number | null | undefined;
   active: boolean;
   syncedAt: string | null | undefined;
+  // Só preenchido para linhas de usuário (isUserRow) cadastradas
+  // manualmente que também têm uma linha de provider correspondente —
+  // é o que torna o Valor da Diária editável mesmo quando o papel de
+  // acesso não é "Prestador" (ex.: um Gestor que também lança diárias).
+  // Ao editar/desativar/excluir essa pessoa, espelhamos a ação nessa
+  // linha de provider para manter os dois registros em sincronia (o
+  // seletor de "Nova Diária" só lista providers ativos).
+  linkedProviderId?: number;
 };
 
 const formatCurrency = (value: number): string =>
@@ -93,36 +102,56 @@ export default function PeopleList() {
   }
 
   const rows = useMemo<PersonRow[]>(() => {
-    // Prestadores são representados exclusivamente pela linha de `providers`
-    // (é lá que vive o Valor da Diária). O backend garante que todo usuário
-    // com papel "prestador" tenha uma linha de provider correspondente, então
-    // omitimos esse papel aqui para não duplicar a pessoa na lista.
-    const fromUsers: PersonRow[] = (users ?? []).filter(u => u.role !== 'prestador').map(u => ({
-      key: `user-${u.id}`,
-      tipo: roleToTipo(u.role),
-      sourceId: u.id,
-      decargoId: u.decargoId,
-      name: u.name,
-      email: u.email,
-      teamId: u.teamId,
-      teamName: u.teamName,
-      dailyRate: undefined,
-      active: u.active,
-      syncedAt: null,
-    }));
-    const fromProviders: PersonRow[] = (providers ?? []).map(p => ({
-      key: `provider-${p.id}`,
-      tipo: 'Prestador',
-      sourceId: p.id,
-      decargoId: p.decargoId,
-      name: p.name,
-      email: p.email,
-      teamId: p.teamId,
-      teamName: p.teamName,
-      dailyRate: p.dailyRate,
-      active: p.active,
-      syncedAt: p.syncedAt,
-    }));
+    // O Valor da Diária vive exclusivamente na linha de `providers`. Pessoas
+    // com papel "Prestador" já são representadas inteiramente pela linha de
+    // provider (tipo fixo "Prestador" abaixo), então não entram aqui. Já
+    // pessoas cadastradas manualmente (decargoId "manual-...") com outro
+    // papel de acesso (Admin/Gestor/Funcionário) também podem ter ganhado
+    // uma linha de provider — o backend cria isso automaticamente — então
+    // "casamos" essa linha com o usuário para manter o Tipo correto (ex.:
+    // "Gestor") enquanto ainda expomos o Valor da Diária como editável.
+    const providersByDecargoId = new Map((providers ?? []).map(p => [p.decargoId, p]));
+
+    const fromUsers: PersonRow[] = (users ?? [])
+      .filter(u => u.role !== 'prestador')
+      .map(u => {
+        const linkedProvider = providersByDecargoId.get(u.decargoId);
+        return {
+          key: `user-${u.id}`,
+          tipo: roleToTipo(u.role),
+          sourceId: u.id,
+          decargoId: u.decargoId,
+          name: u.name,
+          email: u.email,
+          teamId: u.teamId,
+          teamName: u.teamName,
+          dailyRate: linkedProvider?.dailyRate,
+          active: u.active,
+          syncedAt: linkedProvider?.syncedAt ?? null,
+          linkedProviderId: linkedProvider?.id,
+        };
+      });
+
+    // Providers já "casados" com uma linha de usuário acima não devem
+    // aparecer de novo aqui, senão a pessoa apareceria duas vezes.
+    const claimedProviderIds = new Set(
+      fromUsers.map(r => r.linkedProviderId).filter((id): id is number => id != null)
+    );
+    const fromProviders: PersonRow[] = (providers ?? [])
+      .filter(p => !claimedProviderIds.has(p.id))
+      .map(p => ({
+        key: `provider-${p.id}`,
+        tipo: 'Prestador',
+        sourceId: p.id,
+        decargoId: p.decargoId,
+        name: p.name,
+        email: p.email,
+        teamId: p.teamId,
+        teamName: p.teamName,
+        dailyRate: p.dailyRate,
+        active: p.active,
+        syncedAt: p.syncedAt,
+      }));
     return [...fromUsers, ...fromProviders].sort((a, b) => a.name.localeCompare(b.name));
   }, [users, providers]);
 
@@ -167,7 +196,24 @@ export default function PeopleList() {
     const onFail = (err: any) => toast({ title: 'Erro ao atualizar', description: err?.message, variant: 'destructive' });
 
     if (isUserRow(row)) {
-      updateUser.mutate({ id: row.sourceId, data: { name: editForm.name, teamId } }, { onSuccess: onDone, onError: onFail });
+      // Pessoas cadastradas manualmente com um provider vinculado (ver
+      // `linkedProviderId`) têm o Valor da Diária guardado nessa linha
+      // separada — salvamos o usuário primeiro e, se houver vínculo,
+      // espelhamos nome/equipe/valor da diária no provider em seguida.
+      updateUser.mutate({ id: row.sourceId, data: { name: editForm.name, teamId } }, {
+        onSuccess: () => {
+          if (row.linkedProviderId == null) {
+            onDone();
+            return;
+          }
+          const dailyRate = editForm.dailyRate.trim() === '' ? null : Number(editForm.dailyRate);
+          updateProvider.mutate(
+            { id: row.linkedProviderId, data: { name: editForm.name, teamId, dailyRate } },
+            { onSuccess: onDone, onError: onFail }
+          );
+        },
+        onError: onFail,
+      });
     } else {
       const dailyRate = editForm.dailyRate.trim() === '' ? null : Number(editForm.dailyRate);
       updateProvider.mutate(
@@ -185,7 +231,22 @@ export default function PeopleList() {
     const onFail = (err: any) => toast({ title: 'Erro ao atualizar status', description: err?.message, variant: 'destructive' });
 
     if (isUserRow(row)) {
-      updateUser.mutate({ id: row.sourceId, data: { active: !row.active } }, { onSuccess: onDone, onError: onFail });
+      // Um provider vinculado precisa acompanhar o status do usuário —
+      // caso contrário, uma pessoa desativada em Pessoas continuaria
+      // elegível para receber diárias no seletor de "Nova Diária".
+      updateUser.mutate({ id: row.sourceId, data: { active: !row.active } }, {
+        onSuccess: () => {
+          if (row.linkedProviderId == null) {
+            onDone();
+            return;
+          }
+          updateProvider.mutate(
+            { id: row.linkedProviderId, data: { active: !row.active } },
+            { onSuccess: onDone, onError: onFail }
+          );
+        },
+        onError: onFail,
+      });
     } else {
       updateProvider.mutate({ id: row.sourceId, data: { active: !row.active } }, { onSuccess: onDone, onError: onFail });
     }
@@ -201,8 +262,20 @@ export default function PeopleList() {
     };
     const onFail = (err: any) => toast({ title: 'Erro ao excluir', description: err?.message, variant: 'destructive' });
 
-    if (isUserRow(row)) {
+    const deleteUserRow = () => {
       deleteUser.mutate({ id: row.sourceId }, { onSuccess: onDone, onError: onFail });
+    };
+
+    if (isUserRow(row)) {
+      if (row.linkedProviderId != null) {
+        // Apaga primeiro o provider vinculado — se ele já tiver diárias
+        // lançadas, a exclusão falha por causa da restrição de chave
+        // estrangeira e o usuário permanece intacto, em vez de ficar um
+        // provider órfão sem ninguém para representá-lo.
+        deleteProvider.mutate({ id: row.linkedProviderId }, { onSuccess: deleteUserRow, onError: onFail });
+      } else {
+        deleteUserRow();
+      }
     } else {
       deleteProvider.mutate({ id: row.sourceId }, { onSuccess: onDone, onError: onFail });
     }
@@ -371,7 +444,7 @@ export default function PeopleList() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {isEditing && !isUserRow ? (
+                      {isEditing && (!isUserRow || row.linkedProviderId != null) ? (
                         <Input
                           type="number"
                           min="0"

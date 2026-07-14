@@ -11,15 +11,21 @@ const router = Router();
 const VALID_ROLES = ["admin", "gestor", "prestador", "funcionario"];
 
 // Diárias e o Valor da Diária vivem exclusivamente na tabela `providers` —
-// um usuário com papel "prestador" só ganha acesso a esse campo (e aparece
-// no seletor de "Nova Diária") se também existir uma linha correspondente
-// em `providers`. Prestadores sincronizados do DECARGO People já recebem
-// essa linha via /api/providers/sync; esta função cobre o caso de alguém
-// cadastrado (ou promovido a "prestador") manualmente pela tela de
-// Usuários, que de outra forma nunca ganharia essa linha. É idempotente e
-// só cria — nunca atualiza um registro de provider já existente, seguindo
-// o mesmo princípio "sync é aditivo" usado no resto do sistema.
-async function ensureProviderForPrestador(user: {
+// alguém só ganha acesso a esse campo (e aparece no seletor de "Nova
+// Diária") se também existir uma linha correspondente em `providers`.
+// Pessoas sincronizadas do DECARGO People já recebem essa linha via
+// /api/providers/sync; esta função cobre quem é cadastrado manualmente
+// pela tela de Usuários — independente do papel de acesso escolhido
+// (Admin/Gestor/Funcionário/Prestador também podem receber diárias), já
+// que "manual" aqui é sinal de que a pessoa não veio do DECARGO People e
+// pode precisar lançar diárias. É idempotente e só cria — nunca atualiza
+// um registro de provider já existente, seguindo o mesmo princípio "sync
+// é aditivo" usado no resto do sistema.
+function isManualUser(decargoId: string): boolean {
+  return decargoId.startsWith("manual-");
+}
+
+async function ensureProviderForManualUser(user: {
   decargoId: string;
   name: string;
   email: string | null;
@@ -195,8 +201,8 @@ router.post("/", requireRole("admin"), async (req, res) => {
       newValues: { name, email: normalizedEmail, role, teamId: teamId ?? null, active: active ?? true },
     });
 
-    if (updated.role === "prestador") {
-      await ensureProviderForPrestador(updated);
+    if (isManualUser(updated.decargoId)) {
+      await ensureProviderForManualUser(updated);
     }
 
     res.status(200).json(updated);
@@ -215,8 +221,8 @@ router.post("/", requireRole("admin"), async (req, res) => {
     })
     .returning();
 
-  if (created.role === "prestador") {
-    await ensureProviderForPrestador(created);
+  if (isManualUser(created.decargoId)) {
+    await ensureProviderForManualUser(created);
   }
 
   await logAudit({
@@ -249,13 +255,13 @@ router.get("/", requireRole("admin"), async (req, res) => {
     .leftJoin(teamsTable, eq(usersTable.teamId, teamsTable.id))
     .orderBy(usersTable.name);
 
-  // Self-heals prestador users created before ensureProviderForPrestador
+  // Self-heals manual users created before ensureProviderForManualUser
   // existed (or created some other way that skipped it) — every listing of
   // Usuários/Pessoas is a chance to backfill any missing provider row, so
   // people already stuck without a Valor da Diária field get fixed on the
   // next page load instead of needing a re-edit.
   await Promise.all(
-    users.filter(u => u.role === "prestador").map(u => ensureProviderForPrestador(u))
+    users.filter(u => isManualUser(u.decargoId)).map(u => ensureProviderForManualUser(u))
   );
 
   res.json(users);
@@ -331,8 +337,8 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
     return;
   }
 
-  if (updated.role === "prestador") {
-    await ensureProviderForPrestador(updated);
+  if (isManualUser(updated.decargoId)) {
+    await ensureProviderForManualUser(updated);
   }
 
   await logAudit({
