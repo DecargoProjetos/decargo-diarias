@@ -1,0 +1,95 @@
+### Melhorias na Seção Diárias
+
+Na seção **Diárias**, preciso que sejam implementadas mudanças significativas no layout, nos componentes visuais e nas funcionalidades do sistema.
+
+### Novo Layout Baseado em Calendário
+
+Gostaria que a seção utilizasse como referência o aplicativo de calendário padrão do Google para Android.
+
+O objetivo é exibir um calendário mensal, contendo todos os dias do mês em uma única visualização.
+
+Ao selecionar uma data no calendário, o sistema deverá abrir uma tela ou painel para inclusão, edição e consulta dos registros de diárias daquele dia.
+
+### Campos do Registro de Diária
+
+Ao selecionar uma data, deverão ser exibidos os seguintes campos:
+
+* **Nome**
+
+  * Campo do tipo lista de seleção.
+  * Deve exibir apenas as pessoas cadastradas na seção **Pessoas** com status **Ativo**.
+  * A lista deverá respeitar as permissões de acesso do usuário logado.
+
+* **Data**
+
+  * Preenchimento automático com a data selecionada no calendário.
+  * Não deverá permitir alteração manual, salvo para usuários administradores (caso aplicável).
+
+* **Horário Inicial**
+
+  * Campo do tipo hora.
+
+* **Horário Final**
+
+  * Campo do tipo hora.
+
+* **Observações**
+
+  * Campo opcional para registro de informações complementares.
+
+### Regras de Permissão
+
+O sistema deverá reconhecer automaticamente o perfil e as permissões do usuário no momento do login.
+
+#### Líder de Equipe
+
+Cada líder de equipe poderá:
+
+* Registrar diárias apenas para os membros de sua equipe.
+* Registrar suas próprias diárias.
+* Visualizar apenas os registros pertencentes à sua equipe.
+* Editar apenas registros da sua equipe, respeitando as regras de negócio definidas pelo sistema.
+
+#### Usuários Comuns
+
+Os usuários comuns poderão:
+
+* Visualizar apenas seus próprios registros.
+* Consultar suas diárias e histórico.
+
+#### Administradores
+
+Os administradores poderão:
+
+* Visualizar todas as equipes.
+* Visualizar todos os registros.
+* Editar qualquer lançamento.
+* Realizar aprovações e auditorias.
+* Corrigir inconsistências quando necessário.
+
+### Controle de Acesso
+
+Ao acessar o sistema, deverão ser aplicadas automaticamente as seguintes restrições:
+
+* Bloqueio da visualização de equipes não autorizadas.
+* Bloqueio da edição de registros pertencentes a outras equipes.
+* Exibição apenas dos nomes permitidos para o usuário logado.
+* Respeito integral às permissões definidas no cadastro de usuários.
+
+### Melhorias Visuais
+
+* Exibir indicadores visuais nos dias que possuam registros cadastrados.
+* Exibir a quantidade de diárias registradas por dia.
+* Permitir navegação rápida entre meses.
+* Permitir visualização mensal, semanal e diária.
+* Adaptar a interface para dispositivos móveis e desktops.
+
+### Resultado Esperado
+
+* Interface mais intuitiva e visual.
+* Facilidade para lançamento e consulta de diárias.
+* Controle eficiente por equipe.
+* Redução de erros de lançamento.
+* Melhor experiência de uso para líderes, prestadores e administradores.
+
+Após a implementação, realizar testes completos de permissões, navegação e lançamentos, apresentando um resumo das alterações realizadas e dos resultados obtidos.
