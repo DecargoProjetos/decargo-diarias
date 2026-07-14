@@ -24,7 +24,9 @@ async function getDiariaById(id: number, userId: number, role: string, teamId: n
         d.id, d.provider_id AS "providerId", p.name AS "providerName",
         d.team_id AS "teamId", t.name AS "teamName",
         d.manager_id AS "managerId", mu.name AS "managerName",
-        d.work_date AS "workDate", d.value, d.payment_date AS "paymentDate",
+        d.work_date AS "workDate",
+        d.start_time AS "startTime", d.end_time AS "endTime",
+        d.value, d.payment_date AS "paymentDate",
         d.observations, d.status, d.action_note AS "actionNote",
         d.created_at AS "createdAt", cu.name AS "createdByName",
         d.approved_at AS "approvedAt", au.name AS "approvedByName",
@@ -110,7 +112,9 @@ router.get("/", requireAuth, async (req, res) => {
           d.id, d.provider_id AS "providerId", p.name AS "providerName",
           d.team_id AS "teamId", t.name AS "teamName",
           d.manager_id AS "managerId", mu.name AS "managerName",
-          d.work_date AS "workDate", d.value, d.payment_date AS "paymentDate",
+          d.work_date AS "workDate",
+          d.start_time AS "startTime", d.end_time AS "endTime",
+          d.value, d.payment_date AS "paymentDate",
           d.observations, d.status, d.action_note AS "actionNote",
           d.created_at AS "createdAt", cu.name AS "createdByName",
           d.approved_at AS "approvedAt", au.name AS "approvedByName",
@@ -149,11 +153,13 @@ router.get("/", requireAuth, async (req, res) => {
 // POST /api/diarias (gestor/admin)
 router.post("/", requireRole("admin", "gestor"), async (req, res) => {
   const me = req.currentUser!;
-  const { providerId, teamId, workDate, value, paymentDate, observations } =
+  const { providerId, teamId, workDate, startTime, endTime, value, paymentDate, observations } =
     req.body as {
       providerId: number;
       teamId: number;
       workDate: string;
+      startTime?: string | null;
+      endTime?: string | null;
       value: number;
       paymentDate?: string;
       observations?: string;
@@ -172,6 +178,8 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
       teamId,
       managerId: me.id,
       workDate,
+      startTime: startTime ?? null,
+      endTime: endTime ?? null,
       value: String(value),
       paymentDate: paymentDate ?? null,
       observations: observations ?? null,
@@ -280,8 +288,10 @@ router.patch("/:id", requireRole("admin", "gestor"), async (req, res) => {
     return;
   }
 
-  const { workDate, value, paymentDate, observations } = req.body as {
+  const { workDate, startTime, endTime, value, paymentDate, observations } = req.body as {
     workDate?: string;
+    startTime?: string | null;
+    endTime?: string | null;
     value?: number;
     paymentDate?: string | null;
     observations?: string | null;
@@ -290,6 +300,8 @@ router.patch("/:id", requireRole("admin", "gestor"), async (req, res) => {
   const oldValues = { workDate: diaria.workDate, value: diaria.value };
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (workDate !== undefined) updates.workDate = workDate;
+  if (startTime !== undefined) updates.startTime = startTime;
+  if (endTime !== undefined) updates.endTime = endTime;
   if (value !== undefined) updates.value = String(value);
   if (paymentDate !== undefined) updates.paymentDate = paymentDate;
   if (observations !== undefined) updates.observations = observations;

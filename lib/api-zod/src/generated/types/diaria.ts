@@ -19,6 +19,16 @@ export interface Diaria {
   managerName?: string | null;
   workDate: Date;
   /**
+     * Horário inicial no formato HH:mm
+     * @nullable
+     */
+  startTime?: string | null;
+  /**
+     * Horário final no formato HH:mm
+     * @nullable
+     */
+  endTime?: string | null;
+  /**
      * Null when viewer is a provider (no financial visibility)
      * @nullable
      */

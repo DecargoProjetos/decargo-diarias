@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import NotFound from '@/pages/not-found';
 
 import Dashboard from '@/pages/Dashboard';
-import DiariasList from '@/pages/DiariasList';
+import DiariasCalendar from '@/pages/DiariasCalendar';
 import DiariaForm from '@/pages/DiariaForm';
 import DiariaDetails from '@/pages/DiariaDetails';
 import TeamsList from '@/pages/TeamsList';
@@ -152,7 +152,7 @@ function Router() {
       <Switch>
         <Route path="/login" component={Login} />
         <Route path="/" component={Dashboard} />
-        <Route path="/diarias" component={DiariasList} />
+        <Route path="/diarias" component={DiariasCalendar} />
         <Route path="/diarias/nova" component={DiariaForm} />
         <Route path="/diarias/:id/editar" component={DiariaForm} />
         <Route path="/diarias/:id" component={DiariaDetails} />

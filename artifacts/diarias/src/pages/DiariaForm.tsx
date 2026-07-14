@@ -39,6 +39,8 @@ export default function DiariaForm() {
     providerId: '',
     teamId: '',
     workDate: new Date().toISOString().split('T')[0],
+    startTime: '',
+    endTime: '',
     value: '',
     observations: ''
   });
@@ -49,6 +51,8 @@ export default function DiariaForm() {
         providerId: existingDiaria.providerId.toString(),
         teamId: existingDiaria.teamId.toString(),
         workDate: existingDiaria.workDate.split('T')[0],
+        startTime: existingDiaria.startTime?.slice(0, 5) || '',
+        endTime: existingDiaria.endTime?.slice(0, 5) || '',
         value: existingDiaria.value?.toString() || '',
         observations: existingDiaria.observations || ''
       });
@@ -65,6 +69,8 @@ export default function DiariaForm() {
         id: Number(id),
         data: {
           workDate: formData.workDate,
+          startTime: formData.startTime || null,
+          endTime: formData.endTime || null,
           value: Number(formData.value),
           observations: formData.observations || null
         }
@@ -81,6 +87,8 @@ export default function DiariaForm() {
           providerId: Number(formData.providerId),
           teamId: Number(formData.teamId),
           workDate: formData.workDate,
+          startTime: formData.startTime || null,
+          endTime: formData.endTime || null,
           value: Number(formData.value),
           observations: formData.observations || null
         }
@@ -156,6 +164,24 @@ export default function DiariaForm() {
                   required
                   value={formData.workDate}
                   onChange={(e) => setFormData({...formData, workDate: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">Horário Inicial</label>
+                <Input
+                  type="time"
+                  value={formData.startTime}
+                  onChange={(e) => setFormData({...formData, startTime: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">Horário Final</label>
+                <Input
+                  type="time"
+                  value={formData.endTime}
+                  onChange={(e) => setFormData({...formData, endTime: e.target.value})}
                 />
               </div>
 

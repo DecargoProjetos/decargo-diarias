@@ -178,6 +178,16 @@ export default function DiariaDetails() {
                   {formatDate(diaria.workDate)}
                 </div>
               </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Horário</p>
+                <p className="mt-1 font-medium">
+                  {diaria.startTime && diaria.endTime
+                    ? `${diaria.startTime.slice(0, 5)} – ${diaria.endTime.slice(0, 5)}`
+                    : diaria.startTime
+                    ? `A partir de ${diaria.startTime.slice(0, 5)}`
+                    : 'Não informado'}
+                </p>
+              </div>
               {showFinancials && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Valor</p>

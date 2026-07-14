@@ -10,6 +10,16 @@ export interface DiariaInput {
   providerId: number;
   teamId: number;
   workDate: Date;
+  /**
+     * Horário inicial no formato HH:mm
+     * @nullable
+     */
+  startTime?: string | null;
+  /**
+     * Horário final no formato HH:mm
+     * @nullable
+     */
+  endTime?: string | null;
   value: number;
   /** @nullable */
   paymentDate?: Date | null;

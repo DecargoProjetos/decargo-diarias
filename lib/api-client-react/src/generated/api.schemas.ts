@@ -182,6 +182,16 @@ export interface Diaria {
   managerName?: string | null;
   workDate: string;
   /**
+     * Horário inicial no formato HH:mm
+     * @nullable
+     */
+  startTime?: string | null;
+  /**
+     * Horário final no formato HH:mm
+     * @nullable
+     */
+  endTime?: string | null;
+  /**
      * Null when viewer is a provider (no financial visibility)
      * @nullable
      */
@@ -215,6 +225,16 @@ export interface DiariaInput {
   providerId: number;
   teamId: number;
   workDate: string;
+  /**
+     * Horário inicial no formato HH:mm
+     * @nullable
+     */
+  startTime?: string | null;
+  /**
+     * Horário final no formato HH:mm
+     * @nullable
+     */
+  endTime?: string | null;
   value: number;
   /** @nullable */
   paymentDate?: string | null;
@@ -224,6 +244,10 @@ export interface DiariaInput {
 
 export interface DiariaUpdate {
   workDate?: string;
+  /** @nullable */
+  startTime?: string | null;
+  /** @nullable */
+  endTime?: string | null;
   value?: number;
   /** @nullable */
   paymentDate?: string | null;

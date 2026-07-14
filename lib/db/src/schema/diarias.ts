@@ -6,6 +6,7 @@ import {
   timestamp,
   numeric,
   date,
+  time,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -38,6 +39,10 @@ export const diariasTable = pgTable("diarias", {
     onDelete: "set null",
   }),
   workDate: date("work_date").notNull(),
+  // Horário do serviço no dia — opcionais para não quebrar registros
+  // existentes e lançamentos feitos fora do novo painel de calendário.
+  startTime: time("start_time"),
+  endTime: time("end_time"),
   value: numeric("value", { precision: 10, scale: 2 }).notNull(),
   paymentDate: date("payment_date"),
   observations: text("observations"),

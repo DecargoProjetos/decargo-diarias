@@ -8,6 +8,10 @@
 
 export interface DiariaUpdate {
   workDate?: Date;
+  /** @nullable */
+  startTime?: string | null;
+  /** @nullable */
+  endTime?: string | null;
   value?: number;
   /** @nullable */
   paymentDate?: Date | null;

@@ -1037,6 +1037,12 @@ components:
         workDate:
           type: string
           format: date
+        startTime:
+          type: ["string", "null"]
+          description: Horário inicial no formato HH:mm
+        endTime:
+          type: ["string", "null"]
+          description: Horário final no formato HH:mm
         value:
           type: ["number", "null"]
           description: Null when viewer is a provider (no financial visibility)
@@ -1103,6 +1109,12 @@ components:
         workDate:
           type: string
           format: date
+        startTime:
+          type: ["string", "null"]
+          description: Horário inicial no formato HH:mm
+        endTime:
+          type: ["string", "null"]
+          description: Horário final no formato HH:mm
         value:
           type: number
         paymentDate:
@@ -1118,6 +1130,10 @@ components:
         workDate:
           type: string
           format: date
+        startTime:
+          type: ["string", "null"]
+        endTime:
+          type: ["string", "null"]
         value:
           type: number
         paymentDate:
