@@ -32,9 +32,15 @@ type PersonRow = {
   email: string | null | undefined;
   teamId: number | null | undefined;
   teamName: string | null | undefined;
+  // Só existe para prestadores — funcionários não recebem diárias, então o
+  // campo fica undefined para eles e a UI mostra "-" nesse caso.
+  dailyRate: number | null | undefined;
   active: boolean;
   syncedAt: string | null | undefined;
 };
+
+const formatCurrency = (value: number): string =>
+  value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const TIPO_BADGE_CLASSES: Record<PersonTipo, string> = {
   Administrador: 'bg-amber-50 text-amber-700',
@@ -75,7 +81,7 @@ export default function PeopleList() {
   const { toast } = useToast();
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', teamId: '' });
+  const [editForm, setEditForm] = useState({ name: '', teamId: '', dailyRate: '' });
 
   const [filterTipo, setFilterTipo] = useState<'todos' | PersonTipo>('todos');
   const [filterTeamId, setFilterTeamId] = useState<'todas' | string>('todas');
@@ -96,6 +102,7 @@ export default function PeopleList() {
       email: u.email,
       teamId: u.teamId,
       teamName: u.teamName,
+      dailyRate: undefined,
       active: u.active,
       syncedAt: null,
     }));
@@ -108,6 +115,7 @@ export default function PeopleList() {
       email: p.email,
       teamId: p.teamId,
       teamName: p.teamName,
+      dailyRate: p.dailyRate,
       active: p.active,
       syncedAt: p.syncedAt,
     }));
@@ -138,7 +146,11 @@ export default function PeopleList() {
 
   const startEdit = (row: PersonRow) => {
     setEditingKey(row.key);
-    setEditForm({ name: row.name, teamId: row.teamId?.toString() || '' });
+    setEditForm({
+      name: row.name,
+      teamId: row.teamId?.toString() || '',
+      dailyRate: row.dailyRate != null ? String(row.dailyRate) : '',
+    });
   };
 
   const handleSaveEdit = (row: PersonRow) => {
@@ -153,7 +165,11 @@ export default function PeopleList() {
     if (isUserRow(row)) {
       updateUser.mutate({ id: row.sourceId, data: { name: editForm.name, teamId } }, { onSuccess: onDone, onError: onFail });
     } else {
-      updateProvider.mutate({ id: row.sourceId, data: { name: editForm.name, teamId } }, { onSuccess: onDone, onError: onFail });
+      const dailyRate = editForm.dailyRate.trim() === '' ? null : Number(editForm.dailyRate);
+      updateProvider.mutate(
+        { id: row.sourceId, data: { name: editForm.name, teamId, dailyRate } },
+        { onSuccess: onDone, onError: onFail }
+      );
     }
   };
 
@@ -287,6 +303,7 @@ export default function PeopleList() {
                 <TableHead>DECARGO ID</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Equipe</TableHead>
+                <TableHead>Valor da Diária</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Última Sincronização</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -295,17 +312,17 @@ export default function PeopleList() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center h-24">Carregando...</TableCell>
+                  <TableCell colSpan={8} className="text-center h-24">Carregando...</TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
                     Nenhuma pessoa sincronizada ainda. Clique em "Sincronizar com DECARGO People".
                   </TableCell>
                 </TableRow>
               ) : filteredRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
                     Nenhuma pessoa encontrada com os filtros selecionados.
                   </TableCell>
                 </TableRow>
@@ -347,6 +364,23 @@ export default function PeopleList() {
                         </select>
                       ) : (
                         row.teamName || '-'
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isEditing && !isUserRow ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editForm.dailyRate}
+                          onChange={e => setEditForm({ ...editForm, dailyRate: e.target.value })}
+                          placeholder="0,00"
+                          className="h-8 max-w-28"
+                        />
+                      ) : row.dailyRate != null ? (
+                        formatCurrency(row.dailyRate)
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell>

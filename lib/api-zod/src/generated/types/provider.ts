@@ -16,6 +16,11 @@ export interface Provider {
   teamId?: number | null;
   /** @nullable */
   teamName?: string | null;
+  /**
+     * Valor padrão da diária deste prestador
+     * @nullable
+     */
+  dailyRate?: number | null;
   active: boolean;
   /** @nullable */
   syncedAt?: Date | null;

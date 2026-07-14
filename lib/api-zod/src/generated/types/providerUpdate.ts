@@ -12,5 +12,7 @@ export interface ProviderUpdate {
   email?: string | null;
   /** @nullable */
   teamId?: number | null;
+  /** @nullable */
+  dailyRate?: number | null;
   active?: boolean;
 }

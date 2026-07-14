@@ -25,6 +25,7 @@ router.get("/", requireAuth, async (req, res) => {
       email: providersTable.email,
       teamId: providersTable.teamId,
       teamName: teamsTable.name,
+      dailyRate: providersTable.dailyRate,
       active: providersTable.active,
       syncedAt: providersTable.syncedAt,
     })
@@ -122,10 +123,11 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
 // PATCH /api/providers/:id (admin only)
 router.patch("/:id", requireRole("admin"), async (req, res) => {
   const id = Number(req.params.id);
-  const { name, email, teamId, active } = req.body as {
+  const { name, email, teamId, dailyRate, active } = req.body as {
     name?: string;
     email?: string | null;
     teamId?: number | null;
+    dailyRate?: number | null;
     active?: boolean;
   };
 
@@ -133,6 +135,7 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
   if (name !== undefined) updates.name = name;
   if (email !== undefined) updates.email = email;
   if (teamId !== undefined) updates.teamId = teamId;
+  if (dailyRate !== undefined) updates.dailyRate = dailyRate === null ? null : String(dailyRate);
   if (active !== undefined) updates.active = active;
 
   const [updated] = await db
@@ -202,6 +205,7 @@ router.get("/:id", requireAuth, async (req, res) => {
       email: providersTable.email,
       teamId: providersTable.teamId,
       teamName: teamsTable.name,
+      dailyRate: providersTable.dailyRate,
       active: providersTable.active,
       syncedAt: providersTable.syncedAt,
     })

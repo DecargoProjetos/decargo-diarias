@@ -260,6 +260,7 @@ export const ListProvidersResponseItem = zod.object({
   "email": zod.string().nullish(),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
+  "dailyRate": zod.number().nullish().describe('Valor padrão da diária deste prestador'),
   "active": zod.boolean(),
   "syncedAt": zod.coerce.date().nullish()
 })
@@ -290,6 +291,7 @@ export const GetProviderResponse = zod.object({
   "email": zod.string().nullish(),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
+  "dailyRate": zod.number().nullish().describe('Valor padrão da diária deste prestador'),
   "active": zod.boolean(),
   "syncedAt": zod.coerce.date().nullish()
 })
@@ -306,6 +308,7 @@ export const UpdateProviderBody = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().nullish(),
   "teamId": zod.number().nullish(),
+  "dailyRate": zod.number().nullish(),
   "active": zod.boolean().optional()
 })
 
@@ -316,6 +319,7 @@ export const UpdateProviderResponse = zod.object({
   "email": zod.string().nullish(),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
+  "dailyRate": zod.number().nullish().describe('Valor padrão da diária deste prestador'),
   "active": zod.boolean(),
   "syncedAt": zod.coerce.date().nullish()
 })

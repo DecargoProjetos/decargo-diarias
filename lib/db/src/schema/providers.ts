@@ -5,6 +5,7 @@ import {
   integer,
   boolean,
   timestamp,
+  numeric,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -18,6 +19,10 @@ export const providersTable = pgTable("providers", {
   teamId: integer("team_id").references(() => teamsTable.id, {
     onDelete: "set null",
   }),
+  // Valor padrão da diária deste prestador. Opcional: prestadores
+  // sincronizados do DECARGO People não trazem esse valor, então fica nulo
+  // até um admin preenchê-lo manualmente em Pessoas.
+  dailyRate: numeric("daily_rate", { precision: 10, scale: 2 }),
   active: boolean("active").notNull().default(true),
   syncedAt: timestamp("synced_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

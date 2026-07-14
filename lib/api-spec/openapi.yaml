@@ -960,6 +960,9 @@ components:
           type: ["integer", "null"]
         teamName:
           type: ["string", "null"]
+        dailyRate:
+          type: ["number", "null"]
+          description: Valor padrão da diária deste prestador
         active:
           type: boolean
         syncedAt:
@@ -976,6 +979,8 @@ components:
           type: ["string", "null"]
         teamId:
           type: ["integer", "null"]
+        dailyRate:
+          type: ["number", "null"]
         active:
           type: boolean
 

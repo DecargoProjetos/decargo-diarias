@@ -116,6 +116,11 @@ export interface Provider {
   teamId?: number | null;
   /** @nullable */
   teamName?: string | null;
+  /**
+     * Valor padrão da diária deste prestador
+     * @nullable
+     */
+  dailyRate?: number | null;
   active: boolean;
   /** @nullable */
   syncedAt?: string | null;
@@ -127,6 +132,8 @@ export interface ProviderUpdate {
   email?: string | null;
   /** @nullable */
   teamId?: number | null;
+  /** @nullable */
+  dailyRate?: number | null;
   active?: boolean;
 }
 
