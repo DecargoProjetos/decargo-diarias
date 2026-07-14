@@ -17,9 +17,15 @@ import { RefreshCw, CheckCircle2, XCircle, Edit2, Trash2, Save, X } from 'lucide
 // fazem sentido numa única lista com uma coluna de Tipo. Cada linha guarda
 // seu id de origem (userId/providerId) para rotear edição/exclusão para o
 // endpoint correto (/api/users/:id ou /api/providers/:id).
+//
+// "Tipo" distingue não só a origem do registro (funcionário x prestador),
+// mas também o papel de acesso do funcionário (admin/gestor/funcionário),
+// já que isso é o que o usuário enxerga como "tipo de pessoa" no filtro.
+type PersonTipo = 'Administrador' | 'Gestor' | 'Funcionário' | 'Prestador';
+
 type PersonRow = {
   key: string;
-  tipo: 'Funcionário' | 'Prestador';
+  tipo: PersonTipo;
   sourceId: number;
   decargoId: string;
   name: string;
@@ -29,6 +35,28 @@ type PersonRow = {
   active: boolean;
   syncedAt: string | null | undefined;
 };
+
+const TIPO_BADGE_CLASSES: Record<PersonTipo, string> = {
+  Administrador: 'bg-amber-50 text-amber-700',
+  Gestor: 'bg-teal-50 text-teal-700',
+  Funcionário: 'bg-blue-50 text-blue-700',
+  Prestador: 'bg-purple-50 text-purple-700',
+};
+
+const roleToTipo = (role: string): PersonTipo => {
+  if (role === 'admin') return 'Administrador';
+  if (role === 'gestor') return 'Gestor';
+  if (role === 'prestador') return 'Prestador';
+  return 'Funcionário';
+};
+
+// Normaliza para comparar nomes ignorando acentos/caixa, já que a pesquisa
+// deve casar "Edu" com "Eduarda", "Eduardo" etc. em qualquer posição do nome.
+const normalize = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 
 export default function PeopleList() {
   const { data: currentUser } = useGetMe();
@@ -49,6 +77,11 @@ export default function PeopleList() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: '', teamId: '' });
 
+  const [filterTipo, setFilterTipo] = useState<'todos' | PersonTipo>('todos');
+  const [filterTeamId, setFilterTeamId] = useState<'todas' | string>('todas');
+  const [filterStatus, setFilterStatus] = useState<'todos' | 'ativo' | 'inativo'>('todos');
+  const [searchName, setSearchName] = useState('');
+
   if (!isAdmin) {
     return <div>Acesso negado. Apenas administradores.</div>;
   }
@@ -56,7 +89,7 @@ export default function PeopleList() {
   const rows = useMemo<PersonRow[]>(() => {
     const fromUsers: PersonRow[] = (users ?? []).map(u => ({
       key: `user-${u.id}`,
-      tipo: 'Funcionário',
+      tipo: roleToTipo(u.role),
       sourceId: u.id,
       decargoId: u.decargoId,
       name: u.name,
@@ -81,10 +114,27 @@ export default function PeopleList() {
     return [...fromUsers, ...fromProviders].sort((a, b) => a.name.localeCompare(b.name));
   }, [users, providers]);
 
+  const filteredRows = useMemo(() => {
+    const normalizedSearch = normalize(searchName.trim());
+    return rows.filter(row => {
+      if (filterTipo !== 'todos' && row.tipo !== filterTipo) return false;
+      if (filterTeamId !== 'todas' && row.teamId?.toString() !== filterTeamId) return false;
+      if (filterStatus === 'ativo' && !row.active) return false;
+      if (filterStatus === 'inativo' && row.active) return false;
+      if (normalizedSearch && !normalize(row.name).includes(normalizedSearch)) return false;
+      return true;
+    });
+  }, [rows, filterTipo, filterTeamId, filterStatus, searchName]);
+
   const refetchAll = () => {
     refetchUsers();
     refetchProviders();
   };
+
+  // Registros de funcionário (independente do papel: admin/gestor/funcionário)
+  // vivem em /api/users; prestadores vivem em /api/providers. O tipo exibido
+  // não basta para decidir isso sozinho, então usamos o prefixo da key.
+  const isUserRow = (row: PersonRow) => row.key.startsWith('user-');
 
   const startEdit = (row: PersonRow) => {
     setEditingKey(row.key);
@@ -100,7 +150,7 @@ export default function PeopleList() {
     };
     const onFail = (err: any) => toast({ title: 'Erro ao atualizar', description: err?.message, variant: 'destructive' });
 
-    if (row.tipo === 'Funcionário') {
+    if (isUserRow(row)) {
       updateUser.mutate({ id: row.sourceId, data: { name: editForm.name, teamId } }, { onSuccess: onDone, onError: onFail });
     } else {
       updateProvider.mutate({ id: row.sourceId, data: { name: editForm.name, teamId } }, { onSuccess: onDone, onError: onFail });
@@ -114,7 +164,7 @@ export default function PeopleList() {
     };
     const onFail = (err: any) => toast({ title: 'Erro ao atualizar status', description: err?.message, variant: 'destructive' });
 
-    if (row.tipo === 'Funcionário') {
+    if (isUserRow(row)) {
       updateUser.mutate({ id: row.sourceId, data: { active: !row.active } }, { onSuccess: onDone, onError: onFail });
     } else {
       updateProvider.mutate({ id: row.sourceId, data: { active: !row.active } }, { onSuccess: onDone, onError: onFail });
@@ -122,8 +172,8 @@ export default function PeopleList() {
   };
 
   const handleDelete = (row: PersonRow) => {
-    if (row.sourceId === currentUser?.id) return;
-    if (!confirm(`Tem certeza que deseja excluir ${row.tipo === 'Funcionário' ? 'este funcionário' : 'este prestador'}? Esta ação não pode ser desfeita.`)) return;
+    if (row.sourceId === currentUser?.id && isUserRow(row)) return;
+    if (!confirm(`Tem certeza que deseja excluir ${isUserRow(row) ? 'este funcionário' : 'este prestador'}? Esta ação não pode ser desfeita.`)) return;
 
     const onDone = () => {
       toast({ title: `${row.tipo} excluído.` });
@@ -131,7 +181,7 @@ export default function PeopleList() {
     };
     const onFail = (err: any) => toast({ title: 'Erro ao excluir', description: err?.message, variant: 'destructive' });
 
-    if (row.tipo === 'Funcionário') {
+    if (isUserRow(row)) {
       deleteUser.mutate({ id: row.sourceId }, { onSuccess: onDone, onError: onFail });
     } else {
       deleteProvider.mutate({ id: row.sourceId }, { onSuccess: onDone, onError: onFail });
@@ -188,6 +238,47 @@ export default function PeopleList() {
       </div>
 
       <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+            <Input
+              placeholder="Pesquisar por nome..."
+              value={searchName}
+              onChange={e => setSearchName(e.target.value)}
+              className="h-9 sm:max-w-xs"
+            />
+            <select
+              className="h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
+              value={filterTipo}
+              onChange={e => setFilterTipo(e.target.value as 'todos' | PersonTipo)}
+            >
+              <option value="todos">Todos os tipos</option>
+              <option value="Administrador">Administrador</option>
+              <option value="Gestor">Gestor</option>
+              <option value="Funcionário">Funcionário</option>
+              <option value="Prestador">Prestador</option>
+            </select>
+            <select
+              className="h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
+              value={filterTeamId}
+              onChange={e => setFilterTeamId(e.target.value)}
+            >
+              <option value="todas">Todas as equipes</option>
+              {teams?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <select
+              className="h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value as 'todos' | 'ativo' | 'inativo')}
+            >
+              <option value="todos">Todos os status</option>
+              <option value="ativo">Ativo</option>
+              <option value="inativo">Inativo</option>
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -212,13 +303,20 @@ export default function PeopleList() {
                     Nenhuma pessoa sincronizada ainda. Clique em "Sincronizar com DECARGO People".
                   </TableCell>
                 </TableRow>
-              ) : rows.map(row => {
+              ) : filteredRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
+                    Nenhuma pessoa encontrada com os filtros selecionados.
+                  </TableCell>
+                </TableRow>
+              ) : filteredRows.map(row => {
                 const isEditing = editingKey === row.key;
-                const isSelf = row.tipo === 'Funcionário' && row.sourceId === currentUser?.id;
+                const isUserRow = row.key.startsWith('user-');
+                const isSelf = isUserRow && row.sourceId === currentUser?.id;
                 return (
                   <TableRow key={row.key} className={!row.active ? 'opacity-60' : ''}>
                     <TableCell>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${row.tipo === 'Funcionário' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TIPO_BADGE_CLASSES[row.tipo]}`}>
                         {row.tipo}
                       </span>
                     </TableCell>
