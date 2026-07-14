@@ -7,3 +7,4 @@
 - [Diarias hard-delete FK](diarias-hard-delete-fk.md) — diarias.created_by/provider_id have no ON DELETE rule; user/provider delete must catch FK violation and suggest deactivating instead
 - [Diarias People API fields](diarias-people-api-fields.md) — funcionario active status is `demitido` (inverted), not `ativo`; prestador uses `tem_contrato_ativo`
 - [Diarias sync additive-only](diarias-sync-additive-only.md) — /users/sync and /providers/sync only insert new rows, never update existing ones — preserves manual deactivation
+- [Diarias People Contratos endpoint](diarias-people-contratos-endpoint.md) — contratos-prestacao is a BFF/session-only route, not reachable via the JWT sync integration even with admin creds
