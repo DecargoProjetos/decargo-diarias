@@ -203,7 +203,7 @@ export default function DiariasCalendar() {
       </Card>
 
       <Sheet open={!!selectedDateKey} onOpenChange={open => { if (!open) setSelectedDateKey(null); }}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
+        <SheetContent className="sm:max-w-2xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="capitalize">
               {selectedDateKey && format(parseISO(selectedDateKey), "EEEE, d 'de' MMMM", { locale: ptBR })}
