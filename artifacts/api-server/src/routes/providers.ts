@@ -13,6 +13,10 @@ const router = Router();
 // them disappearing. Pass `activeOnly=true` for operational pickers (e.g.
 // the new-diária form) that must only offer active providers.
 router.get("/", requireAuth, async (req, res) => {
+  // This response carries role-dependent fields (dailyRate is stripped for
+  // gestor) — it must never be cached by the browser/CDN, or a gestor could
+  // keep seeing a previously admin-fetched response with the real value.
+  res.set("Cache-Control", "no-store");
   const me = req.currentUser!;
   const teamId = req.query.teamId ? Number(req.query.teamId) : undefined;
   const activeOnly = req.query.activeOnly === "true";
@@ -200,6 +204,7 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
 
 // GET /api/providers/:id
 router.get("/:id", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
   const me = req.currentUser!;
   const id = Number(req.params.id);
 

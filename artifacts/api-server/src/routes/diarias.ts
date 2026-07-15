@@ -155,6 +155,10 @@ async function getDiariaById(id: number, userId: number, role: string, teamId: n
 
 // GET /api/diarias
 router.get("/", requireAuth, async (req, res) => {
+  // The `value` field is role-dependent (null for gestor) — never let the
+  // browser/CDN cache this response, or a gestor could keep seeing a
+  // previously admin-fetched response with the real value.
+  res.set("Cache-Control", "no-store");
   const me = req.currentUser!;
   const query = req.query as AnaliseFilterQuery;
   const { page = "1", pageSize = "20" } = req.query as Record<string, string>;
@@ -622,6 +626,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
 
 // GET /api/diarias/:id
 router.get("/:id", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
   const me = req.currentUser!;
   const result = await getDiariaById(Number(req.params.id), me.id, me.role, me.teamId, me.decargoId);
   if (!result) {
