@@ -1,0 +1,41 @@
+Ajustes de Permissões para Gestores
+Solicito a implementação das seguintes regras de acesso e permissões para usuários com perfil de Gestor no sistema de Controle de Diárias.
+1. Inclusão de Diárias
+•	Cada gestor deverá poder registrar diárias apenas para os membros da equipe sob sua responsabilidade.
+•	O gestor também poderá registrar suas próprias diárias.
+•	Não deverá ser possível visualizar ou selecionar prestadores pertencentes a outras equipes durante o lançamento das diárias.
+2. Bloqueio de Edição Após o Salvamento
+•	Após o lançamento e salvamento de uma diária, o gestor não poderá mais editar, excluir ou alterar qualquer informação do registro.
+•	Qualquer necessidade de correção deverá ser tratada pelo administrador por meio do fluxo de análise e aprovação.
+•	Essa regra deverá ser aplicada a todos os registros, independentemente da data de lançamento.
+3. Consulta das Diárias da Equipe
+•	Criar uma seção específica de consulta ou adaptar a seção existente para permitir que o gestor visualize as diárias lançadas pelos membros da sua equipe.
+•	Essa visualização deverá ser somente leitura.
+•	O gestor não poderá editar, excluir, aprovar, reprovar ou exportar registros.
+•	O gestor deverá visualizar apenas os registros da sua própria equipe.
+4. Restrição de Acesso aos Módulos
+Os gestores deverão ter acesso apenas às funcionalidades necessárias para o lançamento e acompanhamento das diárias.
+Permitir acesso:
+•	Diárias.
+•	Consulta das diárias da própria equipe.
+Bloquear acesso:
+•	Dashboard.
+•	Relatórios.
+•	Análise de Diárias.
+•	Aprovação e Reprovação.
+•	Exportação para o DECARGO People.
+•	Configurações do sistema.
+•	Funcionalidades administrativas.
+5. Controle Automático de Permissões
+Ao realizar o login, o sistema deverá identificar automaticamente o perfil do usuário e aplicar as permissões correspondentes.
+O gestor deverá:
+•	Visualizar apenas os menus autorizados.
+•	Visualizar apenas os dados da sua equipe.
+•	Não conseguir acessar módulos restritos por meio de URL, atalhos ou manipulação da interface.
+•	Ter todas as restrições validadas também no backend, garantindo a segurança das informações.
+Resultado Esperado
+•	Segregação adequada das informações por equipe.
+•	Maior controle sobre os registros de diárias.
+•	Redução do risco de alterações indevidas.
+•	Fluxo de aprovação centralizado na administração.
+•	Interface simplificada para os gestores, exibindo apenas as funcionalidades necessárias para sua rotina.
