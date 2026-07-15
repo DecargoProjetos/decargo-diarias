@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatCurrency, formatDate, statusColors, statusLabels } from '@/lib/utils';
+import { formatDate, statusColors, statusLabels } from '@/lib/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Tela somente leitura para o gestor consultar as diárias da própria
@@ -92,7 +92,6 @@ export default function DiariasEquipe() {
                     <TableHead>Prestador</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Horário</TableHead>
-                    <TableHead>Valor</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Criada por</TableHead>
                   </TableRow>
@@ -107,7 +106,6 @@ export default function DiariasEquipe() {
                           ? `${d.startTime.slice(0, 5)} – ${d.endTime.slice(0, 5)}`
                           : '-'}
                       </TableCell>
-                      <TableCell>{formatCurrency(d.value)}</TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusColors[d.status]}`}>
                           {statusLabels[d.status]}

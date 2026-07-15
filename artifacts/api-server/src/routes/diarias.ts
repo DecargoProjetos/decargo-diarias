@@ -15,8 +15,9 @@ import { pushDiariasToPeople } from "../lib/peopleClient";
 
 const router = Router();
 
+// Gestor não deve ver valores de diárias em nenhuma tela ou chamada de API.
 function canSeeValue(role: string) {
-  return role === "admin" || role === "gestor";
+  return role === "admin";
 }
 
 // Statuses considered "locked" — financial fields and status may not change
@@ -447,6 +448,22 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
     return;
   }
 
+  // Gestor never sees a diária's value, so the client cannot be trusted (or
+  // even able) to supply it. The server looks up the provider's current
+  // dailyRate itself and uses that, ignoring whatever the client sent.
+  let effectiveValue = value;
+  if (me.role === "gestor") {
+    const [provider] = await db
+      .select({ dailyRate: providersTable.dailyRate })
+      .from(providersTable)
+      .where(eq(providersTable.id, providerId));
+    if (!provider || provider.dailyRate == null) {
+      res.status(400).json({ error: "Configure o valor da diária deste prestador em Pessoas antes de lançar." });
+      return;
+    }
+    effectiveValue = Number(provider.dailyRate);
+  }
+
   const [diaria] = await db
     .insert(diariasTable)
     .values({
@@ -456,7 +473,7 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
       workDate,
       startTime: startTime ?? null,
       endTime: endTime ?? null,
-      value: String(value),
+      value: String(effectiveValue),
       paymentDate: paymentDate ?? null,
       observations: observations ?? null,
       status: "pendente_aprovacao",
@@ -469,7 +486,7 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
     entityId: diaria.id,
     action: "criado",
     userId: me.id,
-    newValues: { status: "pendente_aprovacao", value, providerId, teamId, workDate },
+    newValues: { status: "pendente_aprovacao", value: effectiveValue, providerId, teamId, workDate },
   });
 
   const result = await getDiariaById(diaria.id, me.id, me.role, me.teamId, me.decargoId);

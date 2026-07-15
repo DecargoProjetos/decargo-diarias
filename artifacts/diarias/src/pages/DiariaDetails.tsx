@@ -40,7 +40,8 @@ export default function DiariaDetails() {
   if (isLoading) return <div>Carregando...</div>;
   if (!diaria) return <div>Diária não encontrada.</div>;
 
-  const showFinancials = user?.role !== 'prestador' && user?.role !== 'funcionario';
+  // Gestor não deve ver valores de diárias em nenhuma tela.
+  const showFinancials = user?.role === 'admin';
   const isAdmin = user?.role === 'admin';
 
   const handleAction = (actionFn: any, isDelete = false) => {

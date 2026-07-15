@@ -347,7 +347,8 @@ function DayAgenda({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ startTime: '', endTime: '', observations: '' });
 
-  const showFinancials = user.role !== 'prestador' && user.role !== 'funcionario';
+  // Gestor não deve ver valores de diárias em nenhuma tela.
+  const showFinancials = user.role === 'admin';
 
   // Diária, uma vez salva, nunca é editável pelo gestor — correção é
   // exclusiva do admin (via fluxo de aprovação/solicitação de correção).
@@ -387,7 +388,10 @@ function DayAgenda({
     for (const row of filledRows) {
       const provider = providers?.find(p => p.id === Number(row.providerId));
       if (!provider) continue;
-      if (provider.dailyRate == null) {
+      // Gestor nunca vê o valor da diária, então a API não retorna
+      // dailyRate para ele — o servidor calcula e valida o valor ao salvar
+      // (ver POST /api/diarias), então essa checagem só se aplica ao admin.
+      if (showFinancials && provider.dailyRate == null) {
         toast({
           title: 'Valor da diária não definido',
           description: `Configure o Valor da Diária de ${provider.name} em Pessoas antes de lançar.`,
@@ -412,7 +416,10 @@ function DayAgenda({
             workDate: dateKey,
             startTime: row.startTime || null,
             endTime: row.endTime || null,
-            value: provider.dailyRate!,
+            // Gestor não recebe dailyRate da API (não pode ver o valor); o
+            // servidor calcula e valida o valor real ao salvar. O admin
+            // continua enviando o valor real que já vê na tela.
+            value: provider.dailyRate ?? 0,
             observations: row.observations || null,
           },
         });
@@ -579,7 +586,7 @@ function DayAgenda({
                               <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
                           </select>
-                          {rowProvider && (
+                          {rowProvider && showFinancials && (
                             <p className="text-[11px] text-muted-foreground mt-0.5">
                               {rowProvider.dailyRate != null ? formatCurrency(rowProvider.dailyRate) : 'valor não definido'}
                             </p>

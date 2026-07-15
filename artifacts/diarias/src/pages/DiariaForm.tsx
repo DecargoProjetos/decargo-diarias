@@ -192,18 +192,23 @@ export default function DiariaForm() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Valor (R$) *</label>
-                <Input 
-                  type="number" 
-                  step="0.01" 
-                  min="0"
-                  required
-                  value={formData.value}
-                  onChange={(e) => setFormData({...formData, value: e.target.value})}
-                  placeholder="0.00"
-                />
-              </div>
+              {/* Gestor não vê nem define o valor da diária — o servidor
+                  calcula automaticamente a partir do valor cadastrado do
+                  prestador ao salvar (ver POST /api/diarias). */}
+              {user?.role !== 'gestor' && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium leading-none">Valor (R$) *</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={formData.value}
+                    onChange={(e) => setFormData({...formData, value: e.target.value})}
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

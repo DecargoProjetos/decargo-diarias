@@ -42,7 +42,13 @@ router.get("/", requireAuth, async (req, res) => {
   if (conditions.length > 0) query = query.where(and(...conditions));
 
   const providers = await query.orderBy(providersTable.name);
-  res.json(providers);
+
+  // Gestor não deve ver o valor da diária (dailyRate) de nenhum prestador.
+  const data = me.role === "gestor"
+    ? providers.map((p) => ({ ...p, dailyRate: null }))
+    : providers;
+
+  res.json(data);
 });
 
 // POST /api/providers/sync (admin)
