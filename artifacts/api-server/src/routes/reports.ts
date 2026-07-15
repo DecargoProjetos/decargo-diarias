@@ -1,13 +1,16 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
-import { requireAuth } from "../middlewares/requireAuth";
+import { requireRole } from "../middlewares/requireAuth";
 
 const router = Router();
 
 // GET /api/reports/diarias
-router.get("/diarias", requireAuth, async (req, res) => {
-  const me = req.currentUser!;
-  const canSeeFinancials = me.role === "admin" || me.role === "gestor";
+// Relatórios agora é exclusivo do admin — gestor não deve mais acessar esta
+// tela nem seus dados financeiros agregados (ver Diárias da Equipe para o
+// que o gestor pode consultar).
+router.get("/diarias", requireRole("admin"), async (req, res) => {
+  // Route is admin-only now, so there is no per-role scoping left to apply.
+  const canSeeFinancials = true;
 
   const {
     status, providerId, teamId, managerId, startDate, endDate,
@@ -17,19 +20,9 @@ router.get("/diarias", requireAuth, async (req, res) => {
   const params: unknown[] = [];
   let p = 1;
 
-  if (me.role === "gestor") {
-    conditions.push(`d.team_id = $${p++}`);
-    params.push(me.teamId);
-  } else if (me.role !== "admin") {
-    // Prestadores/funcionários only see their own provider's data
-    // (funcionários have none, so this yields empty results — expected).
-    conditions.push(`p.decargo_id = ${p++}`);
-    params.push(me.decargoId);
-  }
-
   if (status) { conditions.push(`d.status = $${p++}`); params.push(status); }
   if (providerId) { conditions.push(`d.provider_id = $${p++}`); params.push(Number(providerId)); }
-  if (teamId && me.role === "admin") { conditions.push(`d.team_id = $${p++}`); params.push(Number(teamId)); }
+  if (teamId) { conditions.push(`d.team_id = $${p++}`); params.push(Number(teamId)); }
   if (managerId) { conditions.push(`d.manager_id = $${p++}`); params.push(Number(managerId)); }
   if (startDate) { conditions.push(`d.work_date >= $${p++}`); params.push(startDate); }
   if (endDate) { conditions.push(`d.work_date <= $${p++}`); params.push(endDate); }

@@ -614,8 +614,9 @@ router.get("/:id", requireAuth, async (req, res) => {
   res.json(result);
 });
 
-// PATCH /api/diarias/:id (manager, while pending/correction_requested)
-router.patch("/:id", requireRole("admin", "gestor"), async (req, res) => {
+// PATCH /api/diarias/:id (admin only — correções passam exclusivamente pelo
+// fluxo de aprovação do administrador; gestor não edita diárias já salvas)
+router.patch("/:id", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;
   const id = Number(req.params.id);
 
@@ -630,11 +631,6 @@ router.patch("/:id", requireRole("admin", "gestor"), async (req, res) => {
   const editableStatuses = ["pendente_aprovacao", "solicitacao_correcao"];
   if (!editableStatuses.includes(diaria.status)) {
     res.status(400).json({ error: "Diária não pode ser editada no status atual" });
-    return;
-  }
-
-  if (me.role === "gestor" && diaria.teamId !== me.teamId) {
-    res.status(403).json({ error: "Acesso não autorizado" });
     return;
   }
 
@@ -676,8 +672,8 @@ router.patch("/:id", requireRole("admin", "gestor"), async (req, res) => {
   res.json(result);
 });
 
-// DELETE /api/diarias/:id (cancel)
-router.delete("/:id", requireRole("admin", "gestor"), async (req, res) => {
+// DELETE /api/diarias/:id (cancel) — admin only, same rationale as PATCH above
+router.delete("/:id", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;
   const id = Number(req.params.id);
 
@@ -692,11 +688,6 @@ router.delete("/:id", requireRole("admin", "gestor"), async (req, res) => {
   const nonCancellable = ["exportada", "paga", "cancelada"];
   if (nonCancellable.includes(diaria.status)) {
     res.status(400).json({ error: "Diária não pode ser cancelada no status atual" });
-    return;
-  }
-
-  if (me.role === "gestor" && diaria.teamId !== me.teamId) {
-    res.status(403).json({ error: "Acesso não autorizado" });
     return;
   }
 

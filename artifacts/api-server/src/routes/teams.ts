@@ -31,8 +31,13 @@ async function getTeamWithMeta(id: number) {
 }
 
 // GET /api/teams
-router.get("/", requireAuth, async (_req, res) => {
-  const teams = await db
+// Gestor só recebe a própria equipe — este endpoint alimenta seletores em
+// outras telas (ex.: campo "Equipe" desabilitado no formulário de diária),
+// não deve expor a lista completa de equipes para quem não é admin.
+router.get("/", requireAuth, async (req, res) => {
+  const me = req.currentUser!;
+
+  let query = db
     .select({
       id: teamsTable.id,
       name: teamsTable.name,
@@ -42,7 +47,13 @@ router.get("/", requireAuth, async (_req, res) => {
     })
     .from(teamsTable)
     .leftJoin(usersTable, eq(teamsTable.managerId, usersTable.id))
-    .orderBy(teamsTable.name);
+    .$dynamic();
+
+  if (me.role === "gestor") {
+    query = query.where(eq(teamsTable.id, me.teamId ?? -1));
+  }
+
+  const teams = await query.orderBy(teamsTable.name);
 
   const ids = teams.map((t) => t.id);
   const counts =

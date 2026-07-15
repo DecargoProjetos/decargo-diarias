@@ -41,7 +41,6 @@ import { useToast } from '@/hooks/use-toast';
 type ViewMode = 'month' | 'week' | 'day';
 
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const EDITABLE_STATUSES = ['pendente_aprovacao', 'solicitacao_correcao'];
 
 const toDateKey = (date: Date): string => format(date, 'yyyy-MM-dd');
 const truncateTime = (value: string | null | undefined): string | null =>
@@ -350,12 +349,9 @@ function DayAgenda({
 
   const showFinancials = user.role !== 'prestador' && user.role !== 'funcionario';
 
-  const canEdit = (d: Diaria) => {
-    if (!EDITABLE_STATUSES.includes(d.status)) return false;
-    if (user.role === 'admin') return true;
-    if (user.role === 'gestor') return d.teamId === user.teamId;
-    return false;
-  };
+  // Diária, uma vez salva, nunca é editável pelo gestor — correção é
+  // exclusiva do admin (via fluxo de aprovação/solicitação de correção).
+  const canEdit = (_d: Diaria) => user.role === 'admin';
 
   const resetGrid = () => setGridRows([makeEmptyGridRow()]);
 

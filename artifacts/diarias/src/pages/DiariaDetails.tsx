@@ -42,7 +42,6 @@ export default function DiariaDetails() {
 
   const showFinancials = user?.role !== 'prestador' && user?.role !== 'funcionario';
   const isAdmin = user?.role === 'admin';
-  const isGestor = user?.role === 'gestor';
 
   const handleAction = (actionFn: any, isDelete = false) => {
     const payload = isDelete ? { id: Number(id) } : { id: Number(id), data: { note: note || null } };
@@ -85,8 +84,9 @@ export default function DiariaDetails() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {/* Gestor Actions */}
-          {(isGestor || isAdmin) && (diaria.status === 'pendente_aprovacao' || diaria.status === 'solicitacao_correcao') && (
+          {/* Uma diária salva nunca é editável pelo gestor — apenas o admin
+              corrige, via este botão (fluxo de aprovação/correção). */}
+          {isAdmin && (diaria.status === 'pendente_aprovacao' || diaria.status === 'solicitacao_correcao') && (
             <Link href={`/diarias/${diaria.id}/editar`} className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 gap-2">
               <Edit size={16} /> Editar
             </Link>
@@ -113,7 +113,7 @@ export default function DiariaDetails() {
             </Button>
           )}
 
-          {(isAdmin || isGestor) && (diaria.status === 'pendente_aprovacao' || diaria.status === 'rejeitada') && (
+          {isAdmin && (diaria.status === 'pendente_aprovacao' || diaria.status === 'rejeitada') && (
             <Button variant="destructive" onClick={() => {
               if (confirm('Tem certeza que deseja excluir esta diária?')) {
                 handleAction(deleteDiaria, true);

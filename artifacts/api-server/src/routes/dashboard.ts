@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
-import { requireAuth } from "../middlewares/requireAuth";
+import { requireRole } from "../middlewares/requireAuth";
 
 const router = Router();
 
 // GET /api/dashboard/summary
-router.get("/summary", requireAuth, async (req, res) => {
+// Gestor não acessa o Dashboard — apenas Diárias e a consulta somente
+// leitura da própria equipe (ver /api/diarias, já escopado por team_id).
+router.get("/summary", requireRole("admin", "prestador", "funcionario"), async (req, res) => {
   const me = req.currentUser!;
   const canSeeFinancials = me.role === "admin" || me.role === "gestor";
 
@@ -61,7 +63,7 @@ router.get("/summary", requireAuth, async (req, res) => {
 });
 
 // GET /api/dashboard/by-team
-router.get("/by-team", requireAuth, async (req, res) => {
+router.get("/by-team", requireRole("admin", "prestador", "funcionario"), async (req, res) => {
   const me = req.currentUser!;
   const canSeeFinancials = me.role === "admin" || me.role === "gestor";
 
@@ -110,7 +112,7 @@ router.get("/by-team", requireAuth, async (req, res) => {
 });
 
 // GET /api/dashboard/by-provider
-router.get("/by-provider", requireAuth, async (req, res) => {
+router.get("/by-provider", requireRole("admin", "prestador", "funcionario"), async (req, res) => {
   const me = req.currentUser!;
   const canSeeFinancials = me.role === "admin" || me.role === "gestor";
 
@@ -163,7 +165,7 @@ router.get("/by-provider", requireAuth, async (req, res) => {
 });
 
 // GET /api/dashboard/recent-activity
-router.get("/recent-activity", requireAuth, async (req, res) => {
+router.get("/recent-activity", requireRole("admin", "prestador", "funcionario"), async (req, res) => {
   const me = req.currentUser!;
 
   const conditions: string[] = ["al.entity_type = 'diaria'"];

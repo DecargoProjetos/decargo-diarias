@@ -10,3 +10,4 @@
 - [Diarias People Contratos endpoint](diarias-people-contratos-endpoint.md) — contratos-prestacao is a BFF/session-only route, not reachable via the JWT sync integration even with admin creds
 - [Diarias Railway schema drift](diarias-railway-schema-drift.md) — Railway build must run `drizzle-kit push --force`; plain `push` can silently skip columns in non-interactive CI, causing prod-only 500s
 - [Diarias gestor team scoping](diarias-gestor-team-scoping.md) — a gestor's own users.teamId (not teams.managerId) drives every scope check; must be set via Usuários page or the gestor sees nothing
+- [Diarias generated hooks queryKey](diarias-generated-hooks-querykey.md) — passing `query.enabled` to a generated useGetX/useListX hook also requires `query.queryKey` or tsc fails

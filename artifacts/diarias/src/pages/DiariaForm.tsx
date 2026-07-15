@@ -104,6 +104,13 @@ export default function DiariaForm() {
 
   if (isEditing && isLoadingExisting) return <div>Carregando...</div>;
 
+  // Diária salva nunca é editável pelo gestor — só o admin corrige, via
+  // fluxo de aprovação. O backend já bloqueia o PATCH; isto evita que o
+  // gestor chegue à tela de edição navegando direto pela URL.
+  if (isEditing && user?.role === 'gestor') {
+    return <div>Acesso negado. Diárias já salvas só podem ser corrigidas por um administrador.</div>;
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center gap-4">

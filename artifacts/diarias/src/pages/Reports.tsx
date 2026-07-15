@@ -22,12 +22,13 @@ export default function Reports() {
     startDate: filters.startDate || undefined,
     endDate: filters.endDate || undefined,
     status: filters.status || undefined,
-  });
+  }, { query: { enabled: user?.role === 'admin', queryKey: ['getReportDiarias', filters] } });
 
   const exportMutation = useExportDiarias();
 
-  if (user?.role === 'prestador' || user?.role === 'funcionario') {
-    return <div>Acesso negado.</div>;
+  // Relatórios agora é exclusivo do admin — gestor não tem mais acesso.
+  if (user && user.role !== 'admin') {
+    return <div>Acesso negado. Apenas administradores.</div>;
   }
 
   const handleExportERP = () => {

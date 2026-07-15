@@ -6,8 +6,23 @@ import { motion } from 'framer-motion';
 
 export default function Dashboard() {
   const { data: user } = useGetMe();
-  const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary();
-  const { data: activity, isLoading: isLoadingActivity } = useGetRecentActivity();
+  // Gestor não acessa o Dashboard — só Diárias e a consulta somente leitura
+  // da própria equipe. Só habilita as buscas quando sabemos que não é
+  // gestor, para não disparar a chamada admin/prestador/funcionario-only
+  // (que o backend agora rejeita com 403) antes de checarmos o papel.
+  const isGestor = user?.role === 'gestor';
+  const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary({
+    query: { enabled: !!user && !isGestor, queryKey: ['getDashboardSummary'] },
+  });
+  const { data: activity, isLoading: isLoadingActivity } = useGetRecentActivity({
+    query: { enabled: !!user && !isGestor, queryKey: ['getRecentActivity'] },
+  });
+
+  if (!user) return <div>Carregando dashboard...</div>;
+
+  if (isGestor) {
+    return <div>Acesso negado. Consulte suas diárias em "Diárias" ou "Diárias da Equipe".</div>;
+  }
 
   if (isLoadingSummary || isLoadingActivity) return <div>Carregando dashboard...</div>;
 
