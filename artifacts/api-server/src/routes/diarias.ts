@@ -13,6 +13,7 @@ import { logAudit } from "../lib/audit";
 import { randomUUID } from "crypto";
 import { pushDiariasToPeople } from "../lib/peopleClient";
 import { getGestorTeamIds } from "../lib/gestorTeams";
+import { buildDiariaFilters, type AnaliseFilterQuery } from "../lib/diariaFilters";
 
 const router = Router();
 
@@ -24,97 +25,6 @@ function canSeeValue(role: string) {
 // Statuses considered "locked" — financial fields and status may not change
 // once a diária reaches one of these (Bloqueio Pós-Exportação).
 const LOCKED_STATUSES = ["exportada", "paga"];
-
-interface AnaliseFilterQuery {
-  name?: string;
-  providerId?: string;
-  teamId?: string;
-  managerId?: string;
-  startDate?: string;
-  endDate?: string;
-  minValue?: string;
-  maxValue?: string;
-  value?: string;
-  status?: string;
-}
-
-/**
- * Builds the shared WHERE clause + params for the diárias list/summary/ids
- * endpoints. Applies role-based scoping first, then the optional filters
- * used by both the calendar screens and the new Análise de Diárias screen.
- *
- * gestorTeamIds must be pre-fetched by the caller when me.role === "gestor".
- * It replaces the old me.teamId single-team check, enabling a gestor to
- * manage multiple teams.
- */
-function buildDiariaFilters(
-  me: { id: number; role: string; teamId: number | null; decargoId: string },
-  query: AnaliseFilterQuery,
-  opts: { includeStatus?: boolean; gestorTeamIds?: number[] } = {},
-) {
-  const { includeStatus = true } = opts;
-  const conditions: string[] = ["1=1"];
-  const params: unknown[] = [];
-  let p = 1;
-
-  if (me.role === "gestor") {
-    const teamIds = opts.gestorTeamIds ?? [];
-    if (teamIds.length === 0) {
-      // Gestor has no teams assigned yet → must see nothing (safer than unconstrained).
-      conditions.push("1=0");
-    } else {
-      conditions.push(`d.team_id = ANY(${p++}::int[])`);
-      params.push(teamIds);
-    }
-  } else if (me.role !== "admin") {
-    conditions.push(`p.decargo_id = $${p++}`);
-    params.push(me.decargoId);
-  }
-
-  if (includeStatus && query.status) {
-    conditions.push(`d.status = $${p++}`);
-    params.push(query.status);
-  }
-  if (query.providerId) {
-    conditions.push(`d.provider_id = $${p++}`);
-    params.push(Number(query.providerId));
-  }
-  if (query.teamId && me.role === "admin") {
-    conditions.push(`d.team_id = $${p++}`);
-    params.push(Number(query.teamId));
-  }
-  if (query.managerId) {
-    conditions.push(`d.manager_id = $${p++}`);
-    params.push(Number(query.managerId));
-  }
-  if (query.startDate) {
-    conditions.push(`d.work_date >= $${p++}`);
-    params.push(query.startDate);
-  }
-  if (query.endDate) {
-    conditions.push(`d.work_date <= $${p++}`);
-    params.push(query.endDate);
-  }
-  if (query.name) {
-    conditions.push(`p.name ILIKE $${p++}`);
-    params.push(`%${query.name}%`);
-  }
-  if (query.value) {
-    conditions.push(`d.value = $${p++}`);
-    params.push(Number(query.value));
-  } else {
-    if (query.minValue) {
-      conditions.push(`d.value >= $${p++}`);
-      params.push(Number(query.minValue));
-    }
-    if (query.maxValue) {
-      conditions.push(`d.value <= $${p++}`);
-      params.push(Number(query.maxValue));
-    }
-  }
-
-  return { where: conditions.join(" AND "), params };
-}
 
 async function getDiariaById(id: number, userId: number, role: string, gestorTeamIds: number[], decargoId: string) {
   const result = await pool.query<Record<string, unknown>>(
