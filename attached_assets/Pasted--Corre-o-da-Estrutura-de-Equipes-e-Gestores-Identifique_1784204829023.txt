@@ -1,0 +1,59 @@
+### Correção da Estrutura de Equipes e Gestores
+
+Identifiquei uma redundância na configuração das equipes e gestores do sistema.
+
+Atualmente, a informação sobre a equipe do gestor é cadastrada em dois locais distintos:
+
+1. Na seção **Usuários**, por meio do campo **Equipe**.
+2. Na seção **Equipes**, por meio do campo **Líder/Gestor da Equipe**.
+
+Dessa forma, a mesma informação está sendo mantida em locais diferentes, o que pode gerar inconsistências e dificuldades de manutenção.
+
+### Alteração Solicitada
+
+Remover o campo **Equipe** da seção **Usuários** e utilizar exclusivamente as configurações da seção **Equipes** para identificar os gestores responsáveis.
+
+A seção **Equipes** deverá se tornar a única fonte de informação para definição dos gestores e dos membros de cada equipe.
+
+### Nova Regra de Relacionamento
+
+* Um gestor poderá ser responsável por uma ou mais equipes.
+* Cada equipe deverá possuir apenas um gestor responsável.
+* O relacionamento entre gestores e equipes deverá ser controlado exclusivamente pela seção **Equipes**.
+* Não deverá existir qualquer vínculo de equipe diretamente no cadastro de usuários.
+
+### Formação da Lista de Membros
+
+Ao montar a lista de membros de uma equipe, o sistema deverá:
+
+1. Identificar o gestor configurado na equipe.
+2. Identificar todos os membros vinculados àquela equipe.
+3. Utilizar essas informações para controlar permissões, visualizações e lançamentos de diárias.
+
+### Correção da Tela "Nova Diária"
+
+Com base nessa nova estrutura, a funcionalidade **Nova Diária** deverá ser ajustada.
+
+Quando um gestor acessar a tela de lançamento:
+
+* O sistema deverá identificar automaticamente as equipes sob sua responsabilidade por meio das configurações da seção **Equipes**.
+* O campo **Nome** deverá exibir apenas os membros das equipes gerenciadas por esse gestor.
+* Caso o gestor seja responsável por mais de uma equipe, a lista deverá consolidar os membros de todas as equipes sob sua gestão.
+* Não deverão ser exibidos membros de equipes pertencentes a outros gestores.
+* O gestor também poderá visualizar e lançar suas próprias diárias, caso essa regra esteja habilitada no sistema.
+
+### Validações Necessárias
+
+* Verificar todos os pontos do sistema que utilizam o campo **Equipe** da seção Usuários.
+* Atualizar permissões, filtros e consultas para utilizar exclusivamente a estrutura da seção **Equipes**.
+* Garantir que a remoção do campo não gere impactos nas funcionalidades já existentes.
+* Realizar testes completos de permissões para gestores responsáveis por uma ou múltiplas equipes.
+
+### Resultado Esperado
+
+* Eliminação de configurações duplicadas.
+* Redução de inconsistências entre usuários e equipes.
+* Centralização da gestão das equipes em um único local.
+* Suporte nativo para gestores responsáveis por múltiplas equipes.
+* Correção da lista exibida na tela **Nova Diária**.
+* Maior simplicidade na manutenção e evolução do sistema.
