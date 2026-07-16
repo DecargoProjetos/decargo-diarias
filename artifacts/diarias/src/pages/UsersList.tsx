@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useGetMe, useListUsers, useCreateUser, useUpdateUser, useDeleteUser, useSyncUsers, useListTeams } from '@workspace/api-client-react';
+import { useGetMe, useListUsers, useCreateUser, useUpdateUser, useDeleteUser, useSyncUsers } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +22,6 @@ const normalize = (value: string): string =>
 export default function UsersList() {
   const { data: currentUser } = useGetMe();
   const { data: users, isLoading, refetch } = useListUsers({ query: { enabled: currentUser?.role === 'admin' } });
-  const { data: teams } = useListTeams({ query: { enabled: currentUser?.role === 'admin', queryKey: ['listTeams'] } });
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
@@ -59,16 +58,6 @@ export default function UsersList() {
         toast({ title: 'Papel atualizado.' });
         refetch();
       }
-    });
-  };
-
-  const handleTeamChange = (id: number, newTeamId: string) => {
-    updateUser.mutate({ id, data: { teamId: newTeamId ? Number(newTeamId) : null } }, {
-      onSuccess: () => {
-        toast({ title: 'Equipe atualizada.' });
-        refetch();
-      },
-      onError: (err: any) => toast({ title: 'Erro ao atualizar equipe', description: err?.message, variant: 'destructive' }),
     });
   };
 
@@ -255,7 +244,6 @@ export default function UsersList() {
               <TableRow>
                 <TableHead>Usuário</TableHead>
                 <TableHead>Papel</TableHead>
-                <TableHead>Equipe</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Acesso Desde</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -308,22 +296,6 @@ export default function UsersList() {
                       <option value="prestador">Prestador</option>
                       <option value="funcionario">Funcionário</option>
                     </select>
-                  </TableCell>
-                  <TableCell>
-                    {user.role === 'gestor' ? (
-                      // Gestores are scoped via teams.manager_id, not users.team_id.
-                      // Their team assignment lives in the Equipes screen.
-                      <span className="text-xs text-muted-foreground italic">Via Equipes</span>
-                    ) : (
-                      <select
-                        className="h-8 rounded border border-input bg-background px-2 text-sm shadow-sm"
-                        value={user.teamId?.toString() ?? ''}
-                        onChange={e => handleTeamChange(user.id, e.target.value)}
-                      >
-                        <option value="">Sem equipe</option>
-                        {(teams ?? []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                    )}
                   </TableCell>
                   <TableCell>
                     <button 
