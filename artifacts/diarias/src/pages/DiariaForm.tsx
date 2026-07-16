@@ -152,7 +152,7 @@ export default function DiariaForm() {
                 <label className="text-sm font-medium leading-none">Equipe *</label>
                 <select 
                   required
-                  disabled={isEditing || user?.role === 'gestor'}
+                  disabled={isEditing}
                   value={formData.teamId}
                   onChange={(e) => setFormData({...formData, teamId: e.target.value})}
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"

@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { db, providersTable, teamsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { fetchPrestadores } from "../lib/peopleClient";
+import { getGestorTeamIds } from "../lib/gestorTeams";
 
 const router = Router();
 
@@ -37,11 +38,20 @@ router.get("/", requireAuth, async (req, res) => {
     .leftJoin(teamsTable, eq(providersTable.teamId, teamsTable.id))
     .$dynamic();
 
-  // Gestores only see their own team's providers
-  const effectiveTeamId = me.role === "gestor" ? (me.teamId ?? -1) : teamId;
-
+  // Gestores only see providers from their managed teams (teams.manager_id = me.id).
+  // Using an array of teamIds supports gestores responsible for multiple teams.
   const conditions = [];
-  if (effectiveTeamId !== undefined) conditions.push(eq(providersTable.teamId, effectiveTeamId));
+  if (me.role === "gestor") {
+    const teamIds = await getGestorTeamIds(me.id);
+    if (teamIds.length === 0) {
+      // No teams assigned → return nothing (safer than unconstrained listing).
+      res.json([]);
+      return;
+    }
+    conditions.push(inArray(providersTable.teamId, teamIds));
+  } else if (teamId !== undefined) {
+    conditions.push(eq(providersTable.teamId, teamId));
+  }
   if (activeOnly) conditions.push(eq(providersTable.active, true));
   if (conditions.length > 0) query = query.where(and(...conditions));
 
@@ -230,13 +240,13 @@ router.get("/:id", requireAuth, async (req, res) => {
     return;
   }
 
-  // Gestores can only see their team's providers
-  if (
-    me.role === "gestor" &&
-    provider.teamId !== me.teamId
-  ) {
-    res.status(403).json({ error: "Acesso não autorizado" });
-    return;
+  // Gestores can only see providers from their managed teams.
+  if (me.role === "gestor") {
+    const teamIds = await getGestorTeamIds(me.id);
+    if (!teamIds.includes(provider.teamId!)) {
+      res.status(403).json({ error: "Acesso não autorizado" });
+      return;
+    }
   }
 
   res.json(provider);

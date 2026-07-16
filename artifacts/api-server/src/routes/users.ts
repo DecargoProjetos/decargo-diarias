@@ -321,7 +321,14 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (role !== undefined) updates.role = role;
-  if (teamId !== undefined) updates.teamId = teamId;
+  // Gestores are no longer scoped via users.teamId — their teams come from
+  // teams.manager_id. Writing teamId for a gestor would be misleading, so we
+  // ignore it. For prestador/funcionário the field still controls team membership.
+  const effectiveRole = (role ?? (await (async () => {
+    const [u] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, id)).limit(1);
+    return u?.role;
+  })()));
+  if (teamId !== undefined && effectiveRole !== "gestor") updates.teamId = teamId;
   if (active !== undefined) updates.active = active;
   if (name !== undefined) updates.name = name;
   if (email !== undefined) updates.email = email;

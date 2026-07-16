@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db, teamsTable, usersTable, providersTable } from "@workspace/db";
-import { eq, count } from "drizzle-orm";
+import { eq, count, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
+import { getGestorTeamIds } from "../lib/gestorTeams";
 
 const router = Router();
 
@@ -50,7 +51,14 @@ router.get("/", requireAuth, async (req, res) => {
     .$dynamic();
 
   if (me.role === "gestor") {
-    query = query.where(eq(teamsTable.id, me.teamId ?? -1));
+    // Derive visible teams from teams.manager_id, not users.team_id.
+    // This supports a gestor managing multiple teams.
+    const teamIds = await getGestorTeamIds(me.id);
+    if (teamIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    query = query.where(inArray(teamsTable.id, teamIds));
   }
 
   const teams = await query.orderBy(teamsTable.name);

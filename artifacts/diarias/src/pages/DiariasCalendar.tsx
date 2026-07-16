@@ -412,7 +412,9 @@ function DayAgenda({
         return createMutation.mutateAsync({
           data: {
             providerId: provider.id,
-            teamId: provider.teamId ?? user.teamId!,
+            // provider.teamId is always set here — the guard above
+            // (`!provider.teamId`) already returned early if null.
+            teamId: provider.teamId!,
             workDate: dateKey,
             startTime: row.startTime || null,
             endTime: row.endTime || null,

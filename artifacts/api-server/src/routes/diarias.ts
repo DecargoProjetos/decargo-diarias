@@ -12,6 +12,7 @@ import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { randomUUID } from "crypto";
 import { pushDiariasToPeople } from "../lib/peopleClient";
+import { getGestorTeamIds } from "../lib/gestorTeams";
 
 const router = Router();
 
@@ -41,11 +42,15 @@ interface AnaliseFilterQuery {
  * Builds the shared WHERE clause + params for the diárias list/summary/ids
  * endpoints. Applies role-based scoping first, then the optional filters
  * used by both the calendar screens and the new Análise de Diárias screen.
+ *
+ * gestorTeamIds must be pre-fetched by the caller when me.role === "gestor".
+ * It replaces the old me.teamId single-team check, enabling a gestor to
+ * manage multiple teams.
  */
 function buildDiariaFilters(
   me: { id: number; role: string; teamId: number | null; decargoId: string },
   query: AnaliseFilterQuery,
-  opts: { includeStatus?: boolean } = {},
+  opts: { includeStatus?: boolean; gestorTeamIds?: number[] } = {},
 ) {
   const { includeStatus = true } = opts;
   const conditions: string[] = ["1=1"];
@@ -53,8 +58,14 @@ function buildDiariaFilters(
   let p = 1;
 
   if (me.role === "gestor") {
-    conditions.push(`d.team_id = $${p++}`);
-    params.push(me.teamId);
+    const teamIds = opts.gestorTeamIds ?? [];
+    if (teamIds.length === 0) {
+      // Gestor has no teams assigned yet → must see nothing (safer than unconstrained).
+      conditions.push("1=0");
+    } else {
+      conditions.push(`d.team_id = ANY(${p++}::int[])`);
+      params.push(teamIds);
+    }
   } else if (me.role !== "admin") {
     conditions.push(`p.decargo_id = $${p++}`);
     params.push(me.decargoId);
@@ -105,7 +116,7 @@ function buildDiariaFilters(
   return { where: conditions.join(" AND "), params };
 }
 
-async function getDiariaById(id: number, userId: number, role: string, teamId: number | null, decargoId: string) {
+async function getDiariaById(id: number, userId: number, role: string, gestorTeamIds: number[], decargoId: string) {
   const result = await pool.query<Record<string, unknown>>(
     `SELECT
         d.id, d.provider_id AS "providerId", p.name AS "providerName",
@@ -145,7 +156,7 @@ async function getDiariaById(id: number, userId: number, role: string, teamId: n
     }
   }
 
-  if (role === "gestor" && teamId && Number(row.teamId) !== teamId) {
+  if (role === "gestor" && !gestorTeamIds.includes(Number(row.teamId))) {
     return null;
   }
 
@@ -167,7 +178,9 @@ router.get("/", requireAuth, async (req, res) => {
   const pageSz = Math.min(100, Math.max(1, Number(pageSize)));
   const offset = (pageNum - 1) * pageSz;
 
-  const { where, params } = buildDiariaFilters(me, query);
+  // Scope for gestor is derived from teams.manager_id, not users.team_id.
+  const gestorTeamIds = me.role === "gestor" ? await getGestorTeamIds(me.id) : [];
+  const { where, params } = buildDiariaFilters(me, query, { gestorTeamIds });
 
   const [countResult, rows] = await Promise.all([
     pool.query<{ total: string }>(
@@ -427,7 +440,7 @@ router.patch("/:id/payment-date", requireRole("admin"), async (req, res) => {
     newValues: { paymentDate },
   });
 
-  const result = await getDiariaById(id, me.id, me.role, me.teamId, me.decargoId);
+  const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
 
@@ -446,9 +459,10 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
       observations?: string;
     };
 
-  // Gestor can only create for their team
-  if (me.role === "gestor" && teamId !== me.teamId) {
-    res.status(403).json({ error: "Você só pode lançar diárias da sua equipe" });
+  // Gestor can only create for their managed teams (derived from teams.manager_id).
+  const gestorTeamIds = me.role === "gestor" ? await getGestorTeamIds(me.id) : [];
+  if (me.role === "gestor" && !gestorTeamIds.includes(teamId)) {
+    res.status(403).json({ error: "Você só pode lançar diárias das suas equipes" });
     return;
   }
 
@@ -493,7 +507,7 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
     newValues: { status: "pendente_aprovacao", value: effectiveValue, providerId, teamId, workDate },
   });
 
-  const result = await getDiariaById(diaria.id, me.id, me.role, me.teamId, me.decargoId);
+  const result = await getDiariaById(diaria.id, me.id, me.role, gestorTeamIds, me.decargoId);
   res.status(201).json(result);
 });
 
@@ -628,7 +642,8 @@ router.post("/export", requireRole("admin"), async (req, res) => {
 router.get("/:id", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   const me = req.currentUser!;
-  const result = await getDiariaById(Number(req.params.id), me.id, me.role, me.teamId, me.decargoId);
+  const gestorTeamIds = me.role === "gestor" ? await getGestorTeamIds(me.id) : [];
+  const result = await getDiariaById(Number(req.params.id), me.id, me.role, gestorTeamIds, me.decargoId);
   if (!result) {
     res.status(404).json({ error: "Diária não encontrada" });
     return;
@@ -690,7 +705,7 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
     newValues: updates,
   });
 
-  const result = await getDiariaById(id, me.id, me.role, me.teamId, me.decargoId);
+  const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
 
@@ -728,7 +743,7 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
     newValues: { status: "cancelada" },
   });
 
-  const result = await getDiariaById(id, me.id, me.role, me.teamId, me.decargoId);
+  const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
 
@@ -757,7 +772,7 @@ router.post("/:id/approve", requireRole("admin"), async (req, res) => {
   }).where(eq(diariasTable.id, id));
 
   await logAudit({ entityType: "diaria", entityId: id, action: "aprovado", userId: me.id, newValues: { status: "disponivel_exportacao" } });
-  const result = await getDiariaById(id, me.id, me.role, me.teamId, me.decargoId);
+  const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
 
@@ -789,7 +804,7 @@ router.post("/:id/reject", requireRole("admin"), async (req, res) => {
   }).where(eq(diariasTable.id, id));
 
   await logAudit({ entityType: "diaria", entityId: id, action: "rejeitado", userId: me.id, oldValues: { status: diaria.status }, newValues: { status: "rejeitada", note } });
-  const result = await getDiariaById(id, me.id, me.role, me.teamId, me.decargoId);
+  const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
 
@@ -810,7 +825,7 @@ router.post("/:id/request-correction", requireRole("admin"), async (req, res) =>
   }).where(eq(diariasTable.id, id));
 
   await logAudit({ entityType: "diaria", entityId: id, action: "solicitacao_correcao", userId: me.id, newValues: { status: "solicitacao_correcao", note } });
-  const result = await getDiariaById(id, me.id, me.role, me.teamId, me.decargoId);
+  const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
 
@@ -831,7 +846,7 @@ router.post("/:id/mark-paid", requireRole("admin"), async (req, res) => {
   await db.update(diariasTable).set({ status: "paga", paidAt: now, updatedAt: now }).where(eq(diariasTable.id, id));
 
   await logAudit({ entityType: "diaria", entityId: id, action: "pago", userId: me.id, newValues: { status: "paga" } });
-  const result = await getDiariaById(id, me.id, me.role, me.teamId, me.decargoId);
+  const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
 

@@ -310,14 +310,20 @@ export default function UsersList() {
                     </select>
                   </TableCell>
                   <TableCell>
-                    <select
-                      className="h-8 rounded border border-input bg-background px-2 text-sm shadow-sm"
-                      value={user.teamId?.toString() ?? ''}
-                      onChange={e => handleTeamChange(user.id, e.target.value)}
-                    >
-                      <option value="">Sem equipe</option>
-                      {(teams ?? []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
+                    {user.role === 'gestor' ? (
+                      // Gestores are scoped via teams.manager_id, not users.team_id.
+                      // Their team assignment lives in the Equipes screen.
+                      <span className="text-xs text-muted-foreground italic">Via Equipes</span>
+                    ) : (
+                      <select
+                        className="h-8 rounded border border-input bg-background px-2 text-sm shadow-sm"
+                        value={user.teamId?.toString() ?? ''}
+                        onChange={e => handleTeamChange(user.id, e.target.value)}
+                      >
+                        <option value="">Sem equipe</option>
+                        {(teams ?? []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    )}
                   </TableCell>
                   <TableCell>
                     <button 
