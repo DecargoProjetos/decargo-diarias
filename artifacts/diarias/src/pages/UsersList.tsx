@@ -21,7 +21,7 @@ const normalize = (value: string): string =>
 
 export default function UsersList() {
   const { data: currentUser } = useGetMe();
-  const { data: users, isLoading, refetch } = useListUsers({ query: { enabled: currentUser?.role === 'admin' } });
+  const { data: users, isLoading, refetch } = useListUsers({ query: { enabled: currentUser?.role === 'admin', queryKey: ['listUsers'] } });
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();

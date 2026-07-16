@@ -77,7 +77,7 @@ export default function PeopleList() {
   const { data: currentUser } = useGetMe();
   const isAdmin = currentUser?.role === 'admin';
 
-  const { data: users, isLoading: usersLoading, refetch: refetchUsers } = useListUsers({ query: { enabled: isAdmin } });
+  const { data: users, isLoading: usersLoading, refetch: refetchUsers } = useListUsers({ query: { enabled: isAdmin, queryKey: ['listUsers'] } });
   const { data: providers, isLoading: providersLoading, refetch: refetchProviders } = useListProviders();
   const { data: teams } = useListTeams();
 
