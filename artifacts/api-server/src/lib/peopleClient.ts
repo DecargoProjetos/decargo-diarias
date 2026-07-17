@@ -207,8 +207,8 @@ export interface DiariaExportResult {
 const INTEGRATION_BATCH_SIZE = 500;
 
 function integrationApiKey(): string {
-  const key = process.env.PEOPLE_INTEGRATION_KEY;
-  if (!key) throw new Error("PEOPLE_INTEGRATION_KEY not set");
+  const key = process.env.DECARGO_PEOPLE_API_KEY;
+  if (!key) throw new Error("DECARGO_PEOPLE_API_KEY not set");
   return key;
 }
 
