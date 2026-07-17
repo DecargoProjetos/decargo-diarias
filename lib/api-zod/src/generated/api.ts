@@ -827,7 +827,8 @@ export const MarkDiariaPaidResponse = zod.object({
  * @summary Export approved daily rates to DECARGO People (admin only)
  */
 export const ExportDiariasBody = zod.object({
-  "diariaIds": zod.array(zod.number())
+  "diariaIds": zod.array(zod.number()),
+  "paymentDate": zod.string().optional()
 })
 
 export const ExportDiariasResponse = zod.object({

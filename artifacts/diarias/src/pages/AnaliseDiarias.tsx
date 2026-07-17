@@ -66,6 +66,7 @@ export default function AnaliseDiarias() {
   const [paymentDateTarget, setPaymentDateTarget] = useState<{ id: number; current: string | null } | null>(null);
   const [paymentDateValue, setPaymentDateValue] = useState('');
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
+  const [exportFallbackDate, setExportFallbackDate] = useState('');
   const [lastResult, setLastResult] = useState<{ title: string; description: string } | null>(null);
 
   const queryFilters = useMemo(() => ({
@@ -214,9 +215,15 @@ export default function AnaliseDiarias() {
   function handleExport() {
     const ids = [...selected];
     if (!ids.length) return;
-    exportMutation.mutate({ data: { diariaIds: ids } }, {
+    exportMutation.mutate({
+      data: {
+        diariaIds: ids,
+        ...(exportFallbackDate ? { paymentDate: exportFallbackDate } : {}),
+      },
+    }, {
       onSuccess: (res) => {
         setExportConfirmOpen(false);
+        setExportFallbackDate('');
         const skippedCount = res.skipped?.length ?? 0;
         setLastResult({
           title: 'Exportação para o DECARGO People concluída',
@@ -502,18 +509,42 @@ export default function AnaliseDiarias() {
       </Dialog>
 
       {/* Export confirmation dialog */}
-      <Dialog open={exportConfirmOpen} onOpenChange={setExportConfirmOpen}>
+      <Dialog open={exportConfirmOpen} onOpenChange={(open) => { setExportConfirmOpen(open); if (!open) setExportFallbackDate(''); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><FileDown size={18} /> Exportar para o DECARGO People</DialogTitle>
             <DialogDescription>
-              {selected.size} diária(s) selecionada(s) serão enviadas ao DECARGO People. Diárias sem status "Aprovada"
-              ou sem data de pagamento preenchida serão rejeitadas na exportação.
+              {selected.size} diária(s) selecionada(s) serão enviadas ao DECARGO People.
+              Somente diárias com status "P/ Exportar" serão aceitas.
             </DialogDescription>
           </DialogHeader>
+          {(() => {
+            const missingDate = rows.filter(r => selected.has(r.id) && !r.paymentDate);
+            if (missingDate.length === 0) return null;
+            return (
+              <div className="space-y-2">
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                  <strong>{missingDate.length}</strong> das diárias selecionadas não têm data de pagamento.
+                  Informe uma data para aplicar a todas elas:
+                </p>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Data de pagamento</label>
+                  <Input
+                    type="date"
+                    value={exportFallbackDate}
+                    onChange={(e) => setExportFallbackDate(e.target.value)}
+                    className="h-9 w-48"
+                  />
+                </div>
+              </div>
+            );
+          })()}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setExportConfirmOpen(false)}>Cancelar</Button>
-            <Button disabled={exportMutation.isPending} onClick={handleExport}>
+            <Button variant="outline" onClick={() => { setExportConfirmOpen(false); setExportFallbackDate(''); }}>Cancelar</Button>
+            <Button
+              disabled={exportMutation.isPending || (rows.some(r => selected.has(r.id) && !r.paymentDate) && !exportFallbackDate)}
+              onClick={handleExport}
+            >
               {exportMutation.isPending ? <Loader2 className="animate-spin mr-2" size={16} /> : null}
               Confirmar exportação
             </Button>

@@ -8,4 +8,7 @@
 
 export interface ExportInput {
   diariaIds: number[];
+  /** ISO date string (YYYY-MM-DD) applied as fallback payment date for any
+   *  selected diárias that don't have one set yet. */
+  paymentDate?: string;
 }

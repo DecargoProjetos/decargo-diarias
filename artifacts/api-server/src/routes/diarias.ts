@@ -424,7 +424,7 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
 // POST /api/diarias/export (must come before /:id)
 router.post("/export", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;
-  const { diariaIds } = req.body as { diariaIds: number[] };
+  const { diariaIds, paymentDate: fallbackPaymentDate } = req.body as { diariaIds: number[]; paymentDate?: string };
 
   if (!diariaIds?.length) {
     res.status(400).json({ error: "Nenhuma diária selecionada" });
@@ -446,7 +446,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
 
   // Validate every requested record before touching anything (all-or-nothing):
   // must exist, be approved (disponivel_exportacao), not yet exported, and
-  // have a payment date filled in.
+  // have a payment date (either already set or supplied as fallback in this request).
   const validationErrors: { id: number; reason: string }[] = [];
   for (const id of diariaIds) {
     const row = byId.get(id);
@@ -455,7 +455,8 @@ router.post("/export", requireRole("admin"), async (req, res) => {
       validationErrors.push({ id, reason: "Diária não está aprovada/disponível para exportação" });
       continue;
     }
-    if (!row.paymentDate) {
+    const effectivePaymentDate = row.paymentDate ?? fallbackPaymentDate ?? null;
+    if (!effectivePaymentDate) {
       validationErrors.push({ id, reason: "Data de pagamento não preenchida" });
       continue;
     }
@@ -483,7 +484,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
           id_prestador: Number(row.providerDecargoId),
           dia_trabalhado: row.workDate,
           valor_diaria: Number(row.value),
-          data_pagamento: row.paymentDate!,
+          data_pagamento: (row.paymentDate ?? fallbackPaymentDate)!,
           anotacoes_gerais: row.observations ?? undefined,
           __localId: id,
         };
@@ -507,6 +508,18 @@ router.post("/export", requireRole("admin"), async (req, res) => {
   const now = new Date();
 
   if (succeededIds.length > 0) {
+    // For rows that used the fallback payment date (had no date of their own),
+    // include paymentDate in the update so it's persisted alongside the export.
+    const succeededNeedingDate = fallbackPaymentDate
+      ? succeededIds.filter((id) => !byId.get(id)!.paymentDate)
+      : [];
+    if (succeededNeedingDate.length > 0) {
+      await db
+        .update(diariasTable)
+        .set({ paymentDate: fallbackPaymentDate, updatedAt: now })
+        .where(inArray(diariasTable.id, succeededNeedingDate));
+    }
+
     await db
       .update(diariasTable)
       .set({
