@@ -9,6 +9,7 @@ import {
   useBulkRejectDiarias,
   useApproveDiaria,
   useRejectDiaria,
+  useRevertDiaria,
   useSetDiariaPaymentDate,
   useExportDiarias,
 } from '@workspace/api-client-react';
@@ -24,7 +25,7 @@ import { formatCurrency, formatDate, statusColors, statusLabels } from '@/lib/ut
 import { useToast } from '@/hooks/use-toast';
 import {
   CheckCircle2, XCircle, Filter, CalendarClock, FileDown, Loader2,
-  Clock, ThumbsUp, ThumbsDown, PackageCheck, X,
+  Clock, ThumbsUp, ThumbsDown, PackageCheck, X, RotateCcw,
 } from 'lucide-react';
 import { Link } from 'wouter';
 
@@ -85,6 +86,7 @@ export default function AnaliseDiarias() {
 
   const approve = useApproveDiaria();
   const reject = useRejectDiaria();
+  const revert = useRevertDiaria();
   const bulkApprove = useBulkApproveDiarias();
   const bulkReject = useBulkRejectDiarias();
   const setPaymentDate = useSetDiariaPaymentDate();
@@ -244,7 +246,15 @@ export default function AnaliseDiarias() {
     });
   }
 
-  const isBusy = approve.isPending || reject.isPending || bulkApprove.isPending || bulkReject.isPending || exportMutation.isPending;
+  function handleRevert(id: number) {
+    if (!confirm('Reverter esta diária para "Pendente de aprovação"?')) return;
+    revert.mutate({ id }, {
+      onSuccess: () => { toast({ title: 'Diária revertida para pendente.' }); refreshAll(); },
+      onError: (err: any) => toast({ title: 'Erro ao reverter', description: err?.message, variant: 'destructive' }),
+    });
+  }
+
+  const isBusy = approve.isPending || reject.isPending || revert.isPending || bulkApprove.isPending || bulkReject.isPending || exportMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -444,16 +454,21 @@ export default function AnaliseDiarias() {
                         <TableCell className="text-xs text-muted-foreground">{d.approvedByName ?? '---'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{d.exportedByName ?? '---'}</TableCell>
                         <TableCell className="text-right">
-                          {canApproveReject && (
-                            <div className="flex gap-1 justify-end">
+                          <div className="flex gap-1 justify-end">
+                            {canApproveReject && (<>
                               <Button size="sm" variant="outline" className="h-8 px-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50" disabled={isBusy} onClick={() => handleApprove([d.id])}>
                                 <CheckCircle2 size={14} />
                               </Button>
                               <Button size="sm" variant="outline" className="h-8 px-2 text-red-700 border-red-200 hover:bg-red-50" disabled={isBusy} onClick={() => openReject([d.id])}>
                                 <XCircle size={14} />
                               </Button>
-                            </div>
-                          )}
+                            </>)}
+                            {!isLocked && !canApproveReject && (
+                              <Button size="sm" variant="outline" className="h-8 px-2 text-muted-foreground hover:bg-muted" disabled={isBusy} onClick={() => handleRevert(d.id)} title="Reverter para pendente">
+                                <RotateCcw size={14} />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

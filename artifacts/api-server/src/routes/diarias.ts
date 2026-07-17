@@ -670,6 +670,38 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
   res.json(result);
 });
 
+// POST /api/diarias/:id/revert (admin) — returns a non-locked diária to pendente_aprovacao
+router.post("/:id/revert", requireRole("admin"), async (req, res) => {
+  const me = req.currentUser!;
+  const id = Number(req.params.id);
+
+  const [diaria] = await db.select().from(diariasTable).where(eq(diariasTable.id, id)).limit(1);
+  if (!diaria) { res.status(404).json({ error: "Diária não encontrada" }); return; }
+
+  const revertable = ["disponivel_exportacao", "rejeitada", "aprovada", "em_analise"];
+  if (!revertable.includes(diaria.status)) {
+    res.status(400).json({ error: "Diária não pode ser revertida no status atual" });
+    return;
+  }
+
+  const now = new Date();
+  await db.update(diariasTable).set({
+    status: "pendente_aprovacao",
+    actionNote: null,
+    approvedAt: null,
+    approvedBy: null,
+    updatedAt: now,
+  }).where(eq(diariasTable.id, id));
+
+  await logAudit({
+    entityType: "diaria", entityId: id, action: "revertido", userId: me.id,
+    oldValues: { status: diaria.status },
+    newValues: { status: "pendente_aprovacao" },
+  });
+  const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
+  res.json(result);
+});
+
 // POST /api/diarias/:id/approve (admin)
 router.post("/:id/approve", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;

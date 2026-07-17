@@ -2395,6 +2395,56 @@ export const useRejectDiaria = <TError = ErrorType<unknown>,
       return useMutation(getRejectDiariaMutationOptions(options));
     }
 
+export const getRevertDiariaUrl = (id: number,) => {
+  return `/api/diarias/${id}/revert`
+}
+
+/**
+ * @summary Revert a daily rate to pending review (admin only)
+ */
+export const revertDiaria = async (id: number, options?: RequestInit): Promise<Diaria> => {
+  return customFetch<Diaria>(getRevertDiariaUrl(id), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+  });
+}
+
+export const getRevertDiariaMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revertDiaria>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revertDiaria>>, TError,{id: number}, TContext> => {
+const mutationKey = ['revertDiaria'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revertDiaria>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+          return revertDiaria(id, requestOptions)
+        }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+    export type RevertDiariaMutationResult = NonNullable<Awaited<ReturnType<typeof revertDiaria>>>
+    export type RevertDiariaMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Revert a daily rate to pending review (admin only)
+ */
+export const useRevertDiaria = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revertDiaria>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revertDiaria>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRevertDiariaMutationOptions(options));
+    }
+
 export const getRequestCorrectionDiariaUrl = (id: number,) => {
 
 
