@@ -27,7 +27,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
     res.status(400).json({ error: "Descrição é obrigatória" });
     return;
   }
-  const validTargets = ["diaria_extra", "falta"];
+  const validTargets = ["diaria_extra", "falta", "none"];
   if (!exportTarget || !validTargets.includes(exportTarget)) {
     res.status(400).json({ error: "Destino de exportação inválido" });
     return;
@@ -47,7 +47,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
     .insert(diariaTypesTable)
     .values({
       description: description.trim(),
-      exportTarget: exportTarget as "diaria_extra" | "falta",
+      exportTarget: exportTarget as "diaria_extra" | "falta" | "none",
       active: true,
     })
     .returning();
@@ -94,13 +94,13 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
     updates.description = description.trim();
   }
 
-  const validTargets = ["diaria_extra", "falta"];
+  const validTargets = ["diaria_extra", "falta", "none"];
   if (exportTarget !== undefined) {
     if (!validTargets.includes(exportTarget)) {
       res.status(400).json({ error: "Destino de exportação inválido" });
       return;
     }
-    updates.exportTarget = exportTarget as "diaria_extra" | "falta";
+    updates.exportTarget = exportTarget as "diaria_extra" | "falta" | "none";
   }
 
   if (active !== undefined) updates.active = active;

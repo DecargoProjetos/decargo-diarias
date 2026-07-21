@@ -26,9 +26,10 @@ import { useQuery } from '@tanstack/react-query';
 // ---------------------------------------------------------------------------
 type DiariaType = { id: number; description: string; exportTarget: string; active: boolean };
 
+import { getToken } from '@/lib/auth';
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 function apiFetch(path: string) {
-  const token = localStorage.getItem('access_token');
+  const token = getToken();
   return fetch(`${BASE_URL}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   }).then(r => r.json());

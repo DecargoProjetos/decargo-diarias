@@ -15,11 +15,12 @@ import { Plus, Pencil, ToggleLeft, ToggleRight, Settings2 } from 'lucide-react';
 
 // --- inline hooks (hand-written — api-client-react will be rebuilt) ---
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getToken } from '@/lib/auth';
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
 function apiFetch(path: string, init?: RequestInit) {
-  const token = localStorage.getItem('access_token');
+  const token = getToken();
   return fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
@@ -36,15 +37,16 @@ function apiFetch(path: string, init?: RequestInit) {
 export type DiariaType = {
   id: number;
   description: string;
-  exportTarget: 'diaria_extra' | 'falta';
+  exportTarget: 'diaria_extra' | 'falta' | 'none';
   active: boolean;
   createdAt: string;
   updatedAt: string;
 };
 
 const EXPORT_LABELS: Record<string, string> = {
-  diaria_extra: 'Diária Extra',
-  falta: 'Falta',
+  diaria_extra: 'Diária Extra — envia para Diárias Extras',
+  falta: 'Falta — envia para Descontos',
+  none: 'Não importar',
 };
 
 function useListDiariaTypesLocal() {
@@ -70,7 +72,7 @@ function useUpdateDiariaTypeLocal() {
   });
 }
 
-type FormState = { description: string; exportTarget: 'diaria_extra' | 'falta' };
+type FormState = { description: string; exportTarget: 'diaria_extra' | 'falta' | 'none' };
 const emptyForm: FormState = { description: '', exportTarget: 'diaria_extra' };
 
 export default function Configuracoes() {
@@ -167,7 +169,7 @@ export default function Configuracoes() {
                   <TableRow key={t.id} className={!t.active ? 'opacity-50' : undefined}>
                     <TableCell className="font-medium">{t.description}</TableCell>
                     <TableCell>
-                      <Badge variant={t.exportTarget === 'falta' ? 'destructive' : 'secondary'}>
+                      <Badge variant={t.exportTarget === 'falta' ? 'destructive' : t.exportTarget === 'none' ? 'outline' : 'secondary'}>
                         {EXPORT_LABELS[t.exportTarget] ?? t.exportTarget}
                       </Badge>
                     </TableCell>
@@ -224,6 +226,7 @@ export default function Configuracoes() {
               >
                 <option value="diaria_extra">Diária Extra — envia para Diárias Extras</option>
                 <option value="falta">Falta — envia para Descontos</option>
+                <option value="none">Não importar</option>
               </select>
               <p className="text-xs text-muted-foreground">
                 Define para qual seção do DECARGO People este tipo será exportado.

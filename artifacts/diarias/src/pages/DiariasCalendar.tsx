@@ -47,10 +47,11 @@ const truncateTime = (value: string | null | undefined): string | null =>
   value ? value.slice(0, 5) : null;
 
 // Inline fetch para Tipos de Diária (evita dependência de geração orval)
+import { getToken } from '@/lib/auth';
 type DiariaType = { id: number; description: string; active: boolean };
 const _BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 function _apiFetch(path: string) {
-  const token = localStorage.getItem('access_token');
+  const token = getToken();
   return fetch(`${_BASE_URL}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   }).then(r => r.json() as Promise<DiariaType[]>);

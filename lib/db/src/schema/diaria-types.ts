@@ -18,6 +18,7 @@ import { z } from "zod/v4";
 export const diariaTypeExportTargetEnum = pgEnum("diaria_type_export_target", [
   "diaria_extra",
   "falta",
+  "none",
 ]);
 
 export const diariaTypesTable = pgTable("diaria_types", {
