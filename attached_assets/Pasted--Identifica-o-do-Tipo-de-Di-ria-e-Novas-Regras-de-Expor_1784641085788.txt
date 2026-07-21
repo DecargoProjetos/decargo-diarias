@@ -1,0 +1,155 @@
+### Identificação do Tipo de Diária e Novas Regras de Exportação
+
+Analisando a estrutura atual do projeto **Controle de Diárias**, identifiquei a necessidade de incluir um identificador para classificar os registros de diárias.
+
+Atualmente, não existe uma forma de diferenciar se o registro corresponde a:
+
+* Diária Comum;
+* Diária Extra;
+* Falta.
+
+Essa classificação será necessária para controlar corretamente os lançamentos e definir o destino da exportação para o DECARGO People.
+
+## 1. Nova Seção de Configurações
+
+Criar uma nova seção denominada **Configurações**, com acesso restrito exclusivamente aos usuários com perfil de **Administrador**.
+
+### Subtabela: Tipos de Diária
+
+Criar uma tabela de configuração para cadastro dos tipos de diária.
+
+Campos:
+
+* Descrição.
+* Status (Ativo/Inativo).
+
+Funcionalidades:
+
+* Inclusão.
+* Edição.
+* Inativação.
+* Reativação.
+
+Regras:
+
+* Apenas registros com status **Ativo** deverão ser exibidos nas listas de seleção.
+* A lista deverá ser exibida em ordem alfabética.
+* Registros inativos deverão permanecer armazenados para fins históricos.
+
+## 2. Correção da Integração com Prestadores do DECARGO People
+
+Antes da implementação da exportação, é necessário ajustar a integração com o DECARGO People.
+
+Atualmente, o DECARGO People identifica os prestadores pelo **CNPJ ativo**.
+
+Portanto:
+
+* O sistema deverá armazenar e manter o CNPJ do prestador importado do DECARGO People.
+* O CNPJ deverá ser utilizado como identificador principal durante os processos de exportação.
+* O nome continuará sendo utilizado apenas para exibição na interface.
+
+## 3. Inclusão do Campo "Tipo de Diária" em Nova Diária
+
+Na tela **Nova Diária**, incluir um novo campo obrigatório denominado **Tipo de Diária**.
+
+Características:
+
+* Campo do tipo lista suspensa (dropdown).
+* Alimentado pela tabela de Tipos de Diária.
+* Exibir apenas registros ativos.
+* Ordenação alfabética.
+* Campo obrigatório (identificado com asterisco "*").
+
+Funcionalidades adicionais:
+
+* Permitir pesquisa digitável dentro da lista.
+* A pesquisa deverá localizar qualquer parte da descrição.
+* O usuário deverá obrigatoriamente selecionar um item da lista.
+* Não será permitido digitar valores livres.
+
+## 4. Regras de Exportação
+
+O sistema deverá possuir regras distintas de exportação conforme o tipo de diária selecionado.
+
+### 4.1 Exportação de Diárias Extras
+
+Registros classificados como **Diária Extra** deverão ser exportados para:
+
+**DECARGO People > Folha Mensal > Diárias Extras**
+
+Mapeamento dos campos:
+
+| Controle de Diárias | DECARGO People  |
+| ------------------- | --------------- |
+| Nome                | Prestador       |
+| Data                | Data Trabalhada |
+| Valor               | Valor           |
+
+### 4.2 Exportação de Faltas
+
+Registros classificados como **Falta** deverão ser exportados para:
+
+**DECARGO People > Folha Mensal > Descontos**
+
+Mapeamento dos campos:
+
+| Controle de Diárias | DECARGO People       |
+| ------------------- | -------------------- |
+| Nome                | Vínculo              |
+| Tipo                | "Desconto de Diária" |
+| Valor               | Valor                |
+| Data de Desconto    | Data de Desconto     |
+
+O campo **Tipo** deverá ser enviado automaticamente com o valor fixo:
+
+"Desconto de Diária"
+
+## 5. Regra para Cálculo da Data de Desconto
+
+Durante a exportação de faltas, o sistema deverá calcular automaticamente o campo **Data de Desconto**.
+
+### Regra de Competência
+
+Se a data trabalhada for:
+
+* Menor ou igual ao dia 15:
+
+  * O desconto deverá ser lançado para pagamento no dia 15 do mês seguinte.
+
+* Maior que o dia 15:
+
+  * O desconto deverá ser lançado para pagamento no último dia do mês seguinte.
+
+### Tratamento Especial para Fevereiro
+
+Quando o vencimento ocorrer em fevereiro:
+
+* Utilizar automaticamente o último dia válido do mês.
+* Considerar anos bissextos.
+
+Exemplos:
+
+| Data Trabalhada | Data de Desconto |
+| --------------- | ---------------- |
+| 10/01/2026      | 15/02/2026       |
+| 20/01/2026      | 28/02/2026       |
+| 05/03/2026      | 15/04/2026       |
+| 18/03/2026      | 30/04/2026       |
+
+## 6. Validações Necessárias
+
+* Validar se o Tipo de Diária foi selecionado antes de salvar.
+* Impedir exportação sem classificação.
+* Garantir que apenas registros aprovados sejam exportados.
+* Garantir que o CNPJ do prestador esteja disponível para integração.
+* Impedir exportações duplicadas.
+* Registrar todas as exportações em log de auditoria.
+
+## Resultado Esperado
+
+* Classificação adequada das diárias.
+* Integração consistente com o DECARGO People.
+* Separação correta entre diárias extras e faltas.
+* Redução de erros operacionais.
+* Maior rastreabilidade e auditoria dos registros.
+* Flexibilidade para criação de novos tipos de diária no futuro sem necessidade de alterações no código.
