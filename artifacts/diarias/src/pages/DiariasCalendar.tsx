@@ -382,6 +382,8 @@ function DayAgenda({
   // Diária, uma vez salva, nunca é editável pelo gestor — correção é
   // exclusiva do admin (via fluxo de aprovação/solicitação de correção).
   const canEdit = (_d: Diaria) => user.role === 'admin';
+  // Cancelamento só faz sentido para diárias que ainda não estão em estado terminal.
+  const canDelete = (d: Diaria) => user.role === 'admin' && !['cancelada', 'exportada', 'paga'].includes(d.status);
 
   const resetGrid = () => setGridRows([makeEmptyGridRow()]);
 
@@ -618,7 +620,7 @@ function DayAgenda({
                     {statusLabels[d.status]}
                   </span>
                   <div className="flex items-center gap-1">
-                    {canEdit(d) && confirmDeleteId === d.id ? (
+                    {canDelete(d) && confirmDeleteId === d.id ? (
                       <>
                         <span className="text-xs text-destructive mr-1">Cancelar diária?</span>
                         <Button size="sm" variant="destructive" className="h-6 text-xs px-2" onClick={() => handleDelete(d.id)} disabled={deleteMutation.isPending}>
@@ -630,7 +632,7 @@ function DayAgenda({
                       </>
                     ) : (
                       <>
-                        {canEdit(d) && (
+                        {canDelete(d) && (
                           <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setConfirmDeleteId(d.id)}>
                             <Trash2 size={14} />
                           </Button>
