@@ -46,12 +46,22 @@ const toDateKey = (date: Date): string => format(date, 'yyyy-MM-dd');
 const truncateTime = (value: string | null | undefined): string | null =>
   value ? value.slice(0, 5) : null;
 
+// Inline fetch para Tipos de Diária (evita dependência de geração orval)
+type DiariaType = { id: number; description: string; active: boolean };
+const _BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+function _apiFetch(path: string) {
+  const token = localStorage.getItem('access_token');
+  return fetch(`${_BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  }).then(r => r.json() as Promise<DiariaType[]>);
+}
+
 // Linha da grade de lançamento em lote de "Nova Diária" (estilo planilha).
 // `key` é só um id de UI (não persiste), usado para identificar a linha
 // entre re-renders enquanto o registro ainda não foi salvo no backend.
-type GridRow = { key: string; providerId: string; startTime: string; endTime: string; observations: string };
+type GridRow = { key: string; providerId: string; typeId: string; startTime: string; endTime: string; observations: string };
 let gridRowSeq = 0;
-const makeEmptyGridRow = (): GridRow => ({ key: `grid-${++gridRowSeq}`, providerId: '', startTime: '', endTime: '', observations: '' });
+const makeEmptyGridRow = (): GridRow => ({ key: `grid-${++gridRowSeq}`, providerId: '', typeId: '', startTime: '', endTime: '', observations: '' });
 
 export default function DiariasCalendar() {
   const { data: user } = useGetMe();
@@ -341,6 +351,13 @@ function DayAgenda({
   const createMutation = useCreateDiaria();
   const updateMutation = useUpdateDiaria();
 
+  const { data: diariaTypes = [] } = useQuery<DiariaType[]>({
+    queryKey: ['diaria-types', 'active'],
+    queryFn: () => _apiFetch('/api/diaria-types?activeOnly=true'),
+    enabled: canCreate,
+  });
+  const typeOptions = [...diariaTypes].sort((a, b) => a.description.localeCompare(b.description, 'pt-BR'));
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [gridRows, setGridRows] = useState<GridRow[]>([makeEmptyGridRow()]);
   const [isSavingGrid, setIsSavingGrid] = useState(false);
@@ -386,6 +403,10 @@ function DayAgenda({
     }
 
     for (const row of filledRows) {
+      if (!row.typeId) {
+        toast({ title: 'Selecione o Tipo de Diária em todas as linhas.', variant: 'destructive' });
+        return;
+      }
       const provider = providers?.find(p => p.id === Number(row.providerId));
       if (!provider) continue;
       // Gestor nunca vê o valor da diária, então a API não retorna
@@ -415,6 +436,7 @@ function DayAgenda({
             // provider.teamId is always set here — the guard above
             // (`!provider.teamId`) already returned early if null.
             teamId: provider.teamId!,
+            typeId: Number(row.typeId),
             workDate: dateKey,
             startTime: row.startTime || null,
             endTime: row.endTime || null,
@@ -423,7 +445,7 @@ function DayAgenda({
             // continua enviando o valor real que já vê na tela.
             value: provider.dailyRate ?? 0,
             observations: row.observations || null,
-          },
+          } as any,
         });
       }),
     );
@@ -566,9 +588,10 @@ function DayAgenda({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="min-w-[160px]">Nome *</TableHead>
-                    <TableHead className="w-[110px]">Horário Inicial</TableHead>
-                    <TableHead className="w-[110px]">Horário Final</TableHead>
-                    <TableHead className="min-w-[160px]">Observações</TableHead>
+                    <TableHead className="min-w-[140px]">Tipo *</TableHead>
+                    <TableHead className="w-[100px]">Hor. Inicial</TableHead>
+                    <TableHead className="w-[100px]">Hor. Final</TableHead>
+                    <TableHead className="min-w-[130px]">Observações</TableHead>
                     <TableHead className="w-[36px]" />
                   </TableRow>
                 </TableHeader>
@@ -593,6 +616,18 @@ function DayAgenda({
                               {rowProvider.dailyRate != null ? formatCurrency(rowProvider.dailyRate) : 'valor não definido'}
                             </p>
                           )}
+                        </TableCell>
+                        <TableCell className="p-1 align-top">
+                          <select
+                            value={row.typeId}
+                            onChange={e => updateGridRow(row.key, { typeId: e.target.value })}
+                            className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm"
+                          >
+                            <option value="">Selecione</option>
+                            {typeOptions.map(t => (
+                              <option key={t.id} value={t.id}>{t.description}</option>
+                            ))}
+                          </select>
                         </TableCell>
                         <TableCell className="p-1 align-top">
                           <Input
