@@ -124,6 +124,7 @@ export default function DiariasCalendar() {
   const diariasByDay = useMemo(() => {
     const map = new Map<string, Diaria[]>();
     for (const diaria of allDiarias ?? []) {
+      if (diaria.status === 'cancelada') continue;   // excluídas não aparecem no calendário
       const key = diaria.workDate.split('T')[0];
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(diaria);
