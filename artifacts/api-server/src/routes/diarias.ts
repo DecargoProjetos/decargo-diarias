@@ -646,22 +646,20 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
 
   if (!diaria) { res.status(404).json({ error: "Diária não encontrada" }); return; }
 
-  const editableStatuses = ["pendente_aprovacao", "solicitacao_correcao"];
-  if (!editableStatuses.includes(diaria.status)) {
-    res.status(400).json({ error: "Diária não pode ser editada no status atual" });
-    return;
-  }
-
-  const { workDate, startTime, endTime, value, paymentDate, observations } = req.body as {
+  // Admin pode corrigir qualquer campo em qualquer status. Diárias já
+  // exportadas precisam de atenção extra, mas a regra de negócio permite
+  // que o admin faça ajustes retroativos (ex.: atribuir tipo a registros antigos).
+  const { workDate, startTime, endTime, value, typeId, paymentDate, observations } = req.body as {
     workDate?: string;
     startTime?: string | null;
     endTime?: string | null;
     value?: number;
+    typeId?: number | null;
     paymentDate?: string | null;
     observations?: string | null;
   };
 
-  const oldValues = { workDate: diaria.workDate, value: diaria.value };
+  const oldValues = { workDate: diaria.workDate, value: diaria.value, typeId: diaria.typeId };
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (workDate !== undefined) updates.workDate = workDate;
   if (startTime !== undefined) updates.startTime = startTime;
@@ -669,6 +667,13 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
   if (value !== undefined) updates.value = String(value);
   if (paymentDate !== undefined) updates.paymentDate = paymentDate;
   if (observations !== undefined) updates.observations = observations;
+  if (typeId !== undefined) {
+    if (typeId !== null) {
+      const [tipo] = await db.select().from(diariaTypesTable).where(eq(diariaTypesTable.id, typeId)).limit(1);
+      if (!tipo) { res.status(400).json({ error: "Tipo de diária não encontrado" }); return; }
+    }
+    updates.typeId = typeId;
+  }
 
   if (diaria.status === "solicitacao_correcao") {
     updates.status = "pendente_aprovacao";

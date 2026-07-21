@@ -352,18 +352,26 @@ function DayAgenda({
   const createMutation = useCreateDiaria();
   const updateMutation = useUpdateDiaria();
 
-  const { data: diariaTypes = [] } = useQuery<DiariaType[]>({
+  const { data: activeTypes = [] } = useQuery<DiariaType[]>({
     queryKey: ['diaria-types', 'active'],
     queryFn: () => _apiFetch('/api/diaria-types?activeOnly=true'),
     enabled: canCreate,
   });
-  const typeOptions = [...diariaTypes].sort((a, b) => a.description.localeCompare(b.description, 'pt-BR'));
+  // Para edição, busca todos os tipos (inclusive inativos) para o admin poder
+  // ver e corrigir tipos já atribuídos a registros antigos.
+  const { data: allTypes = [] } = useQuery<DiariaType[]>({
+    queryKey: ['diaria-types', 'all'],
+    queryFn: () => _apiFetch('/api/diaria-types?activeOnly=false'),
+    enabled: user.role === 'admin',
+  });
+  const typeOptions = [...activeTypes].sort((a, b) => a.description.localeCompare(b.description, 'pt-BR'));
+  const allTypeOptions = [...allTypes].sort((a, b) => a.description.localeCompare(b.description, 'pt-BR'));
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [gridRows, setGridRows] = useState<GridRow[]>([makeEmptyGridRow()]);
   const [isSavingGrid, setIsSavingGrid] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ startTime: '', endTime: '', observations: '' });
+  const [editForm, setEditForm] = useState({ typeId: '', startTime: '', endTime: '', observations: '' });
 
   // Gestor não deve ver valores de diárias em nenhuma tela.
   const showFinancials = user.role === 'admin';
@@ -476,6 +484,7 @@ function DayAgenda({
   const startEdit = (d: Diaria) => {
     setEditingId(d.id);
     setEditForm({
+      typeId: String((d as any).typeId ?? ''),
       startTime: truncateTime(d.startTime) ?? '',
       endTime: truncateTime(d.endTime) ?? '',
       observations: d.observations ?? '',
@@ -487,10 +496,11 @@ function DayAgenda({
       {
         id,
         data: {
+          typeId: editForm.typeId ? Number(editForm.typeId) : (null as any),
           startTime: editForm.startTime || null,
           endTime: editForm.endTime || null,
           observations: editForm.observations || null,
-        },
+        } as any,
       },
       {
         onSuccess: () => {
@@ -515,6 +525,21 @@ function DayAgenda({
             {editingId === d.id ? (
               <div className="space-y-2">
                 <div className="font-medium">{d.providerName}</div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Tipo de Diária</label>
+                  <select
+                    value={editForm.typeId}
+                    onChange={e => setEditForm({ ...editForm, typeId: e.target.value })}
+                    className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm"
+                  >
+                    <option value="">— sem tipo —</option>
+                    {allTypeOptions.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.description}{!t.active ? ' (inativo)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <label className="text-xs text-muted-foreground">Horário Inicial</label>
@@ -544,6 +569,9 @@ function DayAgenda({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="font-medium">{d.providerName}</div>
+                  {(d as any).typeName && (
+                    <div className="text-xs text-primary/80 font-medium">{(d as any).typeName}</div>
+                  )}
                   <div className="text-sm text-muted-foreground">
                     {d.startTime && d.endTime
                       ? `${truncateTime(d.startTime)} – ${truncateTime(d.endTime)}`
