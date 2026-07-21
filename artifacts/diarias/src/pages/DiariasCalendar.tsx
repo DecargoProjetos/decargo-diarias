@@ -6,6 +6,7 @@ import {
   useListProviders,
   useCreateDiaria,
   useUpdateDiaria,
+  useDeleteDiaria,
   type Diaria,
   type Provider,
   type User,
@@ -30,7 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn, formatCurrency, statusColors, statusLabels } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Plus, Edit2, X, Save, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Edit2, X, Save, Trash2, AlertTriangle } from 'lucide-react';
 import { Link } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
 
@@ -351,6 +352,7 @@ function DayAgenda({
   const { toast } = useToast();
   const createMutation = useCreateDiaria();
   const updateMutation = useUpdateDiaria();
+  const deleteMutation = useDeleteDiaria();
 
   const { data: activeTypes = [] } = useQuery<DiariaType[]>({
     queryKey: ['diaria-types', 'active'],
@@ -371,7 +373,8 @@ function DayAgenda({
   const [gridRows, setGridRows] = useState<GridRow[]>([makeEmptyGridRow()]);
   const [isSavingGrid, setIsSavingGrid] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ typeId: '', startTime: '', endTime: '', observations: '' });
+  const [editForm, setEditForm] = useState({ providerId: '', typeId: '', startTime: '', endTime: '', observations: '' });
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   // Gestor não deve ver valores de diárias em nenhuma tela.
   const showFinancials = user.role === 'admin';
@@ -483,11 +486,24 @@ function DayAgenda({
 
   const startEdit = (d: Diaria) => {
     setEditingId(d.id);
+    setConfirmDeleteId(null);
     setEditForm({
+      providerId: String(d.providerId ?? ''),
       typeId: String((d as any).typeId ?? ''),
       startTime: truncateTime(d.startTime) ?? '',
       endTime: truncateTime(d.endTime) ?? '',
       observations: d.observations ?? '',
+    });
+  };
+
+  const handleDelete = (id: number) => {
+    deleteMutation.mutate({ id }, {
+      onSuccess: () => {
+        toast({ title: 'Diária cancelada.' });
+        setConfirmDeleteId(null);
+        onChanged();
+      },
+      onError: (err: any) => toast({ title: 'Erro ao cancelar', description: err?.message, variant: 'destructive' }),
     });
   };
 
@@ -496,6 +512,7 @@ function DayAgenda({
       {
         id,
         data: {
+          providerId: editForm.providerId ? Number(editForm.providerId) : undefined,
           typeId: editForm.typeId ? Number(editForm.typeId) : (null as any),
           startTime: editForm.startTime || null,
           endTime: editForm.endTime || null,
@@ -524,7 +541,19 @@ function DayAgenda({
           <CardContent className="p-3">
             {editingId === d.id ? (
               <div className="space-y-2">
-                <div className="font-medium">{d.providerName}</div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Prestador</label>
+                  <select
+                    value={editForm.providerId}
+                    onChange={e => setEditForm({ ...editForm, providerId: e.target.value })}
+                    className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm"
+                  >
+                    <option value="">Selecione</option>
+                    {providers?.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <div className="space-y-1">
                   <label className="text-xs text-muted-foreground">Tipo de Diária</label>
                   <select
@@ -588,15 +617,34 @@ function DayAgenda({
                   <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${statusColors[d.status]}`}>
                     {statusLabels[d.status]}
                   </span>
-                  <div className="flex items-center gap-2">
-                    {canEdit(d) && (
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)}>
-                        <Edit2 size={14} />
-                      </Button>
+                  <div className="flex items-center gap-1">
+                    {canEdit(d) && confirmDeleteId === d.id ? (
+                      <>
+                        <span className="text-xs text-destructive mr-1">Cancelar diária?</span>
+                        <Button size="sm" variant="destructive" className="h-6 text-xs px-2" onClick={() => handleDelete(d.id)} disabled={deleteMutation.isPending}>
+                          Sim
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setConfirmDeleteId(null)}>
+                          Não
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        {canEdit(d) && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setConfirmDeleteId(d.id)}>
+                            <Trash2 size={14} />
+                          </Button>
+                        )}
+                        {canEdit(d) && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)}>
+                            <Edit2 size={14} />
+                          </Button>
+                        )}
+                        <Link href={`/diarias/${d.id}`} className="text-xs underline text-muted-foreground">
+                          Detalhes
+                        </Link>
+                      </>
                     )}
-                    <Link href={`/diarias/${d.id}`} className="text-xs underline text-muted-foreground">
-                      Detalhes
-                    </Link>
                   </div>
                 </div>
               </div>

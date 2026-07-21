@@ -649,17 +649,18 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
   // Admin pode corrigir qualquer campo em qualquer status. Diárias já
   // exportadas precisam de atenção extra, mas a regra de negócio permite
   // que o admin faça ajustes retroativos (ex.: atribuir tipo a registros antigos).
-  const { workDate, startTime, endTime, value, typeId, paymentDate, observations } = req.body as {
+  const { workDate, startTime, endTime, value, typeId, providerId, paymentDate, observations } = req.body as {
     workDate?: string;
     startTime?: string | null;
     endTime?: string | null;
     value?: number;
     typeId?: number | null;
+    providerId?: number;
     paymentDate?: string | null;
     observations?: string | null;
   };
 
-  const oldValues = { workDate: diaria.workDate, value: diaria.value, typeId: diaria.typeId };
+  const oldValues = { workDate: diaria.workDate, value: diaria.value, typeId: diaria.typeId, providerId: diaria.providerId };
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (workDate !== undefined) updates.workDate = workDate;
   if (startTime !== undefined) updates.startTime = startTime;
@@ -673,6 +674,11 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
       if (!tipo) { res.status(400).json({ error: "Tipo de diária não encontrado" }); return; }
     }
     updates.typeId = typeId;
+  }
+  if (providerId !== undefined) {
+    const [prov] = await db.select().from(providersTable).where(eq(providersTable.id, providerId)).limit(1);
+    if (!prov) { res.status(400).json({ error: "Prestador não encontrado" }); return; }
+    updates.providerId = providerId;
   }
 
   if (diaria.status === "solicitacao_correcao") {
