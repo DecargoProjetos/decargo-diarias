@@ -64,9 +64,15 @@ export function buildDiariaFilters(
     params.push(me.decargoId);
   }
 
-  if (includeStatus && query.status) {
-    conditions.push(`d.status = $${p++}`);
-    params.push(query.status);
+  if (includeStatus) {
+    if (query.status) {
+      conditions.push(`d.status = ${p++}`);
+      params.push(query.status);
+    } else {
+      // Por padrão, diárias canceladas não aparecem em nenhuma listagem.
+      // Para vê-las, passe explicitamente status=cancelada.
+      conditions.push(`d.status != 'cancelada'`);
+    }
   }
   if (query.providerId) {
     conditions.push(`d.provider_id = $${p++}`);

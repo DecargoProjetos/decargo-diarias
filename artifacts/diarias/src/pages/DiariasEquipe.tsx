@@ -67,9 +67,11 @@ export default function DiariasEquipe() {
               onChange={e => { setPage(1); setFilters({ ...filters, status: e.target.value }); }}
             >
               <option value="">Todos os status</option>
-              {Object.entries(statusLabels).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
+              {Object.entries(statusLabels)
+                .filter(([key]) => key !== 'cancelada')
+                .map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
             </select>
           </div>
         </CardContent>
