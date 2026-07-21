@@ -22,6 +22,7 @@ export const providersTable = pgTable("providers", {
   // Valor padrão da diária deste prestador. Opcional: prestadores
   // sincronizados do DECARGO People não trazem esse valor, então fica nulo
   // até um admin preenchê-lo manualmente em Pessoas.
+  cnpj: text("cnpj"),
   dailyRate: numeric("daily_rate", { precision: 10, scale: 2 }),
   active: boolean("active").notNull().default(true),
   syncedAt: timestamp("synced_at"),

@@ -28,6 +28,7 @@ router.get("/", requireAuth, async (req, res) => {
       decargoId: providersTable.decargoId,
       name: providersTable.name,
       email: providersTable.email,
+      cnpj: providersTable.cnpj,
       teamId: providersTable.teamId,
       teamName: teamsTable.name,
       dailyRate: providersTable.dailyRate,
@@ -115,6 +116,7 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
       await db.insert(providersTable).values({
         decargoId,
         name: p.titular_do_contrato,
+        cnpj: p.cnpj ?? null,
         active: p.tem_contrato_ativo ?? false,
         syncedAt: now,
       });
@@ -143,9 +145,10 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
 // PATCH /api/providers/:id (admin only)
 router.patch("/:id", requireRole("admin"), async (req, res) => {
   const id = Number(req.params.id);
-  const { name, email, teamId, dailyRate, active } = req.body as {
+  const { name, email, cnpj, teamId, dailyRate, active } = req.body as {
     name?: string;
     email?: string | null;
+    cnpj?: string | null;
     teamId?: number | null;
     dailyRate?: number | null;
     active?: boolean;
@@ -154,6 +157,7 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (name !== undefined) updates.name = name;
   if (email !== undefined) updates.email = email;
+  if (cnpj !== undefined) updates.cnpj = cnpj;
   if (teamId !== undefined) updates.teamId = teamId;
   if (dailyRate !== undefined) updates.dailyRate = dailyRate === null ? null : String(dailyRate);
   if (active !== undefined) updates.active = active;
@@ -224,6 +228,7 @@ router.get("/:id", requireAuth, async (req, res) => {
       decargoId: providersTable.decargoId,
       name: providersTable.name,
       email: providersTable.email,
+      cnpj: providersTable.cnpj,
       teamId: providersTable.teamId,
       teamName: teamsTable.name,
       dailyRate: providersTable.dailyRate,

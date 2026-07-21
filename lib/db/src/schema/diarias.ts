@@ -14,6 +14,7 @@ import { z } from "zod/v4";
 import { providersTable } from "./providers";
 import { teamsTable } from "./teams";
 import { usersTable } from "./users";
+import { diariaTypesTable } from "./diaria-types";
 
 export const diariaStatusEnum = pgEnum("diaria_status", [
   "pendente_aprovacao",
@@ -44,6 +45,9 @@ export const diariasTable = pgTable("diarias", {
   startTime: time("start_time"),
   endTime: time("end_time"),
   value: numeric("value", { precision: 10, scale: 2 }).notNull(),
+  typeId: integer("type_id").references(() => diariaTypesTable.id, {
+    onDelete: "restrict",
+  }),
   paymentDate: date("payment_date"),
   observations: text("observations"),
   status: diariaStatusEnum("status").notNull().default("pendente_aprovacao"),

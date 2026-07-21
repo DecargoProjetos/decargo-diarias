@@ -191,6 +191,17 @@ export interface DiariaExportItem {
   __localId: number;
 }
 
+/** Payload for Faltas export → DECARGO People > Folha Mensal > Descontos */
+export interface FaltaExportItem {
+  cnpj: string;
+  tipo: string; // sempre "Desconto de Diária"
+  valor: number;
+  data_desconto: string; // calculado pela regra de competência
+  anotacoes_gerais?: string;
+  /** Tracking only — stripped before sending to People API. */
+  __localId: number;
+}
+
 export interface DiariaExportError {
   [key: string]: unknown;
   __localId?: number;
@@ -210,6 +221,48 @@ function integrationApiKey(): string {
   const key = process.env.DECARGO_PEOPLE_API_KEY;
   if (!key) throw new Error("DECARGO_PEOPLE_API_KEY not set");
   return key;
+}
+
+/**
+ * Pushes a batch of faltas to DECARGO People > Folha Mensal > Descontos
+ * via POST /api/integration/descontos, chunking at 500 items per request.
+ *
+ * TODO: verify exact endpoint path and field names with the DECARGO People team.
+ */
+export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<DiariaExportResult> {
+  const apiKey = integrationApiKey();
+  const merged: DiariaExportResult = { total: 0, inserted: 0, updated: 0, skipped: 0, errors: [] };
+
+  for (let i = 0; i < items.length; i += INTEGRATION_BATCH_SIZE) {
+    const chunk = items.slice(i, i + INTEGRATION_BATCH_SIZE);
+    const payload = chunk.map(({ __localId: _localId, ...rest }) => rest);
+
+    const res = await fetch(`${baseUrl()}/api/integration/descontos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+      body: JSON.stringify({ descontos: payload }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "(no body)");
+      throw new Error(`People API /api/integration/descontos → ${res.status}: ${text}`);
+    }
+
+    const data = (await res.json()) as DiariaExportResult;
+    merged.total += data.total ?? chunk.length;
+    merged.inserted += data.inserted ?? 0;
+    merged.updated += data.updated ?? 0;
+    merged.skipped += data.skipped ?? 0;
+
+    for (const err of data.errors ?? []) {
+      const match = chunk.find(
+        (c) => String((err as Record<string, unknown>).cnpj) === String(c.cnpj),
+      );
+      merged.errors.push({ ...err, __localId: match?.__localId });
+    }
+  }
+
+  return merged;
 }
 
 /**

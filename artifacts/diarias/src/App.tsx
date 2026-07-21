@@ -21,6 +21,7 @@ import UsersList from '@/pages/UsersList';
 import Reports from '@/pages/Reports';
 import AnaliseDiarias from '@/pages/AnaliseDiarias';
 import AuditLogs from '@/pages/AuditLogs';
+import Configuracoes from '@/pages/Configuracoes';
 import Login from '@/pages/Login';
 
 // ---------------------------------------------------------------------------
@@ -165,6 +166,7 @@ function Router() {
         <Route path="/relatorios" component={Reports} />
         <Route path="/analise-diarias" component={AnaliseDiarias} />
         <Route path="/auditoria" component={AuditLogs} />
+        <Route path="/configuracoes" component={Configuracoes} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

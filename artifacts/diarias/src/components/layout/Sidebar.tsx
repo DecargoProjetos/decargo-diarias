@@ -47,6 +47,7 @@ export function Sidebar() {
     { name: 'Pessoas', path: '/pessoas', icon: UserSquare2, roles: ['admin'] },
     { name: 'Usuários', path: '/usuarios', icon: Users, roles: ['admin'] },
     { name: 'Auditoria', path: '/auditoria', icon: ShieldAlert, roles: ['admin'] },
+    { name: 'Configurações', path: '/configuracoes', icon: Settings, roles: ['admin'] },
   ];
 
   const visibleItems = navItems.filter(item => item.roles.includes(user.role));

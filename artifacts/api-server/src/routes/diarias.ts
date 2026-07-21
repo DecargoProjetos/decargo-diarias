@@ -3,6 +3,7 @@ import {
   db,
   pool,
   diariasTable,
+  diariaTypesTable,
   providersTable,
   teamsTable,
   usersTable,
@@ -11,7 +12,7 @@ import { eq, and, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { randomUUID } from "crypto";
-import { pushDiariasToPeople } from "../lib/peopleClient";
+import { pushDiariasToPeople, pushFaltasToPeople } from "../lib/peopleClient";
 import { getGestorTeamIds } from "../lib/gestorTeams";
 import { buildDiariaFilters, type AnaliseFilterQuery } from "../lib/diariaFilters";
 
@@ -41,7 +42,8 @@ async function getDiariaById(id: number, userId: number, role: string, gestorTea
         d.exported_at AS "exportedAt", eu.name AS "exportedByName",
         d.integration_id AS "integrationId",
         d.paid_at AS "paidAt", d.cancelled_at AS "cancelledAt",
-        p.decargo_id AS "providerDecargoId"
+        p.decargo_id AS "providerDecargoId",
+        d.type_id AS "typeId", dt.description AS "typeName", dt.export_target AS "exportTarget"
       FROM diarias d
       JOIN providers p ON p.id = d.provider_id
       JOIN teams t ON t.id = d.team_id
@@ -49,6 +51,7 @@ async function getDiariaById(id: number, userId: number, role: string, gestorTea
       LEFT JOIN users mu ON mu.id = d.manager_id
       LEFT JOIN users au ON au.id = d.approved_by
       LEFT JOIN users eu ON eu.id = d.exported_by
+      LEFT JOIN diaria_types dt ON dt.id = d.type_id
       WHERE d.id = $1`,
     [id]
   );
@@ -110,7 +113,8 @@ router.get("/", requireAuth, async (req, res) => {
           d.approved_at AS "approvedAt", au.name AS "approvedByName",
           d.exported_at AS "exportedAt", eu.name AS "exportedByName",
           d.integration_id AS "integrationId",
-          d.paid_at AS "paidAt", d.cancelled_at AS "cancelledAt"
+          d.paid_at AS "paidAt", d.cancelled_at AS "cancelledAt",
+          d.type_id AS "typeId", dt.description AS "typeName"
         FROM diarias d
         JOIN providers p ON p.id = d.provider_id
         JOIN teams t ON t.id = d.team_id
@@ -118,6 +122,7 @@ router.get("/", requireAuth, async (req, res) => {
         LEFT JOIN users mu ON mu.id = d.manager_id
         LEFT JOIN users au ON au.id = d.approved_by
         LEFT JOIN users eu ON eu.id = d.exported_by
+        LEFT JOIN diaria_types dt ON dt.id = d.type_id
         WHERE ${where}
         ORDER BY d.created_at DESC
         LIMIT ${pageSz} OFFSET ${offset}`,
@@ -357,10 +362,11 @@ router.patch("/:id/payment-date", requireRole("admin"), async (req, res) => {
 // POST /api/diarias (gestor/admin)
 router.post("/", requireRole("admin", "gestor"), async (req, res) => {
   const me = req.currentUser!;
-  const { providerId, teamId, workDate, startTime, endTime, value, paymentDate, observations } =
+  const { providerId, teamId, typeId, workDate, startTime, endTime, value, paymentDate, observations } =
     req.body as {
       providerId: number;
       teamId: number;
+      typeId?: number;
       workDate: string;
       startTime?: string | null;
       endTime?: string | null;
@@ -368,6 +374,16 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
       paymentDate?: string;
       observations?: string;
     };
+
+  if (!typeId) {
+    res.status(400).json({ error: "Tipo de diária é obrigatório" });
+    return;
+  }
+  const [diariaType] = await db.select().from(diariaTypesTable).where(eq(diariaTypesTable.id, typeId)).limit(1);
+  if (!diariaType || !diariaType.active) {
+    res.status(400).json({ error: "Tipo de diária inválido ou inativo" });
+    return;
+  }
 
   // Gestor can only create for their managed teams (derived from teams.manager_id).
   const gestorTeamIds = me.role === "gestor" ? await getGestorTeamIds(me.id) : [];
@@ -397,6 +413,7 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
     .values({
       providerId,
       teamId,
+      typeId,
       managerId: me.id,
       workDate,
       startTime: startTime ?? null,
@@ -421,6 +438,17 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
   res.status(201).json(result);
 });
 
+// Calcula a data de desconto para faltas:
+// dia ≤ 15 → dia 15 do mês seguinte; dia > 15 → último dia do mês seguinte.
+function calcDiscountDate(workDate: string): string {
+  const [y, m, d] = workDate.split("-").map(Number);
+  let nextMonth = m + 1;
+  let nextYear = y;
+  if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+  const targetDay = d <= 15 ? 15 : new Date(nextYear, nextMonth, 0).getDate();
+  return `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}`;
+}
+
 // POST /api/diarias/export (must come before /:id)
 router.post("/export", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;
@@ -432,124 +460,154 @@ router.post("/export", requireRole("admin"), async (req, res) => {
   }
 
   const rows = await pool.query<{
-    id: number; status: string; providerDecargoId: string; providerName: string;
+    id: number; status: string; providerDecargoId: string; providerName: string; cnpj: string | null;
     workDate: string; value: string; paymentDate: string | null; observations: string | null;
+    exportTarget: string | null;
   }>(
     `SELECT d.id, d.status, p.decargo_id AS "providerDecargoId", p.name AS "providerName",
-            d.work_date AS "workDate", d.value, d.payment_date AS "paymentDate", d.observations
-     FROM diarias d JOIN providers p ON p.id = d.provider_id
+            p.cnpj, d.work_date AS "workDate", d.value, d.payment_date AS "paymentDate",
+            d.observations, dt.export_target AS "exportTarget"
+     FROM diarias d
+     JOIN providers p ON p.id = d.provider_id
+     LEFT JOIN diaria_types dt ON dt.id = d.type_id
      WHERE d.id = ANY($1::int[])`,
     [diariaIds],
   );
 
   const byId = new Map(rows.rows.map((r) => [r.id, r]));
 
-  // Validate every requested record before touching anything (all-or-nothing):
-  // must exist, be approved (disponivel_exportacao), not yet exported, and
-  // have a payment date (either already set or supplied as fallback in this request).
+  // Validate every requested record before touching anything (all-or-nothing).
   const validationErrors: { id: number; reason: string }[] = [];
   for (const id of diariaIds) {
     const row = byId.get(id);
     if (!row) { validationErrors.push({ id, reason: "Diária não encontrada" }); continue; }
     if (row.status !== "disponivel_exportacao") {
-      validationErrors.push({ id, reason: "Diária não está aprovada/disponível para exportação" });
-      continue;
+      validationErrors.push({ id, reason: "Diária não está aprovada/disponível para exportação" }); continue;
     }
-    const effectivePaymentDate = row.paymentDate ?? fallbackPaymentDate ?? null;
-    if (!effectivePaymentDate) {
-      validationErrors.push({ id, reason: "Data de pagamento não preenchida" });
-      continue;
+    if (!row.exportTarget) {
+      validationErrors.push({ id, reason: "Tipo de diária não definido — configure o tipo antes de exportar" }); continue;
     }
-    if (!row.providerDecargoId || Number.isNaN(Number(row.providerDecargoId))) {
+    // Diárias extras need a payment date; faltas have auto-calculated discount date.
+    if (row.exportTarget === "diaria_extra") {
+      const effectivePaymentDate = row.paymentDate ?? fallbackPaymentDate ?? null;
+      if (!effectivePaymentDate) {
+        validationErrors.push({ id, reason: "Data de pagamento não preenchida" }); continue;
+      }
+    }
+    if (row.exportTarget === "falta" && (!row.cnpj || !row.cnpj.trim())) {
+      validationErrors.push({ id, reason: "CNPJ do prestador não cadastrado — sincronize ou cadastre manualmente" }); continue;
+    }
+    if (row.exportTarget === "diaria_extra" && (!row.providerDecargoId || Number.isNaN(Number(row.providerDecargoId)))) {
       validationErrors.push({ id, reason: "Prestador sem identificação válida no DECARGO People" });
     }
   }
 
   if (validationErrors.length > 0) {
-    res.status(400).json({
-      error: "Algumas diárias não passaram na validação de exportação",
-      details: validationErrors,
-    });
+    res.status(400).json({ error: "Algumas diárias não passaram na validação", details: validationErrors });
     return;
   }
 
-  // Push to DECARGO People > Folha Mensal > Diárias Extras before marking
-  // anything locally as exported — if the remote call fails, nothing changes.
-  let peopleResult;
-  try {
-    peopleResult = await pushDiariasToPeople(
-      diariaIds.map((id) => {
-        const row = byId.get(id)!;
-        return {
-          id_prestador: Number(row.providerDecargoId),
-          dia_trabalhado: row.workDate,
-          valor_diaria: Number(row.value),
-          data_pagamento: (row.paymentDate ?? fallbackPaymentDate)!,
-          anotacoes_gerais: row.observations ?? undefined,
-          __localId: id,
-        };
-      }),
-    );
-  } catch (err) {
-    res.status(502).json({
-      error: `Falha ao enviar diárias para o DECARGO People: ${err instanceof Error ? err.message : String(err)}`,
-    });
-    return;
-  }
+  // Separate by export target
+  const diariaExtraIds = diariaIds.filter((id) => byId.get(id)!.exportTarget === "diaria_extra");
+  const faltaIds = diariaIds.filter((id) => byId.get(id)!.exportTarget === "falta");
 
-  const failedLocalIds = new Set(
-    (peopleResult.errors ?? [])
-      .map((e) => (e as { __localId?: number }).__localId)
-      .filter((v): v is number => typeof v === "number"),
-  );
-
-  const succeededIds = diariaIds.filter((id) => !failedLocalIds.has(id));
   const integrationRef = `EXP-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
   const now = new Date();
+  const allFailedLocalIds = new Set<number>();
+
+  // --- Export Diárias Extras ---
+  if (diariaExtraIds.length > 0) {
+    let extraResult;
+    try {
+      extraResult = await pushDiariasToPeople(
+        diariaExtraIds.map((id) => {
+          const row = byId.get(id)!;
+          return {
+            id_prestador: Number(row.providerDecargoId),
+            dia_trabalhado: row.workDate,
+            valor_diaria: Number(row.value),
+            data_pagamento: (row.paymentDate ?? fallbackPaymentDate)!,
+            anotacoes_gerais: row.observations ?? undefined,
+            __localId: id,
+          };
+        }),
+      );
+    } catch (err) {
+      res.status(502).json({ error: `Falha ao enviar diárias extras: ${err instanceof Error ? err.message : String(err)}` });
+      return;
+    }
+    for (const e of extraResult.errors ?? []) {
+      const lid = (e as { __localId?: number }).__localId;
+      if (typeof lid === "number") allFailedLocalIds.add(lid);
+    }
+  }
+
+  // --- Export Faltas (Descontos) ---
+  if (faltaIds.length > 0) {
+    let faltaResult;
+    try {
+      faltaResult = await pushFaltasToPeople(
+        faltaIds.map((id) => {
+          const row = byId.get(id)!;
+          return {
+            cnpj: row.cnpj!,
+            tipo: "Desconto de Diária",
+            valor: Number(row.value),
+            data_desconto: calcDiscountDate(row.workDate),
+            anotacoes_gerais: row.observations ?? undefined,
+            __localId: id,
+          };
+        }),
+      );
+    } catch (err) {
+      res.status(502).json({ error: `Falha ao enviar faltas para o DECARGO People: ${err instanceof Error ? err.message : String(err)}` });
+      return;
+    }
+    for (const e of faltaResult.errors ?? []) {
+      const lid = (e as { __localId?: number }).__localId;
+      if (typeof lid === "number") allFailedLocalIds.add(lid);
+    }
+  }
+
+  const succeededIds = diariaIds.filter((id) => !allFailedLocalIds.has(id));
 
   if (succeededIds.length > 0) {
-    // For rows that used the fallback payment date (had no date of their own),
-    // include paymentDate in the update so it's persisted alongside the export.
+    // Persist fallback payment date for diária_extra rows that needed it
+    const extraSucceeded = succeededIds.filter((id) => byId.get(id)!.exportTarget === "diaria_extra");
     const succeededNeedingDate = fallbackPaymentDate
-      ? succeededIds.filter((id) => !byId.get(id)!.paymentDate)
+      ? extraSucceeded.filter((id) => !byId.get(id)!.paymentDate)
       : [];
     if (succeededNeedingDate.length > 0) {
-      await db
-        .update(diariasTable)
-        .set({ paymentDate: fallbackPaymentDate, updatedAt: now })
+      await db.update(diariasTable).set({ paymentDate: fallbackPaymentDate, updatedAt: now })
         .where(inArray(diariasTable.id, succeededNeedingDate));
     }
+    // For faltas, persist the calculated discount date as paymentDate for display consistency
+    const faltaSucceeded = succeededIds.filter((id) => byId.get(id)!.exportTarget === "falta");
+    for (const id of faltaSucceeded) {
+      const row = byId.get(id)!;
+      if (!row.paymentDate) {
+        await db.update(diariasTable).set({ paymentDate: calcDiscountDate(row.workDate), updatedAt: now })
+          .where(eq(diariasTable.id, id));
+      }
+    }
 
-    await db
-      .update(diariasTable)
-      .set({
-        status: "exportada",
-        exportedAt: now,
-        exportedBy: me.id,
-        integrationId: integrationRef,
-        updatedAt: now,
-      })
-      .where(inArray(diariasTable.id, succeededIds));
+    await db.update(diariasTable).set({
+      status: "exportada", exportedAt: now, exportedBy: me.id, integrationId: integrationRef, updatedAt: now,
+    }).where(inArray(diariasTable.id, succeededIds));
 
     for (const id of succeededIds) {
       await logAudit({
-        entityType: "diaria",
-        entityId: id,
-        action: "exportado",
-        userId: me.id,
+        entityType: "diaria", entityId: id, action: "exportado", userId: me.id,
         oldValues: { status: "disponivel_exportacao" },
-        newValues: { status: "exportada", integrationId: integrationRef },
+        newValues: { status: "exportada", integrationId: integrationRef, exportTarget: byId.get(id)!.exportTarget },
       });
     }
   }
 
-  for (const id of failedLocalIds) {
+  for (const id of allFailedLocalIds) {
     await logAudit({
-      entityType: "diaria",
-      entityId: id,
-      action: "exportacao_falhou",
-      userId: me.id,
-      newValues: { peopleErrors: peopleResult.errors },
+      entityType: "diaria", entityId: id, action: "exportacao_falhou", userId: me.id,
+      newValues: { reason: "Rejeitado pelo DECARGO People" },
     });
   }
 
@@ -557,7 +615,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
     exported: succeededIds.length,
     integrationRef,
     exportedAt: now,
-    skipped: [...failedLocalIds].map((id) => ({ id, reason: "Rejeitado pelo DECARGO People" })),
+    skipped: [...allFailedLocalIds].map((id) => ({ id, reason: "Rejeitado pelo DECARGO People" })),
   });
 });
 
