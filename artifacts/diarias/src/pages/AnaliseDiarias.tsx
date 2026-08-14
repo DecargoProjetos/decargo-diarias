@@ -210,8 +210,9 @@ export default function AnaliseDiarias() {
     }
   }
 
-  function openBulkPaymentDate(scope: 'selected' | 'filtered') {
-    setBulkPaymentDateScope(scope);
+  function openBulkPaymentDate() {
+    // Pre-select "selecionados" if there are checked records, otherwise "filtradas"
+    setBulkPaymentDateScope(selected.size > 0 ? 'selected' : 'filtered');
     setBulkPaymentDateValue('');
     setBulkPaymentDateOpen(true);
   }
@@ -463,7 +464,7 @@ export default function AnaliseDiarias() {
           <Button size="sm" variant="outline" disabled={isBusy} onClick={() => setExportConfirmOpen(true)}>
             <FileDown size={16} className="mr-2" /> Exportar selecionadas
           </Button>
-          <Button size="sm" variant="outline" disabled={isBusy} onClick={() => openBulkPaymentDate('selected')}>
+          <Button size="sm" variant="outline" disabled={isBusy} onClick={openBulkPaymentDate}>
             <CalendarClock size={16} className="mr-2" /> Definir data de pagamento
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Limpar seleção</Button>
@@ -475,9 +476,9 @@ export default function AnaliseDiarias() {
           <CardTitle className="text-lg">Diárias ({total})</CardTitle>
           <div className="flex gap-2 flex-wrap">
             {total > 0 && (
-              <Button size="sm" variant="outline" disabled={isBusy} onClick={() => openBulkPaymentDate('filtered')}>
-                {(applyingPaymentDate && bulkPaymentDateScope === 'filtered') ? <Loader2 className="animate-spin mr-2" size={14} /> : <CalendarClock size={14} className="mr-2" />}
-                Aplicar data de pagamento às {total} filtradas
+              <Button size="sm" variant="outline" disabled={isBusy} onClick={openBulkPaymentDate}>
+                {applyingPaymentDate ? <Loader2 className="animate-spin mr-2" size={14} /> : <CalendarClock size={14} className="mr-2" />}
+                Aplicar data de pagamento
               </Button>
             )}
             {total > rows.length && (
@@ -623,15 +624,55 @@ export default function AnaliseDiarias() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><CalendarClock size={18} /> Aplicar data de pagamento</DialogTitle>
             <DialogDescription>
-              {bulkPaymentDateScope === 'filtered'
-                ? `A data será aplicada a todas as ${total} diárias com os filtros atuais (exceto as bloqueadas por exportação).`
-                : `A data será aplicada às ${selected.size} diárias selecionadas (exceto as bloqueadas por exportação).`}
+              Escolha quais registros receberão a data e informe a data desejada.
+              Registros bloqueados (exportados/pagos) serão ignorados.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Scope selector */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium">Aplicar a</label>
+            <div className="flex flex-col gap-2">
+              <label className={`flex items-center gap-3 rounded-md border px-3 py-2.5 cursor-pointer transition-colors ${bulkPaymentDateScope === 'selected' ? 'border-primary bg-primary/5' : 'border-input'} ${selected.size === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                <input
+                  type="radio"
+                  name="bulk-pd-scope"
+                  value="selected"
+                  checked={bulkPaymentDateScope === 'selected'}
+                  disabled={selected.size === 0}
+                  onChange={() => setBulkPaymentDateScope('selected')}
+                  className="accent-primary"
+                />
+                <div>
+                  <span className="text-sm font-medium">Registros selecionados</span>
+                  <span className="text-xs text-muted-foreground ml-2">
+                    {selected.size === 0 ? '(nenhum marcado)' : `${selected.size} marcado(s) via checkbox`}
+                  </span>
+                </div>
+              </label>
+              <label className={`flex items-center gap-3 rounded-md border px-3 py-2.5 cursor-pointer transition-colors ${bulkPaymentDateScope === 'filtered' ? 'border-primary bg-primary/5' : 'border-input'}`}>
+                <input
+                  type="radio"
+                  name="bulk-pd-scope"
+                  value="filtered"
+                  checked={bulkPaymentDateScope === 'filtered'}
+                  onChange={() => setBulkPaymentDateScope('filtered')}
+                  className="accent-primary"
+                />
+                <div>
+                  <span className="text-sm font-medium">Todos os registros filtrados</span>
+                  <span className="text-xs text-muted-foreground ml-2">{total} registro(s)</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Date picker */}
           <div className="space-y-1">
             <label className="text-xs font-medium">Data de pagamento</label>
             <Input type="date" value={bulkPaymentDateValue} onChange={(e) => setBulkPaymentDateValue(e.target.value)} className="h-9 w-48" />
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setBulkPaymentDateOpen(false)}>Cancelar</Button>
             <Button disabled={!bulkPaymentDateValue || isBusy} onClick={confirmBulkPaymentDate}>
