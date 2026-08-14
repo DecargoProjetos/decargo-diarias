@@ -33,9 +33,9 @@ async function getDiariaById(id: number, userId: number, role: string, gestorTea
         d.id, d.provider_id AS "providerId", p.name AS "providerName",
         d.team_id AS "teamId", t.name AS "teamName",
         d.manager_id AS "managerId", mu.name AS "managerName",
-        d.work_date AS "workDate",
+        d.work_date::text AS "workDate",
         d.start_time AS "startTime", d.end_time AS "endTime",
-        d.value, d.payment_date AS "paymentDate",
+        d.value, d.payment_date::text AS "paymentDate",
         d.observations, d.status, d.action_note AS "actionNote",
         d.created_at AS "createdAt", cu.name AS "createdByName",
         d.approved_at AS "approvedAt", au.name AS "approvedByName",
@@ -105,9 +105,9 @@ router.get("/", requireAuth, async (req, res) => {
           d.id, d.provider_id AS "providerId", p.name AS "providerName",
           d.team_id AS "teamId", t.name AS "teamName",
           d.manager_id AS "managerId", mu.name AS "managerName",
-          d.work_date AS "workDate",
+          d.work_date::text AS "workDate",
           d.start_time AS "startTime", d.end_time AS "endTime",
-          d.value, d.payment_date AS "paymentDate",
+          d.value, d.payment_date::text AS "paymentDate",
           d.observations, d.status, d.action_note AS "actionNote",
           d.created_at AS "createdAt", cu.name AS "createdByName",
           d.approved_at AS "approvedAt", au.name AS "approvedByName",
@@ -465,7 +465,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
     exportTarget: string | null;
   }>(
     `SELECT d.id, d.status, p.decargo_id AS "providerDecargoId", p.name AS "providerName",
-            p.cnpj, d.work_date AS "workDate", d.value, d.payment_date AS "paymentDate",
+            p.cnpj, d.work_date::text AS "workDate", d.value, d.payment_date::text AS "paymentDate",
             d.observations, dt.export_target AS "exportTarget"
      FROM diarias d
      JOIN providers p ON p.id = d.provider_id
