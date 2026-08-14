@@ -7,6 +7,7 @@ import {
   listDiariaIds,
   useBulkApproveDiarias,
   useBulkRejectDiarias,
+  useBulkSetDiariaPaymentDate,
   useApproveDiaria,
   useRejectDiaria,
   useRevertDiaria,
@@ -49,10 +50,11 @@ interface Filters {
   maxValue: string;
   value: string;
   status: string;
+  hasPaymentDate: string;
 }
 
 const EMPTY_FILTERS: Filters = {
-  name: '', teamId: '', startDate: '', endDate: '', minValue: '', maxValue: '', value: '', status: '',
+  name: '', teamId: '', startDate: '', endDate: '', minValue: '', maxValue: '', value: '', status: '', hasPaymentDate: '',
 };
 
 export default function AnaliseDiarias() {
@@ -71,6 +73,9 @@ export default function AnaliseDiarias() {
   const [valueInput, setValueInput] = useState('');
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
   const [exportFallbackDate, setExportFallbackDate] = useState('');
+  const [bulkPaymentDateOpen, setBulkPaymentDateOpen] = useState(false);
+  const [bulkPaymentDateValue, setBulkPaymentDateValue] = useState('');
+  const [bulkPaymentDateScope, setBulkPaymentDateScope] = useState<'selected' | 'filtered'>('selected');
   const [lastResult, setLastResult] = useState<{ title: string; description: string } | null>(null);
 
   const queryFilters = useMemo(() => ({
@@ -82,6 +87,7 @@ export default function AnaliseDiarias() {
     maxValue: filters.maxValue ? Number(filters.maxValue) : undefined,
     value: filters.value ? Number(filters.value) : undefined,
     status: (filters.status || undefined) as any,
+    hasPaymentDate: (filters.hasPaymentDate || undefined) as 'sim' | 'nao' | undefined,
   }), [filters]);
 
   const { data: summary } = useGetDiariasAnaliseSummary(queryFilters);
@@ -93,9 +99,11 @@ export default function AnaliseDiarias() {
   const bulkApprove = useBulkApproveDiarias();
   const bulkReject = useBulkRejectDiarias();
   const setPaymentDate = useSetDiariaPaymentDate();
+  const bulkSetPaymentDate = useBulkSetDiariaPaymentDate();
   const updateDiaria = useUpdateDiaria();
   const exportMutation = useExportDiarias();
   const [selectingAllFiltered, setSelectingAllFiltered] = useState(false);
+  const [applyingPaymentDate, setApplyingPaymentDate] = useState(false);
 
   if (user && user.role !== 'admin') {
     return (
@@ -202,6 +210,51 @@ export default function AnaliseDiarias() {
     }
   }
 
+  function openBulkPaymentDate(scope: 'selected' | 'filtered') {
+    setBulkPaymentDateScope(scope);
+    setBulkPaymentDateValue('');
+    setBulkPaymentDateOpen(true);
+  }
+
+  async function confirmBulkPaymentDate() {
+    if (!bulkPaymentDateValue) return;
+    setApplyingPaymentDate(true);
+    try {
+      let ids: number[];
+      if (bulkPaymentDateScope === 'filtered') {
+        const res = await listDiariaIds(queryFilters);
+        ids = res.ids;
+      } else {
+        ids = [...selected];
+      }
+      if (!ids.length) {
+        toast({ title: 'Nenhuma diária encontrada.' });
+        setBulkPaymentDateOpen(false);
+        return;
+      }
+      bulkSetPaymentDate.mutate(
+        { data: { diariaIds: ids, paymentDate: bulkPaymentDateValue } },
+        {
+          onSuccess: (res: { succeeded: number[]; failed: { id: number; reason: string }[] }) => {
+            setBulkPaymentDateOpen(false);
+            setLastResult({
+              title: 'Data de pagamento aplicada',
+              description: `${res.succeeded.length} diária(s) atualizadas. ${res.failed.length} não puderam ser alteradas (bloqueadas).`,
+            });
+            refreshAll();
+          },
+          onError: (err: any) => {
+            toast({ title: 'Erro ao aplicar data', description: err?.response?.data?.error ?? err?.message, variant: 'destructive' });
+          },
+        },
+      );
+    } catch (err: any) {
+      toast({ title: 'Erro ao buscar IDs filtrados', description: err?.message, variant: 'destructive' });
+    } finally {
+      setApplyingPaymentDate(false);
+    }
+  }
+
   function openPaymentDate(id: number, current: string | null) {
     setPaymentDateTarget({ id, current });
     setPaymentDateValue(current ? current.slice(0, 10) : '');
@@ -279,7 +332,7 @@ export default function AnaliseDiarias() {
     });
   }
 
-  const isBusy = approve.isPending || reject.isPending || revert.isPending || bulkApprove.isPending || bulkReject.isPending || exportMutation.isPending;
+  const isBusy = approve.isPending || reject.isPending || revert.isPending || bulkApprove.isPending || bulkReject.isPending || exportMutation.isPending || bulkSetPaymentDate.isPending || applyingPaymentDate;
 
   return (
     <div className="space-y-6">
@@ -377,7 +430,19 @@ export default function AnaliseDiarias() {
               {ANALISE_STATUSES.map((s) => <option key={s} value={s}>{statusLabels[s]}</option>)}
             </select>
           </div>
-          {(filters.name || filters.teamId || filters.startDate || filters.endDate || filters.minValue || filters.maxValue || filters.value || filters.status) && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium flex items-center gap-1"><CalendarClock size={12} /> Data pagamento</label>
+            <select
+              className="flex h-9 w-44 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              value={filters.hasPaymentDate}
+              onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, hasPaymentDate: e.target.value })); }}
+            >
+              <option value="">Todas</option>
+              <option value="nao">Sem data de pagamento</option>
+              <option value="sim">Com data de pagamento</option>
+            </select>
+          </div>
+          {(filters.name || filters.teamId || filters.startDate || filters.endDate || filters.minValue || filters.maxValue || filters.value || filters.status || filters.hasPaymentDate) && (
             <Button variant="ghost" size="sm" onClick={() => { setFilters(EMPTY_FILTERS); setPage(1); }}>
               <X size={14} className="mr-1" /> Limpar filtros
             </Button>
@@ -398,19 +463,30 @@ export default function AnaliseDiarias() {
           <Button size="sm" variant="outline" disabled={isBusy} onClick={() => setExportConfirmOpen(true)}>
             <FileDown size={16} className="mr-2" /> Exportar selecionadas
           </Button>
+          <Button size="sm" variant="outline" disabled={isBusy} onClick={() => openBulkPaymentDate('selected')}>
+            <CalendarClock size={16} className="mr-2" /> Definir data de pagamento
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Limpar seleção</Button>
         </div>
       )}
 
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader className="flex-row items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-lg">Diárias ({total})</CardTitle>
-          {total > rows.length && (
-            <Button size="sm" variant="outline" disabled={selectingAllFiltered} onClick={selectAllFiltered}>
-              {selectingAllFiltered ? <Loader2 className="animate-spin mr-2" size={14} /> : null}
-              Selecionar todas as {total} filtradas
-            </Button>
-          )}
+          <div className="flex gap-2 flex-wrap">
+            {total > 0 && (
+              <Button size="sm" variant="outline" disabled={isBusy} onClick={() => openBulkPaymentDate('filtered')}>
+                {(applyingPaymentDate && bulkPaymentDateScope === 'filtered') ? <Loader2 className="animate-spin mr-2" size={14} /> : <CalendarClock size={14} className="mr-2" />}
+                Aplicar data de pagamento às {total} filtradas
+              </Button>
+            )}
+            {total > rows.length && (
+              <Button size="sm" variant="outline" disabled={selectingAllFiltered} onClick={selectAllFiltered}>
+                {selectingAllFiltered ? <Loader2 className="animate-spin mr-2" size={14} /> : null}
+                Selecionar todas as {total} filtradas
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -537,6 +613,31 @@ export default function AnaliseDiarias() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectTarget(null)}>Cancelar</Button>
             <Button variant="destructive" disabled={isBusy} onClick={confirmReject}>Confirmar reprovação</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk payment date dialog */}
+      <Dialog open={bulkPaymentDateOpen} onOpenChange={(open) => { if (!open) setBulkPaymentDateOpen(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><CalendarClock size={18} /> Aplicar data de pagamento</DialogTitle>
+            <DialogDescription>
+              {bulkPaymentDateScope === 'filtered'
+                ? `A data será aplicada a todas as ${total} diárias com os filtros atuais (exceto as bloqueadas por exportação).`
+                : `A data será aplicada às ${selected.size} diárias selecionadas (exceto as bloqueadas por exportação).`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Data de pagamento</label>
+            <Input type="date" value={bulkPaymentDateValue} onChange={(e) => setBulkPaymentDateValue(e.target.value)} className="h-9 w-48" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkPaymentDateOpen(false)}>Cancelar</Button>
+            <Button disabled={!bulkPaymentDateValue || isBusy} onClick={confirmBulkPaymentDate}>
+              {isBusy && bulkPaymentDateOpen ? <Loader2 className="animate-spin mr-2" size={16} /> : null}
+              Aplicar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

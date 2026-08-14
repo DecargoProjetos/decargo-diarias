@@ -16,6 +16,8 @@ export interface AnaliseFilterQuery {
   maxValue?: string;
   value?: string;
   status?: string;
+  /** 'sim' → só com data de pagamento; 'nao' → só sem data de pagamento */
+  hasPaymentDate?: string;
 }
 
 export interface BuildDiariaFiltersOpts {
@@ -110,6 +112,11 @@ export function buildDiariaFilters(
       conditions.push(`d.value <= $${p++}`);
       params.push(Number(query.maxValue));
     }
+  }
+  if (query.hasPaymentDate === "sim") {
+    conditions.push(`d.payment_date IS NOT NULL`);
+  } else if (query.hasPaymentDate === "nao") {
+    conditions.push(`d.payment_date IS NULL`);
   }
 
   return { where: conditions.join(" AND "), params };

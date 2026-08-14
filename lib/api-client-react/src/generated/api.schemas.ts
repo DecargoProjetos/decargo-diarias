@@ -295,6 +295,11 @@ export interface PaymentDateInput {
   paymentDate: string;
 }
 
+export interface BulkSetPaymentDateInput {
+  diariaIds: number[];
+  paymentDate: string;
+}
+
 export interface DiariaIdsResult {
   ids: number[];
   total: number;
@@ -462,6 +467,11 @@ maxValue?: number | null;
  * @nullable
  */
 value?: number | null;
+/**
+ * Filtra por presença de data de pagamento: 'sim' = com data, 'nao' = sem data
+ * @nullable
+ */
+hasPaymentDate?: 'sim' | 'nao' | null;
 /**
  * @nullable
  */

@@ -316,6 +316,64 @@ router.post("/bulk-reject", requireRole("admin"), async (req, res) => {
   res.json({ succeeded, failed });
 });
 
+// POST /api/diarias/bulk-set-payment-date (admin)
+// Applies a payment date to a list of diárias, skipping locked records.
+router.post("/bulk-set-payment-date", requireRole("admin"), async (req, res) => {
+  const me = req.currentUser!;
+  const { diariaIds, paymentDate } = req.body as { diariaIds: number[]; paymentDate: string };
+
+  if (!diariaIds?.length) {
+    res.status(400).json({ error: "Nenhuma diária selecionada" });
+    return;
+  }
+  if (!paymentDate || !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
+    res.status(400).json({ error: "Data de pagamento inválida (use yyyy-MM-dd)" });
+    return;
+  }
+
+  const rows = await db
+    .select({ id: diariasTable.id, status: diariasTable.status, paymentDate: diariasTable.paymentDate })
+    .from(diariasTable)
+    .where(inArray(diariasTable.id, diariaIds));
+
+  const foundIds = new Set(rows.map((r) => r.id));
+  const succeeded: number[] = [];
+  const failed: { id: number; reason: string }[] = [];
+
+  for (const id of diariaIds) {
+    if (!foundIds.has(id)) failed.push({ id, reason: "Diária não encontrada" });
+  }
+
+  const toUpdate = rows.filter((r) => !LOCKED_STATUSES.includes(r.status) && r.status !== "cancelada");
+  for (const r of rows) {
+    if (LOCKED_STATUSES.includes(r.status) || r.status === "cancelada") {
+      failed.push({ id: r.id, reason: "Diária bloqueada após exportação/cancelamento" });
+    }
+  }
+
+  if (toUpdate.length > 0) {
+    const now = new Date();
+    await db
+      .update(diariasTable)
+      .set({ paymentDate, updatedAt: now })
+      .where(inArray(diariasTable.id, toUpdate.map((r) => r.id)));
+
+    for (const r of toUpdate) {
+      succeeded.push(r.id);
+      await logAudit({
+        entityType: "diaria",
+        entityId: r.id,
+        action: "data_pagamento_atualizada_em_lote",
+        userId: me.id,
+        oldValues: { paymentDate: r.paymentDate },
+        newValues: { paymentDate },
+      });
+    }
+  }
+
+  res.json({ succeeded, failed });
+});
+
 // PATCH /api/diarias/:id/payment-date (admin, blocked after export)
 router.patch("/:id/payment-date", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;

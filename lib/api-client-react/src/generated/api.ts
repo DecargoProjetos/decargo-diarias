@@ -25,6 +25,7 @@ import type {
   BulkActionResult,
   BulkIdsInput,
   BulkRejectInput,
+  BulkSetPaymentDateInput,
   DashboardSummary,
   Diaria,
   DiariaActionNote,
@@ -1957,6 +1958,58 @@ export const useBulkRejectDiarias = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getBulkRejectDiariasMutationOptions(options));
+    }
+
+export const getBulkSetDiariaPaymentDateUrl = () => {
+  return `/api/diarias/bulk-set-payment-date`
+}
+
+/**
+ * @summary Apply a payment date to multiple daily rates at once (admin only)
+ */
+export const bulkSetDiariaPaymentDate = async (bulkSetPaymentDateInput: BulkSetPaymentDateInput, options?: RequestInit): Promise<BulkActionResult> => {
+  return customFetch<BulkActionResult>(getBulkSetDiariaPaymentDateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkSetPaymentDateInput)
+  }
+);}
+
+export const getBulkSetDiariaPaymentDateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkSetDiariaPaymentDate>>, TError,{data: BodyType<BulkSetPaymentDateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkSetDiariaPaymentDate>>, TError,{data: BodyType<BulkSetPaymentDateInput>}, TContext> => {
+const mutationKey = ['bulkSetDiariaPaymentDate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkSetDiariaPaymentDate>>, {data: BodyType<BulkSetPaymentDateInput>}> = (props) => {
+          const {data} = props ?? {};
+          return  bulkSetDiariaPaymentDate(data, requestOptions)
+        }
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkSetDiariaPaymentDateMutationResult = NonNullable<Awaited<ReturnType<typeof bulkSetDiariaPaymentDate>>>
+    export type BulkSetDiariaPaymentDateMutationBody = BodyType<BulkSetPaymentDateInput>
+    export type BulkSetDiariaPaymentDateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Apply a payment date to multiple daily rates at once (admin only)
+ */
+export const useBulkSetDiariaPaymentDate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkSetDiariaPaymentDate>>, TError,{data: BodyType<BulkSetPaymentDateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkSetDiariaPaymentDate>>,
+        TError,
+        {data: BodyType<BulkSetPaymentDateInput>},
+        TContext
+      > => {
+      return useMutation(getBulkSetDiariaPaymentDateMutationOptions(options));
     }
 
 export const getSetDiariaPaymentDateUrl = (id: number,) => {
