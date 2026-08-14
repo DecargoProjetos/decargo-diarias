@@ -1,0 +1,27 @@
+kind = "slides"
+previewPath = "/guia-gestor-diarias/"
+title = "Guia do Gestor — DECARGO Diárias"
+version = "1.0.0"
+id = "artifacts/guia-gestor-diarias"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/guia-gestor-diarias/" ]
+localPort = 18172
+
+[services.development]
+run = "pnpm --filter @workspace/guia-gestor-diarias run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/guia-gestor-diarias", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/guia-gestor-diarias/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18172"
+BASE_PATH = "/guia-gestor-diarias/"

@@ -11,6 +11,7 @@ import {
   useRejectDiaria,
   useRevertDiaria,
   useSetDiariaPaymentDate,
+  useUpdateDiaria,
   useExportDiarias,
 } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -66,6 +67,8 @@ export default function AnaliseDiarias() {
   const [rejectNote, setRejectNote] = useState('');
   const [paymentDateTarget, setPaymentDateTarget] = useState<{ id: number; current: string | null } | null>(null);
   const [paymentDateValue, setPaymentDateValue] = useState('');
+  const [valueTarget, setValueTarget] = useState<{ id: number; current: number | null; providerName: string } | null>(null);
+  const [valueInput, setValueInput] = useState('');
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
   const [exportFallbackDate, setExportFallbackDate] = useState('');
   const [lastResult, setLastResult] = useState<{ title: string; description: string } | null>(null);
@@ -90,6 +93,7 @@ export default function AnaliseDiarias() {
   const bulkApprove = useBulkApproveDiarias();
   const bulkReject = useBulkRejectDiarias();
   const setPaymentDate = useSetDiariaPaymentDate();
+  const updateDiaria = useUpdateDiaria();
   const exportMutation = useExportDiarias();
   const [selectingAllFiltered, setSelectingAllFiltered] = useState(false);
 
@@ -210,6 +214,27 @@ export default function AnaliseDiarias() {
       {
         onSuccess: () => { toast({ title: 'Data de pagamento atualizada.' }); setPaymentDateTarget(null); refreshAll(); },
         onError: (err: any) => toast({ title: 'Erro ao atualizar data', description: err?.response?.data?.error ?? err?.message, variant: 'destructive' }),
+      },
+    );
+  }
+
+  function openValueEdit(id: number, current: number | null, providerName: string) {
+    setValueTarget({ id, current, providerName });
+    setValueInput(current !== null && current !== undefined ? String(current) : '');
+  }
+
+  function confirmValueEdit() {
+    if (!valueTarget) return;
+    const num = Number(valueInput.replace(',', '.'));
+    if (!Number.isFinite(num) || num <= 0) {
+      toast({ title: 'Valor inválido', description: 'Informe um número maior que zero.', variant: 'destructive' });
+      return;
+    }
+    updateDiaria.mutate(
+      { id: valueTarget.id, data: { value: num } },
+      {
+        onSuccess: () => { toast({ title: 'Valor atualizado.' }); setValueTarget(null); refreshAll(); },
+        onError: (err: any) => toast({ title: 'Erro ao atualizar valor', description: err?.response?.data?.error ?? err?.message, variant: 'destructive' }),
       },
     );
   }
@@ -430,7 +455,15 @@ export default function AnaliseDiarias() {
                         </TableCell>
                         <TableCell>{d.teamName}</TableCell>
                         <TableCell>{formatDate(d.workDate)}</TableCell>
-                        <TableCell className="font-medium text-emerald-700">{formatCurrency(d.value)}</TableCell>
+                        <TableCell>
+                          <button
+                            className="font-medium text-emerald-700 text-left hover:underline"
+                            onClick={() => openValueEdit(d.id, d.value ?? null, d.providerName)}
+                            title="Editar valor"
+                          >
+                            {formatCurrency(d.value)}
+                          </button>
+                        </TableCell>
                         <TableCell>
                           <button
                             className="text-left hover:underline disabled:no-underline disabled:cursor-not-allowed disabled:text-muted-foreground"
@@ -519,6 +552,37 @@ export default function AnaliseDiarias() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPaymentDateTarget(null)}>Cancelar</Button>
             <Button disabled={!paymentDateValue || setPaymentDate.isPending} onClick={confirmPaymentDate}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Value edit dialog */}
+      <Dialog open={!!valueTarget} onOpenChange={(open) => { if (!open) setValueTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar valor da diária</DialogTitle>
+            <DialogDescription>
+              {valueTarget?.providerName} — valor atual: {formatCurrency(valueTarget?.current)}.
+              A alteração fica registrada no histórico de auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Novo valor (R$)</label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={valueInput}
+              onChange={(e) => setValueInput(e.target.value)}
+              placeholder="Ex.: 150.00"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setValueTarget(null)}>Cancelar</Button>
+            <Button disabled={!valueInput || updateDiaria.isPending} onClick={confirmValueEdit}>
+              {updateDiaria.isPending ? <Loader2 className="animate-spin mr-2" size={16} /> : null}
+              Salvar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

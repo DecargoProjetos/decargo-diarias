@@ -1,0 +1,19 @@
+[
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789001","position":1,"filepath":"src/pages/slides/Slide01Cover.tsx","title":"Capa","description":"Slide de abertura — DECARGO Diárias: Guia do Gestor","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789002","position":2,"filepath":"src/pages/slides/Slide02Conceito.tsx","title":"O que são Diárias?","description":"Definição e papel das diárias no sistema","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789003","position":3,"filepath":"src/pages/slides/Slide03Acesso.tsx","title":"Acesso ao Sistema","description":"Como acessar o sistema DECARGO Diárias","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789004","position":4,"filepath":"src/pages/slides/Slide04Interface.tsx","title":"A Interface do Gestor","description":"Menu lateral e seções principais","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789005","position":5,"filepath":"src/pages/slides/Slide05Calendario.tsx","title":"Navegando pelo Calendário","description":"Como usar o calendário de diárias","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789006","position":6,"filepath":"src/pages/slides/Slide06Passo1.tsx","title":"Registrando uma Diária — Passo 1","description":"Como abrir o formulário de registro","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789007","position":7,"filepath":"src/pages/slides/Slide07Passo2.tsx","title":"Registrando uma Diária — Passo 2","description":"Campos do formulário de registro","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789008","position":8,"filepath":"src/pages/slides/Slide08Lote.tsx","title":"Registro em Lote","description":"Várias diárias no mesmo dia","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789009","position":9,"filepath":"src/pages/slides/Slide09AposRegistro.tsx","title":"O que Acontece após o Registro?","description":"Fluxo de aprovação das diárias","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789010","position":10,"filepath":"src/pages/slides/Slide10Status.tsx","title":"Entendendo os Status","description":"Significado de cada status de diária","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789011","position":11,"filepath":"src/pages/slides/Slide11Consulta.tsx","title":"Consultando as Diárias da Equipe","description":"Tela de consulta de diárias","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789012","position":12,"filepath":"src/pages/slides/Slide12Filtros.tsx","title":"Filtrando os Registros","description":"Como usar os filtros da tela","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789013","position":13,"filepath":"src/pages/slides/Slide13Cancelar.tsx","title":"Cancelando um Registro","description":"Como cancelar uma diária","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789014","position":14,"filepath":"src/pages/slides/Slide14Editar.tsx","title":"Editando um Registro","description":"Como editar uma diária existente","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789015","position":15,"filepath":"src/pages/slides/Slide15Permissoes.tsx","title":"O Que o Gestor Pode Fazer","description":"Permissões e limitações do papel Gestor","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789016","position":16,"filepath":"src/pages/slides/Slide16BoasPraticas.tsx","title":"Boas Práticas de Registro","description":"Recomendações para registro correto","speakerNotes":""},
+  {"id":"c3d4e5f6-a7b8-9012-cdef-123456789017","position":17,"filepath":"src/pages/slides/Slide17Resumo.tsx","title":"Resumo — Fluxo Completo","description":"Checklist do fluxo completo de registro","speakerNotes":""}
+]

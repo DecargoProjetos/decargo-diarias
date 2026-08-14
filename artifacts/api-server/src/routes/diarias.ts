@@ -665,7 +665,14 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
   if (workDate !== undefined) updates.workDate = workDate;
   if (startTime !== undefined) updates.startTime = startTime;
   if (endTime !== undefined) updates.endTime = endTime;
-  if (value !== undefined) updates.value = String(value);
+  if (value !== undefined) {
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num) || num <= 0) {
+      res.status(400).json({ error: "Valor inválido: informe um número maior que zero" });
+      return;
+    }
+    updates.value = num.toFixed(2);
+  }
   if (paymentDate !== undefined) updates.paymentDate = paymentDate;
   if (observations !== undefined) updates.observations = observations;
   if (typeId !== undefined) {

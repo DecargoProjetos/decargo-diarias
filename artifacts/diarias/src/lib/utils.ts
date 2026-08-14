@@ -15,7 +15,14 @@ export function formatCurrency(value: number | null | undefined): string {
 
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '---';
+  // Datas "date-only" (yyyy-MM-dd) não podem passar por new Date(),
+  // que interpreta como meia-noite UTC e volta um dia no fuso do Brasil.
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`;
+  }
   const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return '---';
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: '2-digit',
