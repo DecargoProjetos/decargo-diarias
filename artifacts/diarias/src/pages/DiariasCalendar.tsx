@@ -31,9 +31,10 @@ import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn, formatCurrency, statusColors, statusLabels } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Plus, Edit2, X, Save, Trash2, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Edit2, X, Save, Trash2, AlertTriangle, FileUp } from 'lucide-react';
 import { Link } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
+import ImportarPlanilhaDialog from '@/components/ImportarPlanilhaDialog';
 
 // Referência visual: app de Calendário do Android — grade mensal com
 // indicador de quantidade por dia, alternância mensal/semanal/diária e um
@@ -70,6 +71,7 @@ export default function DiariasCalendar() {
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const canCreate = user?.role === 'admin' || user?.role === 'gestor';
 
@@ -157,7 +159,13 @@ export default function DiariasCalendar() {
           <p className="text-muted-foreground mt-1">Consulte, registre e edite diárias direto no calendário.</p>
         </div>
 
-        <div className="flex rounded-md border overflow-hidden">
+        <div className="flex items-center gap-3">
+          {canCreate && (
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+              <FileUp size={14} className="mr-2" /> Importar Planilha
+            </Button>
+          )}
+          <div className="flex rounded-md border overflow-hidden">
           {(['month', 'week', 'day'] as ViewMode[]).map(mode => (
             <button
               key={mode}
@@ -170,8 +178,15 @@ export default function DiariasCalendar() {
               {mode === 'month' ? 'Mês' : mode === 'week' ? 'Semana' : 'Dia'}
             </button>
           ))}
+          </div>
         </div>
       </div>
+
+      <ImportarPlanilhaDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImportDone={refetch}
+      />
 
       <Card>
         <CardContent className="p-4 space-y-4">
