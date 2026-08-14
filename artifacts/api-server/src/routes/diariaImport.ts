@@ -14,22 +14,35 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 function parseDateField(raw: unknown): string | null {
   if (raw === null || raw === undefined || raw === "") return null;
-  // xlsx with raw:false usually gives "dd/mm/yyyy" for date cells
-  const s = String(raw).trim();
-  // dd/mm/yyyy
-  const dmy = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
-  if (dmy) {
-    const iso = `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+
+  // JS Date object — comes from cellDates:true in XLSX.read; most reliable path
+  if (raw instanceof Date) {
+    if (isNaN(raw.getTime())) return null;
+    const y = raw.getFullYear();
+    const m = String(raw.getMonth() + 1).padStart(2, "0");
+    const d = String(raw.getDate()).padStart(2, "0");
+    const iso = `${y}-${m}-${d}`;
     return isCalendarDate(iso) ? iso : null;
   }
+
+  const s = String(raw).trim();
+
+  // dd/mm/yyyy (formato brasileiro padrão)
+  const dmy4 = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+  if (dmy4) {
+    const iso = `${dmy4[3]}-${dmy4[2].padStart(2, "0")}-${dmy4[1].padStart(2, "0")}`;
+    return isCalendarDate(iso) ? iso : null;
+  }
+
   // yyyy-MM-dd
   const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (ymd) return isCalendarDate(s) ? s : null;
-  // Excel serial number (raw:true path)
+
+  // Excel serial number (fallback for raw:true without cellDates)
   const n = Number(s);
-  if (!Number.isNaN(n) && n > 0) {
+  if (!Number.isNaN(n) && n > 1000) {
     const parsed = XLSX.SSF.parse_date_code(n);
-    if (parsed) {
+    if (parsed && parsed.y > 1900) {
       const iso = `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
       return isCalendarDate(iso) ? iso : null;
     }
@@ -67,12 +80,26 @@ function parseValueField(raw: unknown): number | null {
 }
 
 function parseSheetRows(buffer: Buffer): Record<string, unknown>[] {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: false });
+  // cellDates:true → XLSX parses date cells as JS Date objects, bypassing
+  // locale-specific formatting (avoids "M/D/YY" vs "dd/mm/yyyy" ambiguity).
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws) return [];
-  // raw:false → formats numbers/dates as strings using SSF
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", raw: false });
+  // raw:true → preserves Date objects and numeric types; do NOT use raw:false
+  // here because it re-serialises dates through SSF and loses the Date type.
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", raw: true });
   return rows;
+}
+
+// Convert a cell value to a plain string, formatting Date objects as dd/mm/yyyy
+// so that (a) parseDateField can parse them and (b) the preview table looks right.
+function cellToString(v: unknown): string {
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    const d = String(v.getDate()).padStart(2, "0");
+    const m = String(v.getMonth() + 1).padStart(2, "0");
+    return `${d}/${m}/${v.getFullYear()}`;
+  }
+  return String(v ?? "");
 }
 
 // Map a raw sheet row (by position) to named fields regardless of header casing
@@ -81,7 +108,7 @@ function extractFields(row: Record<string, unknown>, headers: string[]) {
   return {
     prestadorRaw: get(0),
     tipoRaw:      get(1),
-    dataRaw:      get(2),
+    dataRaw:      cellToString(get(2)), // always a readable string
     horarioIni:   get(3),
     horarioFim:   get(4),
     observacoes:  get(5),
