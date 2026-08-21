@@ -34,6 +34,7 @@ export * from './getReportDiariasParams';
 export * from './healthStatus';
 export * from './listAuditLogsParams';
 export * from './listDiariaIdsParams';
+export * from './listDiariasHasPaymentDate';
 export * from './listDiariasParams';
 export * from './listDiariasStatus';
 export * from './listProvidersParams';

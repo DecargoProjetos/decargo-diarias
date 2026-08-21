@@ -5,6 +5,7 @@
  * Controle de Diárias de Prestadores de Serviços
  * OpenAPI spec version: 0.1.0
  */
+import type { ListDiariasHasPaymentDate } from './listDiariasHasPaymentDate';
 import type { ListDiariasStatus } from './listDiariasStatus';
 
 export type ListDiariasParams = {
@@ -50,6 +51,11 @@ maxValue?: number | null;
  * @nullable
  */
 value?: number | null;
+/**
+ * Filtra diárias com ou sem data de pagamento
+ * @nullable
+ */
+hasPaymentDate?: ListDiariasHasPaymentDate;
 /**
  * @nullable
  */

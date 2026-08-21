@@ -267,6 +267,8 @@ export interface DiariaActionNote {
 
 export interface ExportInput {
   diariaIds: number[];
+  /** Data de pagamento usada como alternativa para diárias extras sem data definida. */
+  paymentDate?: string;
 }
 
 export interface BulkActionFailure {
@@ -473,6 +475,11 @@ maxValue?: number | null;
  */
 value?: number | null;
 /**
+ * Filtra diárias com ou sem data de pagamento
+ * @nullable
+ */
+hasPaymentDate?: ListDiariasHasPaymentDate;
+/**
  * @nullable
  */
 page?: number | null;
@@ -495,6 +502,14 @@ export const ListDiariasStatus = {
   exportada: 'exportada',
   paga: 'paga',
   cancelada: 'cancelada',
+} as const;
+
+export type ListDiariasHasPaymentDate = typeof ListDiariasHasPaymentDate[keyof typeof ListDiariasHasPaymentDate] | null;
+
+
+export const ListDiariasHasPaymentDate = {
+  sim: 'sim',
+  nao: 'nao',
 } as const;
 
 export type GetDiariasAnaliseSummaryParams = {

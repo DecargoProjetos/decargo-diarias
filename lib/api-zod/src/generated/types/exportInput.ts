@@ -8,4 +8,6 @@
 
 export interface ExportInput {
   diariaIds: number[];
+  /** Data de pagamento usada como alternativa para diárias extras sem data definida. */
+  paymentDate?: Date;
 }

@@ -477,6 +477,12 @@ paths:
           description: Valor exato da diária
           schema:
             type: ["number", "null"]
+        - name: hasPaymentDate
+          in: query
+          description: Filtra diárias com ou sem data de pagamento
+          schema:
+            type: ["string", "null"]
+            enum: [sim, nao, null]
         - name: page
           in: query
           schema:
@@ -1419,6 +1425,10 @@ components:
           type: array
           items:
             type: integer
+        paymentDate:
+          type: string
+          format: date
+          description: Data de pagamento usada como alternativa para diárias extras sem data definida.
       required: [diariaIds]
 
     ExportResult:

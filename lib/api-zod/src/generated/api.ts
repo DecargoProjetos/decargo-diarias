@@ -351,6 +351,7 @@ export const ListDiariasQueryParams = zod.object({
   "minValue": zod.coerce.number().nullish(),
   "maxValue": zod.coerce.number().nullish(),
   "value": zod.coerce.number().nullish().describe('Valor exato da diária'),
+  "hasPaymentDate": zod.union([zod.literal('sim'),zod.literal('nao'),zod.literal(null)]).nullish().describe('Filtra diárias com ou sem data de pagamento'),
   "page": zod.coerce.number().nullish(),
   "pageSize": zod.coerce.number().nullish()
 })
@@ -857,7 +858,8 @@ export const MarkDiariaPaidResponse = zod.object({
  * @summary Export approved daily rates to DECARGO People (admin only)
  */
 export const ExportDiariasBody = zod.object({
-  "diariaIds": zod.array(zod.number())
+  "diariaIds": zod.array(zod.number()),
+  "paymentDate": zod.coerce.date().optional().describe('Data de pagamento usada como alternativa para diárias extras sem data definida.')
 })
 
 export const ExportDiariasResponse = zod.object({

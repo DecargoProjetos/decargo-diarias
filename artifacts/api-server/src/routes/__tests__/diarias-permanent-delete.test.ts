@@ -23,7 +23,7 @@ let adminToken: string;
 let gestorToken: string;
 const createdDiariaIds: number[] = [];
 
-async function createDiaria(status: "pendente_aprovacao" | "exportada" | "paga") {
+async function createDiaria(status: "pendente_aprovacao" | "disponivel_exportacao" | "exportada" | "paga") {
   const [diaria] = await db
     .insert(diariasTable)
     .values({
@@ -171,5 +171,22 @@ describe("DELETE /api/diarias/:id — permanent deletion", () => {
     expect(response.status).toBe(400);
     const [stillThere] = await db.select({ id: diariasTable.id }).from(diariasTable).where(eq(diariasTable.id, id));
     expect(stillThere?.id).toBe(id);
+  });
+
+  it("blocks deletion while an export reservation is in progress", async () => {
+    const id = await createDiaria("disponivel_exportacao");
+    await db
+      .update(diariasTable)
+      .set({ integrationId: "__TEST_EXPORT_RESERVATION__" })
+      .where(eq(diariasTable.id, id));
+
+    const response = await deleteRequest(id, adminToken);
+
+    expect(response.status).toBe(400);
+    const [stillThere] = await db
+      .select({ id: diariasTable.id, integrationId: diariasTable.integrationId })
+      .from(diariasTable)
+      .where(eq(diariasTable.id, id));
+    expect(stillThere).toEqual({ id, integrationId: "__TEST_EXPORT_RESERVATION__" });
   });
 });

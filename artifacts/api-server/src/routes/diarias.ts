@@ -9,7 +9,7 @@ import {
   teamsTable,
   usersTable,
 } from "@workspace/db";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { randomUUID } from "crypto";
@@ -572,6 +572,37 @@ router.post("/export", requireRole("admin"), async (req, res) => {
 
   const integrationRef = `EXP-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
   const now = new Date();
+
+  // Reserve every record before sending any payload externally. This is the
+  // synchronization point shared with permanent deletion: a reservation keeps
+  // the record locally available but makes it ineligible for deletion or a
+  // second export while DECARGO People processes the request.
+  try {
+    await db.transaction(async (tx) => {
+      const reserved = await tx
+        .update(diariasTable)
+        .set({ integrationId: integrationRef, updatedAt: now })
+        .where(and(
+          inArray(diariasTable.id, diariaIds),
+          eq(diariasTable.status, "disponivel_exportacao"),
+          isNull(diariasTable.integrationId),
+        ))
+        .returning({ id: diariasTable.id });
+
+      if (reserved.length !== diariaIds.length) {
+        const error = new Error("Uma ou mais diárias foram alteradas durante a preparação da exportação");
+        (error as Error & { code?: string }).code = "EXPORT_RESERVATION_CONFLICT";
+        throw error;
+      }
+    });
+  } catch (error) {
+    if ((error as { code?: string }).code === "EXPORT_RESERVATION_CONFLICT") {
+      res.status(409).json({ error: "Uma ou mais diárias já estão sendo exportadas ou foram alteradas" });
+      return;
+    }
+    throw error;
+  }
+
   const allFailedLocalIds = new Set<number>();
 
   // --- Export Diárias Extras ---
@@ -592,7 +623,15 @@ router.post("/export", requireRole("admin"), async (req, res) => {
         }),
       );
     } catch (err) {
-      res.status(502).json({ error: `Falha ao enviar diárias extras: ${err instanceof Error ? err.message : String(err)}` });
+      await Promise.all(diariaIds.map((id) => logAudit({
+        entityType: "diaria",
+        entityId: id,
+        action: "exportacao_aguardando_conferencia",
+        userId: me.id,
+        oldValues: { status: "disponivel_exportacao" },
+        newValues: { integrationId: integrationRef },
+      })));
+      res.status(502).json({ error: `Falha ao enviar diárias extras; os registros foram bloqueados para conferência: ${err instanceof Error ? err.message : String(err)}` });
       return;
     }
     for (const e of extraResult.errors ?? []) {
@@ -619,7 +658,15 @@ router.post("/export", requireRole("admin"), async (req, res) => {
         }),
       );
     } catch (err) {
-      res.status(502).json({ error: `Falha ao enviar faltas para o DECARGO People: ${err instanceof Error ? err.message : String(err)}` });
+      await Promise.all(diariaIds.map((id) => logAudit({
+        entityType: "diaria",
+        entityId: id,
+        action: "exportacao_aguardando_conferencia",
+        userId: me.id,
+        oldValues: { status: "disponivel_exportacao" },
+        newValues: { integrationId: integrationRef },
+      })));
+      res.status(502).json({ error: `Falha ao enviar faltas para o DECARGO People; os registros foram bloqueados para conferência: ${err instanceof Error ? err.message : String(err)}` });
       return;
     }
     for (const e of faltaResult.errors ?? []) {
@@ -629,6 +676,19 @@ router.post("/export", requireRole("admin"), async (req, res) => {
   }
 
   const succeededIds = diariaIds.filter((id) => !allFailedLocalIds.has(id));
+
+  // A known rejection from DECARGO People is safe to retry, so release only
+  // those reservations. Unknown transport failures intentionally remain
+  // reserved above to prevent a duplicate financial integration.
+  if (allFailedLocalIds.size > 0) {
+    await db
+      .update(diariasTable)
+      .set({ integrationId: null, updatedAt: now })
+      .where(and(
+        inArray(diariasTable.id, [...allFailedLocalIds]),
+        eq(diariasTable.integrationId, integrationRef),
+      ));
+  }
 
   if (succeededIds.length > 0) {
     // Persist fallback payment date for diária_extra rows that needed it
@@ -773,24 +833,21 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;
   const id = Number(req.params.id);
 
-  const [diaria] = await db
-    .select()
-    .from(diariasTable)
-    .where(eq(diariasTable.id, id))
-    .limit(1);
+  const deleted = await db.transaction(async (tx) => {
+    // The conditional delete is atomic with export reservation: if an export
+    // claims the row first, integrationId is populated and this delete affects
+    // no rows; if deletion wins, export cannot reserve or send the row.
+    const [diaria] = await tx
+      .delete(diariasTable)
+      .where(and(
+        eq(diariasTable.id, id),
+        isNull(diariasTable.integrationId),
+        notInArray(diariasTable.status, ["exportada", "paga"]),
+      ))
+      .returning();
 
-  if (!diaria) { res.status(404).json({ error: "Diária não encontrada" }); return; }
+    if (!diaria) return null;
 
-  // Never physically remove a record already sent to DECARGO People or marked
-  // as paid: removing it locally would make financial reconciliation impossible.
-  const nonDeletable = ["exportada", "paga"];
-  if (nonDeletable.includes(diaria.status)) {
-    res.status(400).json({ error: "Diária exportada ou paga não pode ser excluída" });
-    return;
-  }
-
-  await db.transaction(async (tx) => {
-    await tx.delete(diariasTable).where(eq(diariasTable.id, id));
     await tx.insert(auditLogsTable).values({
       entityType: "diaria",
       entityId: id,
@@ -807,7 +864,19 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
       newValues: { deleted: true },
       timestamp: new Date(),
     });
+    return diaria;
   });
+
+  if (!deleted) {
+    const [current] = await db
+      .select({ id: diariasTable.id })
+      .from(diariasTable)
+      .where(eq(diariasTable.id, id))
+      .limit(1);
+    if (!current) { res.status(404).json({ error: "Diária não encontrada" }); return; }
+    res.status(400).json({ error: "Diária exportada, paga ou em processo de exportação não pode ser excluída" });
+    return;
+  }
 
   res.json({ id, deleted: true });
 });
