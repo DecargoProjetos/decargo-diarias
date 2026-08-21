@@ -14,6 +14,7 @@ import {
   useSetDiariaPaymentDate,
   useUpdateDiaria,
   useExportDiarias,
+  useDeleteDiaria,
 } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,7 +28,7 @@ import { formatCurrency, formatDate, statusColors, statusLabels } from '@/lib/ut
 import { useToast } from '@/hooks/use-toast';
 import {
   CheckCircle2, XCircle, Filter, CalendarClock, FileDown, Loader2,
-  Clock, ThumbsUp, ThumbsDown, PackageCheck, X, RotateCcw,
+  Clock, ThumbsUp, ThumbsDown, PackageCheck, X, RotateCcw, Trash2,
 } from 'lucide-react';
 import { Link } from 'wouter';
 
@@ -102,6 +103,7 @@ export default function AnaliseDiarias() {
   const bulkSetPaymentDate = useBulkSetDiariaPaymentDate();
   const updateDiaria = useUpdateDiaria();
   const exportMutation = useExportDiarias();
+  const deleteDiaria = useDeleteDiaria();
   const [selectingAllFiltered, setSelectingAllFiltered] = useState(false);
   const [applyingPaymentDate, setApplyingPaymentDate] = useState(false);
 
@@ -333,7 +335,22 @@ export default function AnaliseDiarias() {
     });
   }
 
-  const isBusy = approve.isPending || reject.isPending || revert.isPending || bulkApprove.isPending || bulkReject.isPending || exportMutation.isPending || bulkSetPaymentDate.isPending || applyingPaymentDate;
+  function handlePermanentDelete(id: number, providerName: string) {
+    if (!confirm(`Excluir permanentemente a diária de ${providerName}? Esta ação não pode ser desfeita.`)) return;
+    deleteDiaria.mutate({ id }, {
+      onSuccess: () => {
+        toast({ title: 'Diária excluída permanentemente.' });
+        refreshAll();
+      },
+      onError: (err: any) => toast({
+        title: 'Erro ao excluir diária',
+        description: err?.response?.data?.error ?? err?.message,
+        variant: 'destructive',
+      }),
+    });
+  }
+
+  const isBusy = approve.isPending || reject.isPending || revert.isPending || bulkApprove.isPending || bulkReject.isPending || exportMutation.isPending || bulkSetPaymentDate.isPending || deleteDiaria.isPending || applyingPaymentDate;
 
   return (
     <div className="space-y-6">
@@ -522,6 +539,7 @@ export default function AnaliseDiarias() {
                   {rows.map((d) => {
                     const isLocked = d.status === 'exportada' || d.status === 'paga' || d.status === 'cancelada';
                     const canApproveReject = d.status === 'pendente_aprovacao' || d.status === 'em_analise';
+                    const canDelete = d.status !== 'exportada' && d.status !== 'paga';
                     return (
                       <TableRow key={d.id} data-state={selected.has(d.id) ? 'selected' : undefined}>
                         <TableCell>
@@ -576,6 +594,18 @@ export default function AnaliseDiarias() {
                             {!isLocked && !canApproveReject && (
                               <Button size="sm" variant="outline" className="h-8 px-2 text-muted-foreground hover:bg-muted" disabled={isBusy} onClick={() => handleRevert(d.id)} title="Reverter para pendente">
                                 <RotateCcw size={14} />
+                              </Button>
+                            )}
+                            {canDelete && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2 text-destructive border-destructive/30 hover:bg-destructive/10"
+                                disabled={isBusy}
+                                onClick={() => handlePermanentDelete(d.id, d.providerName)}
+                                title="Excluir permanentemente"
+                              >
+                                <Trash2 size={14} />
                               </Button>
                             )}
                           </div>

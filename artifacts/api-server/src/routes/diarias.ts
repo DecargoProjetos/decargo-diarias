@@ -766,7 +766,8 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
   res.json(result);
 });
 
-// DELETE /api/diarias/:id (cancel) — admin only, same rationale as PATCH above
+// DELETE /api/diarias/:id (permanent) — admin only.
+// Audit records deliberately remain as an immutable trace of the deletion.
 router.delete("/:id", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;
   const id = Number(req.params.id);
@@ -779,29 +780,33 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
 
   if (!diaria) { res.status(404).json({ error: "Diária não encontrada" }); return; }
 
-  const nonCancellable = ["exportada", "paga", "cancelada"];
-  if (nonCancellable.includes(diaria.status)) {
-    res.status(400).json({ error: "Diária não pode ser cancelada no status atual" });
+  // Never physically remove a record already sent to DECARGO People or marked
+  // as paid: removing it locally would make financial reconciliation impossible.
+  const nonDeletable = ["exportada", "paga"];
+  if (nonDeletable.includes(diaria.status)) {
+    res.status(400).json({ error: "Diária exportada ou paga não pode ser excluída" });
     return;
   }
 
-  const now = new Date();
-  await db
-    .update(diariasTable)
-    .set({ status: "cancelada", cancelledAt: now, cancelledBy: me.id, updatedAt: now })
-    .where(eq(diariasTable.id, id));
+  await db.delete(diariasTable).where(eq(diariasTable.id, id));
 
   await logAudit({
     entityType: "diaria",
     entityId: id,
-    action: "cancelado",
+    action: "excluido_permanentemente",
     userId: me.id,
-    oldValues: { status: diaria.status },
-    newValues: { status: "cancelada" },
+    oldValues: {
+      status: diaria.status,
+      providerId: diaria.providerId,
+      teamId: diaria.teamId,
+      workDate: diaria.workDate,
+      value: diaria.value,
+      paymentDate: diaria.paymentDate,
+    },
+    newValues: { deleted: true },
   });
 
-  const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
-  res.json(result);
+  res.json({ id, deleted: true });
 });
 
 // POST /api/diarias/:id/revert (admin) — returns a non-locked diária to pendente_aprovacao

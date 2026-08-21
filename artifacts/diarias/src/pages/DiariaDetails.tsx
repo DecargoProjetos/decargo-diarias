@@ -49,7 +49,7 @@ export default function DiariaDetails() {
     
     actionFn.mutate(payload, {
       onSuccess: () => {
-        toast({ title: 'Ação realizada com sucesso.' });
+        toast({ title: isDelete ? 'Diária excluída permanentemente.' : 'Ação realizada com sucesso.' });
         if (isDelete) {
           setLocation('/diarias');
         } else {
@@ -58,7 +58,11 @@ export default function DiariaDetails() {
           setNote('');
         }
       },
-      onError: () => toast({ title: 'Erro ao realizar ação', variant: 'destructive' })
+      onError: (err: any) => toast({
+        title: isDelete ? 'Erro ao excluir diária' : 'Erro ao realizar ação',
+        description: err?.response?.data?.error ?? err?.message,
+        variant: 'destructive',
+      })
     });
   };
 
@@ -114,13 +118,13 @@ export default function DiariaDetails() {
             </Button>
           )}
 
-          {isAdmin && (diaria.status === 'pendente_aprovacao' || diaria.status === 'rejeitada') && (
+          {isAdmin && !['exportada', 'paga'].includes(diaria.status) && (
             <Button variant="destructive" onClick={() => {
-              if (confirm('Tem certeza que deseja excluir esta diária?')) {
+              if (confirm('Excluir esta diária permanentemente? Esta ação não pode ser desfeita.')) {
                 handleAction(deleteDiaria, true);
               }
             }}>
-              <Trash2 className="w-4 h-4 mr-2" /> Excluir
+              <Trash2 className="w-4 h-4 mr-2" /> Excluir permanentemente
             </Button>
           )}
         </div>

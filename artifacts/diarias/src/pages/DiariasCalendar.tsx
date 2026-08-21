@@ -398,8 +398,8 @@ function DayAgenda({
   // Diária, uma vez salva, nunca é editável pelo gestor — correção é
   // exclusiva do admin (via fluxo de aprovação/solicitação de correção).
   const canEdit = (_d: Diaria) => user.role === 'admin';
-  // Cancelamento só faz sentido para diárias que ainda não estão em estado terminal.
-  const canDelete = (d: Diaria) => user.role === 'admin' && !['cancelada', 'exportada', 'paga'].includes(d.status);
+  // Exclusão permanente é exclusiva do admin e nunca é permitida após integração financeira.
+  const canDelete = (d: Diaria) => user.role === 'admin' && !['exportada', 'paga'].includes(d.status);
 
   const resetGrid = () => setGridRows([makeEmptyGridRow()]);
 
@@ -517,11 +517,15 @@ function DayAgenda({
   const handleDelete = (id: number) => {
     deleteMutation.mutate({ id }, {
       onSuccess: () => {
-        toast({ title: 'Diária cancelada.' });
+        toast({ title: 'Diária excluída permanentemente.' });
         setConfirmDeleteId(null);
         onChanged();
       },
-      onError: (err: any) => toast({ title: 'Erro ao cancelar', description: err?.message, variant: 'destructive' }),
+      onError: (err: any) => toast({
+        title: 'Erro ao excluir diária',
+        description: err?.response?.data?.error ?? err?.message,
+        variant: 'destructive',
+      }),
     });
   };
 
@@ -638,7 +642,7 @@ function DayAgenda({
                   <div className="flex items-center gap-1">
                     {canDelete(d) && confirmDeleteId === d.id ? (
                       <>
-                        <span className="text-xs text-destructive mr-1">Cancelar diária?</span>
+                        <span className="text-xs text-destructive mr-1">Excluir permanentemente?</span>
                         <Button size="sm" variant="destructive" className="h-6 text-xs px-2" onClick={() => handleDelete(d.id)} disabled={deleteMutation.isPending}>
                           Sim
                         </Button>
