@@ -515,6 +515,23 @@ export const BulkRejectDiariasResponse = zod.object({
 
 
 /**
+ * @summary Apply a payment date to multiple daily rates at once (admin only)
+ */
+export const BulkSetDiariaPaymentDateBody = zod.object({
+  "diariaIds": zod.array(zod.number()),
+  "paymentDate": zod.coerce.date()
+})
+
+export const BulkSetDiariaPaymentDateResponse = zod.object({
+  "succeeded": zod.array(zod.number()),
+  "failed": zod.array(zod.object({
+  "id": zod.number(),
+  "reason": zod.string()
+}))
+})
+
+
+/**
  * @summary Set/update the payment date of a daily rate (admin only, blocked after export)
  */
 export const SetDiariaPaymentDateParams = zod.object({
@@ -633,13 +650,26 @@ export const UpdateDiariaResponse = zod.object({
 
 
 /**
- * @summary Cancel a daily rate
+ * @summary Permanently delete a daily rate (admin only)
  */
 export const DeleteDiariaParams = zod.object({
   "id": zod.coerce.number()
 })
 
 export const DeleteDiariaResponse = zod.object({
+  "id": zod.number(),
+  "deleted": zod.boolean()
+})
+
+
+/**
+ * @summary Revert an eligible daily rate to pending review (admin only)
+ */
+export const RevertDiariaParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RevertDiariaResponse = zod.object({
   "id": zod.number(),
   "providerId": zod.number(),
   "providerName": zod.string(),
@@ -827,8 +857,7 @@ export const MarkDiariaPaidResponse = zod.object({
  * @summary Export approved daily rates to DECARGO People (admin only)
  */
 export const ExportDiariasBody = zod.object({
-  "diariaIds": zod.array(zod.number()),
-  "paymentDate": zod.string().optional()
+  "diariaIds": zod.array(zod.number())
 })
 
 export const ExportDiariasResponse = zod.object({

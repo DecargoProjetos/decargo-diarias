@@ -29,6 +29,7 @@ import type {
   DashboardSummary,
   Diaria,
   DiariaActionNote,
+  DiariaDeletionResult,
   DiariaIdsResult,
   DiariaInput,
   DiariaUpdate,
@@ -1961,6 +1962,10 @@ export const useBulkRejectDiarias = <TError = ErrorType<unknown>,
     }
 
 export const getBulkSetDiariaPaymentDateUrl = () => {
+
+
+
+
   return `/api/diarias/bulk-set-payment-date`
 }
 
@@ -1968,6 +1973,7 @@ export const getBulkSetDiariaPaymentDateUrl = () => {
  * @summary Apply a payment date to multiple daily rates at once (admin only)
  */
 export const bulkSetDiariaPaymentDate = async (bulkSetPaymentDateInput: BulkSetPaymentDateInput, options?: RequestInit): Promise<BulkActionResult> => {
+
   return customFetch<BulkActionResult>(getBulkSetDiariaPaymentDateUrl(),
   {
     ...options,
@@ -1977,9 +1983,14 @@ export const bulkSetDiariaPaymentDate = async (bulkSetPaymentDateInput: BulkSetP
   }
 );}
 
+
+
+
+
 export const getBulkSetDiariaPaymentDateMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkSetDiariaPaymentDate>>, TError,{data: BodyType<BulkSetPaymentDateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof bulkSetDiariaPaymentDate>>, TError,{data: BodyType<BulkSetPaymentDateInput>}, TContext> => {
+
 const mutationKey = ['bulkSetDiariaPaymentDate'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
@@ -1987,10 +1998,19 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {...options, mutation: {...options.mutation, mutationKey}}
       : {mutation: { mutationKey, }, request: undefined};
 
+
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkSetDiariaPaymentDate>>, {data: BodyType<BulkSetPaymentDateInput>}> = (props) => {
           const {data} = props ?? {};
-          return  bulkSetDiariaPaymentDate(data, requestOptions)
+
+          return  bulkSetDiariaPaymentDate(data,requestOptions)
         }
+
+
+
+
+
 
   return  { mutationFn, ...mutationOptions }}
 
@@ -2242,11 +2262,11 @@ export const getDeleteDiariaUrl = (id: number,) => {
 }
 
 /**
- * @summary Cancel a daily rate
+ * @summary Permanently delete a daily rate (admin only)
  */
-export const deleteDiaria = async (id: number, options?: RequestInit): Promise<Diaria> => {
+export const deleteDiaria = async (id: number, options?: RequestInit): Promise<DiariaDeletionResult> => {
 
-  return customFetch<Diaria>(getDeleteDiariaUrl(id),
+  return customFetch<DiariaDeletionResult>(getDeleteDiariaUrl(id),
   {
     ...options,
     method: 'DELETE'
@@ -2259,7 +2279,7 @@ export const deleteDiaria = async (id: number, options?: RequestInit): Promise<D
 
 
 
-export const getDeleteDiariaMutationOptions = <TError = ErrorType<unknown>,
+export const getDeleteDiariaMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDiaria>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteDiaria>>, TError,{id: number}, TContext> => {
 
@@ -2288,12 +2308,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type DeleteDiariaMutationResult = NonNullable<Awaited<ReturnType<typeof deleteDiaria>>>
 
-    export type DeleteDiariaMutationError = ErrorType<unknown>
+    export type DeleteDiariaMutationError = ErrorType<ErrorResponse>
 
     /**
- * @summary Cancel a daily rate
+ * @summary Permanently delete a daily rate (admin only)
  */
-export const useDeleteDiaria = <TError = ErrorType<unknown>,
+export const useDeleteDiaria = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDiaria>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof deleteDiaria>>,
@@ -2302,6 +2322,77 @@ export const useDeleteDiaria = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteDiariaMutationOptions(options));
+    }
+
+export const getRevertDiariaUrl = (id: number,) => {
+
+
+
+
+  return `/api/diarias/${id}/revert`
+}
+
+/**
+ * @summary Revert an eligible daily rate to pending review (admin only)
+ */
+export const revertDiaria = async (id: number, options?: RequestInit): Promise<Diaria> => {
+
+  return customFetch<Diaria>(getRevertDiariaUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevertDiariaMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revertDiaria>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revertDiaria>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['revertDiaria'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revertDiaria>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  revertDiaria(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevertDiariaMutationResult = NonNullable<Awaited<ReturnType<typeof revertDiaria>>>
+
+    export type RevertDiariaMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Revert an eligible daily rate to pending review (admin only)
+ */
+export const useRevertDiaria = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revertDiaria>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revertDiaria>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRevertDiariaMutationOptions(options));
     }
 
 export const getApproveDiariaUrl = (id: number,) => {
@@ -2446,56 +2537,6 @@ export const useRejectDiaria = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRejectDiariaMutationOptions(options));
-    }
-
-export const getRevertDiariaUrl = (id: number,) => {
-  return `/api/diarias/${id}/revert`
-}
-
-/**
- * @summary Revert a daily rate to pending review (admin only)
- */
-export const revertDiaria = async (id: number, options?: RequestInit): Promise<Diaria> => {
-  return customFetch<Diaria>(getRevertDiariaUrl(id), {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-  });
-}
-
-export const getRevertDiariaMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revertDiaria>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof revertDiaria>>, TError,{id: number}, TContext> => {
-const mutationKey = ['revertDiaria'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revertDiaria>>, {id: number}> = (props) => {
-          const {id} = props ?? {};
-          return revertDiaria(id, requestOptions)
-        }
-
-  return { mutationFn, ...mutationOptions }
-}
-
-    export type RevertDiariaMutationResult = NonNullable<Awaited<ReturnType<typeof revertDiaria>>>
-    export type RevertDiariaMutationError = ErrorType<unknown>
-
-    /**
- * @summary Revert a daily rate to pending review (admin only)
- */
-export const useRevertDiaria = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revertDiaria>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof revertDiaria>>,
-        TError,
-        {id: number},
-        TContext
-      > => {
-      return useMutation(getRevertDiariaMutationOptions(options));
     }
 
 export const getRequestCorrectionDiariaUrl = (id: number,) => {

@@ -68,7 +68,7 @@ export function buildDiariaFilters(
 
   if (includeStatus) {
     if (query.status) {
-      conditions.push(`d.status = ${p++}`);
+      conditions.push(`d.status = $${p++}`);
       params.push(query.status);
     } else {
       // Por padrão, diárias canceladas não aparecem em nenhuma listagem.

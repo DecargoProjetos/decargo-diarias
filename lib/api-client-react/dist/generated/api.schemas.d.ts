@@ -14,6 +14,10 @@ export interface ErrorResponse {
 export interface MessageResponse {
     message: string;
 }
+export interface DiariaDeletionResult {
+    id: number;
+    deleted: boolean;
+}
 export type UserRole = typeof UserRole[keyof typeof UserRole];
 export declare const UserRole: {
     readonly admin: "admin";
@@ -420,11 +424,6 @@ export type ListDiariasParams = {
      * @nullable
      */
     value?: number | null;
-    /**
-     * Filtra por presença de data de pagamento: 'sim' = com data, 'nao' = sem data
-     * @nullable
-     */
-    hasPaymentDate?: 'sim' | 'nao' | null;
     /**
      * @nullable
      */

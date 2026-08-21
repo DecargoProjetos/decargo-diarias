@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   db,
   pool,
+  auditLogsTable,
   diariasTable,
   diariaTypesTable,
   providersTable,
@@ -788,22 +789,24 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
     return;
   }
 
-  await db.delete(diariasTable).where(eq(diariasTable.id, id));
-
-  await logAudit({
-    entityType: "diaria",
-    entityId: id,
-    action: "excluido_permanentemente",
-    userId: me.id,
-    oldValues: {
-      status: diaria.status,
-      providerId: diaria.providerId,
-      teamId: diaria.teamId,
-      workDate: diaria.workDate,
-      value: diaria.value,
-      paymentDate: diaria.paymentDate,
-    },
-    newValues: { deleted: true },
+  await db.transaction(async (tx) => {
+    await tx.delete(diariasTable).where(eq(diariasTable.id, id));
+    await tx.insert(auditLogsTable).values({
+      entityType: "diaria",
+      entityId: id,
+      action: "excluido_permanentemente",
+      userId: me.id,
+      oldValues: {
+        status: diaria.status,
+        providerId: diaria.providerId,
+        teamId: diaria.teamId,
+        workDate: diaria.workDate,
+        value: diaria.value,
+        paymentDate: diaria.paymentDate,
+      },
+      newValues: { deleted: true },
+      timestamp: new Date(),
+    });
   });
 
   res.json({ id, deleted: true });

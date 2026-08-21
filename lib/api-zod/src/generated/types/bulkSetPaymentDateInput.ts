@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface ExportInput {
+export interface BulkSetPaymentDateInput {
   diariaIds: number[];
+  paymentDate: Date;
 }
