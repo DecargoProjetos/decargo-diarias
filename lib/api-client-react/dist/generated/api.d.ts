@@ -1,4 +1,183 @@
-ErrorType<unknown>;
+import type { QueryKey, UseMutationOptions, UseMutationResult, UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
+import type { ActivityItem, AuditPage, BulkActionResult, BulkIdsInput, BulkRejectInput, BulkSetPaymentDateInput, CompetenceAuthorization, CompetencePeriod, CompetencePeriodInput, CompetenceRelease, CompetenceReleaseInput, DashboardSummary, Diaria, DiariaActionNote, DiariaDeletionResult, DiariaIdsResult, DiariaInput, DiariaUpdate, DiariasAnaliseSummary, DiariasPage, DiariasReport, ErrorResponse, ExportInput, ExportResult, GetDiariasAnaliseSummaryParams, GetReportDiariasParams, HealthStatus, ListAuditLogsParams, ListDiariaIdsParams, ListDiariasParams, ListProvidersParams, MessageResponse, PaymentDateInput, Provider, ProviderMetrics, ProviderUpdate, SyncResult, Team, TeamInput, TeamMetrics, TeamUpdate, User, UserCreate, UserSyncResult, UserUpdate } from './api.schemas';
+import { customFetch } from '../custom-fetch';
+import type { ErrorType, BodyType } from '../custom-fetch';
+type AwaitedInput<T> = PromiseLike<T> | T;
+type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+export declare const getHealthCheckUrl: () => string;
+/**
+ * @summary Health check
+ */
+export declare const healthCheck: (options?: RequestInit) => Promise<HealthStatus>;
+export declare const getHealthCheckQueryKey: () => readonly ["/api/healthz"];
+export declare const getHealthCheckQueryOptions: <TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData> & {
+    queryKey: QueryKey;
+};
+export type HealthCheckQueryResult = NonNullable<Awaited<ReturnType<typeof healthCheck>>>;
+export type HealthCheckQueryError = ErrorType<unknown>;
+/**
+ * @summary Health check
+ */
+export declare function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+};
+export declare const getGetMeUrl: () => string;
+/**
+ * @summary Get current user session
+ */
+export declare const getMe: (options?: RequestInit) => Promise<User>;
+export declare const getGetMeQueryKey: () => readonly ["/api/auth/me"];
+export declare const getGetMeQueryOptions: <TData = Awaited<ReturnType<typeof getMe>>, TError = ErrorType<ErrorResponse>>(options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData> & {
+    queryKey: QueryKey;
+};
+export type GetMeQueryResult = NonNullable<Awaited<ReturnType<typeof getMe>>>;
+export type GetMeQueryError = ErrorType<ErrorResponse>;
+/**
+ * @summary Get current user session
+ */
+export declare function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = ErrorType<ErrorResponse>>(options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+};
+export declare const getLogoutUrl: () => string;
+/**
+ * @summary End session
+ */
+export declare const logout: (options?: RequestInit) => Promise<MessageResponse>;
+export declare const getLogoutMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>;
+export type LogoutMutationError = ErrorType<unknown>;
+/**
+* @summary End session
+*/
+export declare const useLogout: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+export declare const getListUsersUrl: () => string;
+/**
+ * @summary List all users (admin only)
+ */
+export declare const listUsers: (options?: RequestInit) => Promise<User[]>;
+export declare const getListUsersQueryKey: () => readonly ["/api/users"];
+export declare const getListUsersQueryOptions: <TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData> & {
+    queryKey: QueryKey;
+};
+export type ListUsersQueryResult = NonNullable<Awaited<ReturnType<typeof listUsers>>>;
+export type ListUsersQueryError = ErrorType<unknown>;
+/**
+ * @summary List all users (admin only)
+ */
+export declare function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+};
+export declare const getCreateUserUrl: () => string;
+/**
+ * @summary Manually create a user (admin only)
+ */
+export declare const createUser: (userCreate: UserCreate, options?: RequestInit) => Promise<User>;
+export declare const getCreateUserMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError, {
+        data: BodyType<UserCreate>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError, {
+    data: BodyType<UserCreate>;
+}, TContext>;
+export type CreateUserMutationResult = NonNullable<Awaited<ReturnType<typeof createUser>>>;
+export type CreateUserMutationBody = BodyType<UserCreate>;
+export type CreateUserMutationError = ErrorType<unknown>;
+/**
+* @summary Manually create a user (admin only)
+*/
+export declare const useCreateUser: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError, {
+        data: BodyType<UserCreate>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof createUser>>, TError, {
+    data: BodyType<UserCreate>;
+}, TContext>;
+export declare const getSyncUsersUrl: () => string;
+/**
+ * @summary Sync users (funcionários) from DECARGO People (admin only)
+ */
+export declare const syncUsers: (options?: RequestInit) => Promise<UserSyncResult>;
+export declare const getSyncUsersMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError, void, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError, void, TContext>;
+export type SyncUsersMutationResult = NonNullable<Awaited<ReturnType<typeof syncUsers>>>;
+export type SyncUsersMutationError = ErrorType<unknown>;
+/**
+* @summary Sync users (funcionários) from DECARGO People (admin only)
+*/
+export declare const useSyncUsers: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError, void, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof syncUsers>>, TError, void, TContext>;
+export declare const getGetUserUrl: (id: number) => string;
+/**
+ * @summary Get a user by ID
+ */
+export declare const getUser: (id: number, options?: RequestInit) => Promise<User>;
+export declare const getGetUserQueryKey: (id: number) => readonly [`/api/users/${number}`];
+export declare const getGetUserQueryOptions: <TData = Awaited<ReturnType<typeof getUser>>, TError = ErrorType<ErrorResponse>>(id: number, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getUser>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getUser>>, TError, TData> & {
+    queryKey: QueryKey;
+};
+export type GetUserQueryResult = NonNullable<Awaited<ReturnType<typeof getUser>>>;
+export type GetUserQueryError = ErrorType<ErrorResponse>;
+/**
+ * @summary Get a user by ID
+ */
+export declare function useGetUser<TData = Awaited<ReturnType<typeof getUser>>, TError = ErrorType<ErrorResponse>>(id: number, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getUser>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+};
+export declare const getUpdateUserUrl: (id: number) => string;
+/**
+ * @summary Update user role, team, name, email or status (admin only)
+ */
+export declare const updateUser: (id: number, userUpdate: UserUpdate, options?: RequestInit) => Promise<User>;
+export declare const getUpdateUserMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError, {
+        id: number;
+        data: BodyType<UserUpdate>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError, {
+    id: number;
+    data: BodyType<UserUpdate>;
+}, TContext>;
+export type UpdateUserMutationResult = NonNullable<Awaited<ReturnType<typeof updateUser>>>;
+export type UpdateUserMutationBody = BodyType<UserUpdate>;
+export type UpdateUserMutationError = ErrorType<unknown>;
 /**
 * @summary Update user role, team, name, email or status (admin only)
 */
