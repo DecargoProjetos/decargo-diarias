@@ -19,7 +19,7 @@ export default function Configuracoes() {
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Settings2 size={28} /> Configurações
           </h1>
-          <p className="text-muted-foreground mt-1">Parâmetros do sistema. Acesso restrito a administradores.</p>
+          <p className="text-muted-foreground mt-1">Configure tipos de diária e prazos por competência. Acesso restrito a administradores.</p>
         </div>
       </div>
 
