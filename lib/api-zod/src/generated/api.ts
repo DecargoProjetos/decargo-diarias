@@ -874,6 +874,213 @@ export const ExportDiariasResponse = zod.object({
 
 
 /**
+ * @summary List competence registration periods (admin only)
+ */
+export const ListCompetencePeriodsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "workStartDate": zod.coerce.date(),
+  "workEndDate": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date().describe('Instant shown in America\/Sao_Paulo'),
+  "observations": zod.string().nullish(),
+  "status": zod.enum(['open', 'closed']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.number().nullish()
+})
+export const ListCompetencePeriodsResponse = zod.array(ListCompetencePeriodsResponseItem)
+
+
+/**
+ * @summary Create a competence registration period (admin only)
+ */
+
+
+
+export const CreateCompetencePeriodBody = zod.object({
+  "name": zod.string().min(1),
+  "workStartDate": zod.coerce.date(),
+  "workEndDate": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date(),
+  "observations": zod.string().optional()
+})
+
+export const CreateCompetencePeriodResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "workStartDate": zod.coerce.date(),
+  "workEndDate": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date().describe('Instant shown in America\/Sao_Paulo'),
+  "observations": zod.string().nullish(),
+  "status": zod.enum(['open', 'closed']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.number().nullish()
+})
+
+
+/**
+ * @summary Get authenticated user's registration authorization for a work date
+ */
+export const GetCompetenceWorkDateStatusParams = zod.object({
+  "workDate": zod.date()
+})
+
+export const GetCompetenceWorkDateStatusResponse = zod.object({
+  "allowed": zod.boolean(),
+  "source": zod.enum(['admin', 'no_period', 'period', 'release', 'closed', 'expired']),
+  "periodId": zod.number().optional(),
+  "releaseId": zod.number().optional(),
+  "message": zod.string().optional(),
+  "period": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "workStartDate": zod.coerce.date(),
+  "workEndDate": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date().describe('Instant shown in America\/Sao_Paulo'),
+  "observations": zod.string().nullish(),
+  "status": zod.enum(['open', 'closed']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.number().nullish()
+}).optional()
+})
+
+
+/**
+ * @summary Update a competence registration period (admin only)
+ */
+export const UpdateCompetencePeriodParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateCompetencePeriodBody = zod.object({
+  "name": zod.string().min(1),
+  "workStartDate": zod.coerce.date(),
+  "workEndDate": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date(),
+  "observations": zod.string().optional()
+})
+
+export const UpdateCompetencePeriodResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "workStartDate": zod.coerce.date(),
+  "workEndDate": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date().describe('Instant shown in America\/Sao_Paulo'),
+  "observations": zod.string().nullish(),
+  "status": zod.enum(['open', 'closed']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.number().nullish()
+})
+
+
+/**
+ * @summary Delete a competence registration period (admin only)
+ */
+export const DeleteCompetencePeriodParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteCompetencePeriodResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Close, open, or reopen a competence period (admin only)
+ */
+export const SetCompetencePeriodStatusParams = zod.object({
+  "id": zod.coerce.number(),
+  "status": zod.enum(['open', 'close', 'reopen'])
+})
+
+export const SetCompetencePeriodStatusResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "workStartDate": zod.coerce.date(),
+  "workEndDate": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date().describe('Instant shown in America\/Sao_Paulo'),
+  "observations": zod.string().nullish(),
+  "status": zod.enum(['open', 'closed']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.number().nullish()
+})
+
+
+/**
+ * @summary List releases for a period with manager names (admin only)
+ */
+export const ListCompetencePeriodReleasesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCompetencePeriodReleasesResponseItem = zod.object({
+  "id": zod.number(),
+  "periodId": zod.number(),
+  "managerId": zod.number(),
+  "managerName": zod.string().optional(),
+  "startsAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date(),
+  "active": zod.boolean(),
+  "reason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "createdBy": zod.number().nullish(),
+  "cancelledAt": zod.coerce.date().nullish(),
+  "cancelledBy": zod.number().nullish()
+})
+export const ListCompetencePeriodReleasesResponse = zod.array(ListCompetencePeriodReleasesResponseItem)
+
+
+/**
+ * @summary Grant exceptional manager release (admin only)
+ */
+export const CreateCompetencePeriodReleaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateCompetencePeriodReleaseBody = zod.object({
+  "managerId": zod.number(),
+  "startsAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date(),
+  "reason": zod.string().optional()
+})
+
+export const CreateCompetencePeriodReleaseResponse = zod.object({
+  "id": zod.number(),
+  "periodId": zod.number(),
+  "managerId": zod.number(),
+  "managerName": zod.string().optional(),
+  "startsAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date(),
+  "active": zod.boolean(),
+  "reason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "createdBy": zod.number().nullish(),
+  "cancelledAt": zod.coerce.date().nullish(),
+  "cancelledBy": zod.number().nullish()
+})
+
+
+/**
+ * @summary Cancel exceptional manager release (admin only)
+ */
+export const CancelCompetencePeriodReleaseParams = zod.object({
+  "id": zod.coerce.number(),
+  "releaseId": zod.coerce.number()
+})
+
+export const CancelCompetencePeriodReleaseResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary List audit log entries (admin only)
  */
 export const ListAuditLogsQueryParams = zod.object({

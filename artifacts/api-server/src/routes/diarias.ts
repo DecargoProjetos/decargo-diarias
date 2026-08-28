@@ -16,6 +16,7 @@ import { randomUUID } from "crypto";
 import { pushDiariasToPeople, pushFaltasToPeople } from "../lib/peopleClient";
 import { getGestorTeamIds } from "../lib/gestorTeams";
 import { buildDiariaFilters, type AnaliseFilterQuery } from "../lib/diariaFilters";
+import { authorizeCompetenceRegistration } from "../lib/competenceAuthorization";
 
 const router = Router();
 
@@ -444,11 +445,51 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
     return;
   }
 
+  // Resolve the provider relationship server-side. The submitted teamId is
+  // only a consistency check; it must never be used to move a provider into a
+  // manager's scope.
+  const [provider] = await db
+    .select({
+      id: providersTable.id,
+      teamId: providersTable.teamId,
+      active: providersTable.active,
+      dailyRate: providersTable.dailyRate,
+    })
+    .from(providersTable)
+    .where(eq(providersTable.id, providerId))
+    .limit(1);
+  if (!provider || !provider.active) {
+    res.status(400).json({ error: "Prestador inválido ou inativo" });
+    return;
+  }
+  if (!provider.teamId) {
+    res.status(400).json({ error: "Prestador sem equipe vinculada" });
+    return;
+  }
+  if (provider.teamId !== teamId) {
+    res.status(400).json({ error: "A equipe informada não corresponde à equipe atual do prestador" });
+    return;
+  }
+
+  const authoritativeTeamId = provider.teamId;
+
   // Gestor can only create for their managed teams (derived from teams.manager_id).
   const gestorTeamIds = me.role === "gestor" ? await getGestorTeamIds(me.id) : [];
-  if (me.role === "gestor" && !gestorTeamIds.includes(teamId)) {
+  if (me.role === "gestor" && !gestorTeamIds.includes(authoritativeTeamId)) {
     res.status(403).json({ error: "Você só pode lançar diárias das suas equipes" });
     return;
+  }
+
+  if (me.role === "gestor") {
+    const authorization = await authorizeCompetenceRegistration({
+      role: me.role,
+      managerId: me.id,
+      workDate,
+    });
+    if (!authorization.allowed) {
+      res.status(403).json({ error: authorization.message });
+      return;
+    }
   }
 
   // Gestor never sees a diária's value, so the client cannot be trusted (or
@@ -456,11 +497,7 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
   // dailyRate itself and uses that, ignoring whatever the client sent.
   let effectiveValue = value;
   if (me.role === "gestor") {
-    const [provider] = await db
-      .select({ dailyRate: providersTable.dailyRate })
-      .from(providersTable)
-      .where(eq(providersTable.id, providerId));
-    if (!provider || provider.dailyRate == null) {
+    if (provider.dailyRate == null) {
       res.status(400).json({ error: "Configure o valor da diária deste prestador em Pessoas antes de lançar." });
       return;
     }
@@ -471,7 +508,7 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
     .insert(diariasTable)
     .values({
       providerId,
-      teamId,
+      teamId: authoritativeTeamId,
       typeId,
       managerId: me.id,
       workDate,
@@ -490,7 +527,7 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
     entityId: diaria.id,
     action: "criado",
     userId: me.id,
-    newValues: { status: "pendente_aprovacao", value: effectiveValue, providerId, teamId, workDate },
+    newValues: { status: "pendente_aprovacao", value: effectiveValue, providerId, teamId: authoritativeTeamId, workDate },
   });
 
   const result = await getDiariaById(diaria.id, me.id, me.role, gestorTeamIds, me.decargoId);

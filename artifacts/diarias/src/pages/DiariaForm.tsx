@@ -6,12 +6,13 @@ import {
   useUpdateDiaria, 
   useGetDiaria,
   useListProviders,
-  useListTeams
+  useListTeams,
+  useGetCompetenceWorkDateStatus
 } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Save, ChevronsUpDown, Check } from 'lucide-react';
+import { ArrowLeft, Save, ChevronsUpDown, Check, AlertTriangle } from 'lucide-react';
 import { Link } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -113,9 +114,6 @@ export default function DiariaForm() {
     { query: { enabled: isEditing, queryKey: ['getDiaria', id] } }
   );
 
-  const createMutation = useCreateDiaria();
-  const updateMutation = useUpdateDiaria();
-
   const [formData, setFormData] = useState({
     providerId: '',
     teamId: '',
@@ -126,6 +124,16 @@ export default function DiariaForm() {
     value: '',
     observations: ''
   });
+
+  const { data: authStatus, isLoading: isLoadingAuth } = useGetCompetenceWorkDateStatus(formData.workDate, {
+    query: { enabled: !!formData.workDate && user?.role === 'gestor', queryKey: ['getCompetenceWorkDateStatus', formData.workDate] }
+  });
+
+  const isGestor = user?.role === 'gestor';
+  const isBlocked = isGestor && authStatus && !authStatus.allowed;
+
+  const createMutation = useCreateDiaria();
+  const updateMutation = useUpdateDiaria();
 
   useEffect(() => {
     if (existingDiaria) {
@@ -326,11 +334,21 @@ export default function DiariaForm() {
               />
             </div>
 
+            {isBlocked && (
+              <div className="flex items-start gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-4 text-destructive" data-testid="alert-deadline-blocked">
+                <AlertTriangle size={20} className="shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-semibold">Registro bloqueado</p>
+                  <p>{authStatus?.message || 'O prazo para lançar diárias nesta data já se encerrou ou o período está fechado.'}</p>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Link href={isEditing ? `/diarias/${id}` : "/diarias"} className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background px-4 py-2 hover:bg-accent">
                 Cancelar
               </Link>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending || !!isBlocked}>
                 <Save className="w-4 h-4 mr-2" />
                 Salvar
               </Button>

@@ -15,3 +15,4 @@
 - [Diarias tipo export routing](diarias-tipo-export-routing.md) — diaria_types.export_target routes export: diaria_extra→/api/integration/diarias, falta→/api/integration/descontos; Descontos endpoint/fields need verification with DECARGO People team
 - [Diarias db project references](diarias-db-project-references.md) — both api-server and api-client-react use TS project references; after schema changes run tsc -p tsconfig.json in lib/db and lib/api-client-react before typechecking consumers
 - [Diarias permanent deletion](diarias-permanent-deletion.md) — admin deletion is physical for non-integrated records; exportada/paga stay protected and audit remains
+- [Diarias competence deadlines](diarias-competence-deadlines.md) — deadline checks use São Paulo instants; admin bypasses, missing periods stay permissive, and provider teams are server-authoritative

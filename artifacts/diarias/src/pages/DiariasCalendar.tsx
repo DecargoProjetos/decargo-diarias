@@ -7,6 +7,7 @@ import {
   useCreateDiaria,
   useUpdateDiaria,
   useDeleteDiaria,
+  useGetCompetenceWorkDateStatus,
   type Diaria,
   type Provider,
   type User,
@@ -392,6 +393,14 @@ function DayAgenda({
   const [editForm, setEditForm] = useState({ providerId: '', typeId: '', startTime: '', endTime: '', observations: '' });
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
+  const { data: authStatus, isLoading: isLoadingAuth } = useGetCompetenceWorkDateStatus(dateKey, {
+    query: { enabled: !!dateKey && user.role === 'gestor', queryKey: ['getCompetenceWorkDateStatus', dateKey] }
+  });
+
+  const isGestor = user.role === 'gestor';
+  const isBlocked = isGestor && authStatus && !authStatus.allowed;
+  const showNewForm = canCreate && !isBlocked;
+
   // Gestor não deve ver valores de diárias em nenhuma tela.
   const showFinancials = user.role === 'admin';
 
@@ -675,7 +684,17 @@ function DayAgenda({
         </Card>
       ))}
 
-      {canCreate && (
+      {isBlocked && (
+        <div className="flex items-start gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-destructive mb-3" data-testid="alert-deadline-calendar">
+          <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold">Registro bloqueado</p>
+            <p>{authStatus?.message || 'O prazo para lançar diárias nesta data já se encerrou ou o período está fechado.'}</p>
+          </div>
+        </div>
+      )}
+
+      {showNewForm && (
         showCreateForm ? (
           <Card className="border-dashed">
             <CardContent className="p-3 space-y-3">
@@ -784,7 +803,7 @@ function DayAgenda({
             </CardContent>
           </Card>
         ) : (
-          <Button variant="outline" className="w-full" onClick={() => setShowCreateForm(true)}>
+          <Button variant="outline" className="w-full border-dashed" onClick={() => setShowCreateForm(true)}>
             <Plus size={16} className="mr-2" /> Nova Diária
           </Button>
         )

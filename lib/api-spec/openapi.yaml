@@ -26,6 +26,8 @@ tags:
     description: Dashboard summary
   - name: reports
     description: Reports
+  - name: competence-periods
+    description: Registration deadline administration
 
 paths:
   /healthz:
@@ -940,6 +942,148 @@ paths:
               schema:
                 $ref: "#/components/schemas/ExportResult"
 
+  # ── COMPETENCE REGISTRATION PERIODS ───────────────────────────────────
+  /competence-periods:
+    get:
+      operationId: listCompetencePeriods
+      tags: [competence-periods]
+      summary: List competence registration periods (admin only)
+      responses:
+        "200":
+          description: Periods
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CompetencePeriod" }
+    post:
+      operationId: createCompetencePeriod
+      tags: [competence-periods]
+      summary: Create a competence registration period (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompetencePeriodInput" }
+      responses:
+        "201":
+          description: Created period
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompetencePeriod" }
+  /competence-periods/status/work-date/{workDate}:
+    get:
+      operationId: getCompetenceWorkDateStatus
+      tags: [competence-periods]
+      summary: Get authenticated user's registration authorization for a work date
+      parameters:
+        - name: workDate
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Authorization status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompetenceAuthorization" }
+  /competence-periods/{id}:
+    patch:
+      operationId: updateCompetencePeriod
+      tags: [competence-periods]
+      summary: Update a competence registration period (admin only)
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompetencePeriodInput" }
+      responses:
+        "200":
+          description: Updated period
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompetencePeriod" }
+    delete:
+      operationId: deleteCompetencePeriod
+      tags: [competence-periods]
+      summary: Delete a competence registration period (admin only)
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+  /competence-periods/{id}/{status}:
+    post:
+      operationId: setCompetencePeriodStatus
+      tags: [competence-periods]
+      summary: Close, open, or reopen a competence period (admin only)
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: status
+          in: path
+          required: true
+          schema: { type: string, enum: [open, close, reopen] }
+      responses:
+        "200":
+          description: Updated period
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompetencePeriod" }
+  /competence-periods/{id}/releases:
+    get:
+      operationId: listCompetencePeriodReleases
+      tags: [competence-periods]
+      summary: List releases for a period with manager names (admin only)
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Releases
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CompetenceRelease" }
+    post:
+      operationId: createCompetencePeriodRelease
+      tags: [competence-periods]
+      summary: Grant exceptional manager release (admin only)
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompetenceReleaseInput" }
+      responses:
+        "201":
+          description: Created release
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompetenceRelease" }
+  /competence-periods/{id}/releases/{releaseId}:
+    delete:
+      operationId: cancelCompetencePeriodRelease
+      tags: [competence-periods]
+      summary: Cancel exceptional manager release (admin only)
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: releaseId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+
   # ── AUDIT ─────────────────────────────────────────────────────────────
   /audit:
     get:
@@ -1086,6 +1230,13 @@ paths:
                 $ref: "#/components/schemas/DiariasReport"
 
 components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
   schemas:
     HealthStatus:
       type: object
@@ -1107,6 +1258,69 @@ components:
         message:
           type: string
       required: [message]
+
+    CompetencePeriod:
+      type: object
+      required: [id, name, workStartDate, workEndDate, deadlineAt, status, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        workStartDate: { type: string, format: date }
+        workEndDate: { type: string, format: date }
+        deadlineAt: { type: string, format: date-time, description: "Instant shown in America/Sao_Paulo" }
+        observations: { type: ["string", "null"] }
+        status: { type: string, enum: [open, closed] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        createdBy: { type: ["integer", "null"] }
+
+    CompetencePeriodInput:
+      type: object
+      required: [name, workStartDate, workEndDate, deadlineAt]
+      properties:
+        name: { type: string, minLength: 1 }
+        workStartDate: { type: string, format: date }
+        workEndDate: { type: string, format: date }
+        deadlineAt: { type: string, format: date-time }
+        observations: { type: string }
+
+    CompetenceRelease:
+      type: object
+      required: [id, periodId, managerId, startsAt, expiresAt, active, createdAt]
+      properties:
+        id: { type: integer }
+        periodId: { type: integer }
+        managerId: { type: integer }
+        managerName: { type: string }
+        startsAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        active: { type: boolean }
+        reason: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        createdBy: { type: ["integer", "null"] }
+        cancelledAt: { type: ["string", "null"], format: date-time }
+        cancelledBy: { type: ["integer", "null"] }
+
+    CompetenceReleaseInput:
+      type: object
+      required: [managerId, startsAt, expiresAt]
+      properties:
+        managerId: { type: integer }
+        startsAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        reason: { type: string }
+
+    CompetenceAuthorization:
+      type: object
+      required: [allowed, source]
+      properties:
+        allowed: { type: boolean }
+        source: { type: string, enum: [admin, no_period, period, release, closed, expired] }
+        periodId: { type: integer }
+        releaseId: { type: integer }
+        message: { type: string }
+        period:
+          $ref: "#/components/schemas/CompetencePeriod"
 
     DiariaDeletionResult:
       type: object

@@ -1,0 +1,359 @@
+ATUALIZAÇÃO – CONTROLE DE PRAZO PARA REGISTRO DE DIÁRIAS
+
+Precisamos implementar no sistema Controle de Diárias uma nova funcionalidade para controlar o prazo em que os gestores poderão registrar as diárias de suas equipes.
+
+O objetivo é permitir que o Administrador defina períodos de lançamento por competência e, após o encerramento do prazo, bloquear automaticamente novos registros pelos gestores.
+
+O Administrador continuará possuindo acesso completo ao sistema, independentemente dos prazos estabelecidos.
+
+IMPORTANTE:
+Antes de realizar alterações, analise a estrutura atual do sistema e reutilize as funcionalidades, permissões e regras já existentes sempre que possível. Não altere funcionalidades que já estejam funcionando corretamente.
+
+
+1. NOVA CONFIGURAÇÃO – PRAZO PARA REGISTRO DE DIÁRIAS
+
+Criar em:
+
+Configurações > Prazo para Registro de Diárias
+
+uma área administrativa para gerenciamento dos períodos de lançamento.
+
+Essa funcionalidade deverá ser acessível somente aos Administradores.
+
+
+2. CONTROLE POR COMPETÊNCIA
+
+O prazo de lançamento deverá ser vinculado a uma competência.
+
+Exemplo:
+
+Competência: Agosto/2026
+Período das Diárias: 01/08/2026 a 31/08/2026
+Prazo para Lançamento: até 05/09/2026
+Status: Aberto
+
+A configuração deverá possuir, no mínimo:
+
+- Competência (Mês/Ano);
+- Data inicial das diárias;
+- Data final das diárias;
+- Data limite para lançamento;
+- Status: Aberto / Fechado;
+- Observações, se necessário.
+
+Não permitir a criação de períodos conflitantes ou duplicados para a mesma competência, salvo se a estrutura atual do sistema justificar outro comportamento.
+
+
+3. DIFERENCIAR DATA DA DIÁRIA E PRAZO DE LANÇAMENTO
+
+É importante separar dois conceitos:
+
+DATA DA DIÁRIA:
+Representa a data em que o trabalho ou evento ocorreu.
+
+PRAZO DE LANÇAMENTO:
+Representa até quando o gestor poderá registrar aquela diária no sistema.
+
+Exemplo:
+
+Diária realizada em: 25/08/2026
+Competência: Agosto/2026
+Prazo para lançamento: até 05/09/2026
+
+Nesse caso, mesmo que a diária tenha ocorrido em agosto, o gestor poderá registrá-la até 05/09/2026.
+
+Portanto, não utilizar apenas a data atual ou o mês atual para determinar se uma diária pode ou não ser registrada.
+
+A validação deverá considerar a competência da diária e o respectivo prazo de lançamento.
+
+
+4. BLOQUEIO AUTOMÁTICO DOS GESTORES
+
+Enquanto a competência estiver aberta e dentro do prazo, os gestores poderão registrar normalmente as diárias dos membros de suas respectivas equipes, respeitando todas as regras de acesso já existentes.
+
+Após o encerramento do prazo, o sistema deverá bloquear automaticamente a inclusão de novas diárias pelos gestores para aquela competência.
+
+Exemplo:
+
+Competência: Agosto/2026
+Prazo para lançamento: 05/09/2026
+
+Até 05/09/2026:
+Gestor pode registrar as diárias referentes à competência de Agosto/2026.
+
+Após o encerramento do prazo:
+Gestor não poderá criar novos registros referentes àquela competência.
+
+Os registros existentes deverão continuar disponíveis para consulta.
+
+
+5. MENSAGEM DE BLOQUEIO
+
+Quando o gestor tentar registrar uma diária pertencente a uma competência cujo prazo esteja encerrado, apresentar uma mensagem clara, por exemplo:
+
+"Prazo de registro encerrado.
+
+O período para lançamento de diárias desta competência está fechado. Caso seja necessário realizar um novo registro, entre em contato com o RH."
+
+Não apresentar apenas mensagens genéricas como "Erro", "Acesso negado" ou "Não autorizado".
+
+
+6. PERMISSÕES DO ADMINISTRADOR
+
+O Administrador não deverá ser bloqueado pelos prazos de lançamento.
+
+Independentemente de a competência estar aberta ou fechada, o Administrador terá acesso completo e poderá:
+
+- Registrar novas diárias;
+- Editar registros;
+- Excluir registros;
+- Corrigir informações;
+- Abrir uma competência;
+- Fechar uma competência;
+- Reabrir uma competência;
+- Alterar o prazo de lançamento;
+- Criar liberações excepcionais para gestores.
+
+As regras administrativas atualmente existentes deverão ser preservadas.
+
+
+7. LIBERAÇÃO EXCEPCIONAL PARA GESTORES
+
+Implementar também uma funcionalidade de:
+
+"Liberação Excepcional"
+
+Essa funcionalidade permitirá que o Administrador autorize um gestor específico a realizar lançamentos referentes a uma competência já encerrada, sem precisar reabrir o período para todos os gestores.
+
+Exemplo:
+
+Competência: Agosto/2026
+Gestor: João da Silva
+Liberação excepcional até: 10/09/2026 às 18:00
+Motivo: Diárias não registradas dentro do prazo
+Status: Ativa
+
+Enquanto essa autorização estiver válida, somente o gestor autorizado poderá realizar novos lançamentos referentes à competência especificada.
+
+Os demais gestores continuarão bloqueados.
+
+
+8. CONFIGURAÇÃO DA LIBERAÇÃO EXCEPCIONAL
+
+A liberação excepcional deverá possuir, no mínimo:
+
+- Competência;
+- Gestor;
+- Data e hora inicial da liberação;
+- Data e hora final da liberação;
+- Motivo;
+- Status: Ativa / Encerrada / Cancelada;
+- Administrador responsável pela liberação;
+- Data e hora da criação.
+
+Quando chegar à data e hora final da autorização, o sistema deverá encerrar automaticamente a liberação e voltar a bloquear novos lançamentos daquele gestor para a competência.
+
+O Administrador também poderá cancelar manualmente uma liberação antes do seu vencimento.
+
+
+9. NÃO REABRIR O PERÍODO PARA TODOS
+
+A Liberação Excepcional não deverá alterar o status geral da competência.
+
+Exemplo:
+
+Competência Agosto/2026 = FECHADA
+
+Gestor A = possui liberação excepcional
+Gestor B = não possui liberação
+Gestor C = não possui liberação
+
+Resultado:
+
+Gestor A → pode registrar diárias da competência autorizada enquanto sua liberação estiver válida.
+
+Gestores B e C → continuam bloqueados.
+
+Administrador → continua com acesso completo.
+
+Dessa forma, não será necessário reabrir uma competência inteira apenas para corrigir uma situação específica.
+
+
+10. VALIDAÇÃO DA DATA DA DIÁRIA
+
+Uma liberação excepcional deverá autorizar somente registros pertencentes à competência liberada.
+
+Exemplo:
+
+Liberação excepcional:
+Competência Agosto/2026
+
+O gestor poderá registrar uma diária de 25/08/2026.
+
+Isso não significa que poderá registrar uma diária de Julho/2026 ou Setembro/2026 caso essas competências estejam fechadas e não possuam autorização específica.
+
+A liberação deverá respeitar os limites da competência autorizada.
+
+
+11. COMPORTAMENTO NO CALENDÁRIO
+
+Não ocultar as datas ou registros quando uma competência estiver encerrada.
+
+O calendário deverá continuar exibindo normalmente:
+
+- Dias;
+- Diárias registradas;
+- Informações disponíveis para consulta.
+
+O bloqueio deverá ocorrer apenas nas ações que não são mais permitidas.
+
+Quando o gestor selecionar uma data pertencente a uma competência fechada, o sistema poderá informar visualmente:
+
+"Competência encerrada para novos lançamentos."
+
+Caso o gestor possua uma Liberação Excepcional válida, o registro deverá ser permitido normalmente.
+
+
+12. REGISTROS JÁ SALVOS
+
+O encerramento de uma competência não deverá excluir, ocultar ou modificar as diárias já registradas.
+
+Os registros existentes deverão permanecer disponíveis para consulta.
+
+Manter também a regra atual de que o gestor não pode alterar uma diária depois de salvá-la, caso essa regra já esteja implementada corretamente.
+
+Não modificar regras existentes que não sejam necessárias para esta implementação.
+
+
+13. VALIDAÇÃO NO BACKEND
+
+O bloqueio não poderá existir somente no frontend.
+
+Todas as operações de criação de diária deverão ser validadas também pelo backend.
+
+Antes de permitir um novo registro, o backend deverá verificar:
+
+1. Quem é o usuário autenticado;
+2. Se é Administrador ou Gestor;
+3. Qual é a data da diária;
+4. A qual competência essa data pertence;
+5. Se a competência está aberta;
+6. Se o prazo de lançamento ainda está válido;
+7. Caso esteja encerrado, se existe Liberação Excepcional ativa para aquele gestor e competência;
+8. Se o gestor possui autorização sobre a equipe/pessoa selecionada;
+9. As demais regras de permissão já existentes.
+
+Somente após essas validações o registro deverá ser autorizado.
+
+
+14. REGRA RESUMIDA DE AUTORIZAÇÃO
+
+ADMINISTRADOR:
+Pode registrar independentemente da competência estar aberta ou fechada.
+
+GESTOR + COMPETÊNCIA ABERTA + DENTRO DO PRAZO:
+Pode registrar normalmente.
+
+GESTOR + COMPETÊNCIA FECHADA:
+Não pode registrar.
+
+GESTOR + COMPETÊNCIA FECHADA + LIBERAÇÃO EXCEPCIONAL ATIVA:
+Pode registrar somente para a competência autorizada e durante o período da liberação.
+
+GESTOR + LIBERAÇÃO EXCEPCIONAL EXPIRADA:
+Volta a ficar bloqueado automaticamente.
+
+
+15. AUDITORIA
+
+Registrar no histórico de auditoria todas as operações relacionadas ao controle de competências, incluindo:
+
+- Criação da competência;
+- Alteração do período;
+- Alteração do prazo;
+- Abertura;
+- Fechamento;
+- Reabertura;
+- Criação de Liberação Excepcional;
+- Alteração da liberação;
+- Cancelamento;
+- Expiração;
+- Gestor beneficiado;
+- Competência;
+- Motivo informado;
+- Administrador responsável;
+- Data e hora da operação.
+
+Não permitir que usuários comuns alterem esses registros de auditoria.
+
+
+16. INTERFACE ADMINISTRATIVA
+
+Na tela Configurações > Prazo para Registro de Diárias, apresentar de forma simples as competências cadastradas.
+
+Sugestão de colunas:
+
+Competência | Período das Diárias | Prazo para Lançamento | Status | Ações
+
+Nas ações, disponibilizar conforme as permissões:
+
+- Visualizar;
+- Editar;
+- Abrir;
+- Fechar;
+- Reabrir;
+- Criar Liberação Excepcional;
+- Visualizar Liberações.
+
+Também deverá ser possível identificar facilmente quais competências estão:
+
+- Abertas;
+- Fechadas;
+- Com prazo próximo do encerramento.
+
+
+17. TESTES OBRIGATÓRIOS
+
+Após a implementação, testar pelo menos:
+
+- Gestor registrando diária dentro do prazo;
+- Gestor tentando registrar após o prazo;
+- Administrador registrando fora do prazo;
+- Administrador fechando uma competência;
+- Administrador reabrindo uma competência;
+- Gestor com Liberação Excepcional ativa;
+- Gestor com Liberação Excepcional expirada;
+- Gestor com liberação tentando registrar diária de outra competência;
+- Dois gestores, sendo apenas um deles autorizado excepcionalmente;
+- Tentativa de contornar o bloqueio diretamente pela API;
+- Consulta de registros antigos após fechamento;
+- Preservação das regras de equipe já existentes;
+- Preservação dos registros existentes.
+
+
+RESULTADO ESPERADO
+
+O sistema deverá possuir um controle de fechamento das diárias baseado em:
+
+COMPETÊNCIA + PRAZO DE LANÇAMENTO + LIBERAÇÃO EXCEPCIONAL.
+
+A lógica final deverá ser:
+
+Administrador → possui acesso completo, independentemente do prazo.
+
+Gestor dentro do prazo → pode registrar normalmente as diárias de sua equipe.
+
+Gestor fora do prazo → não pode realizar novos registros para a competência encerrada.
+
+Gestor fora do prazo com Liberação Excepcional → pode registrar somente para a competência e durante o período especificamente autorizado.
+
+O encerramento do prazo não deverá impedir a consulta das diárias existentes.
+
+Todas as validações deverão ser realizadas no frontend e, obrigatoriamente, no backend.
+
+IMPORTANTE:
+Antes de implementar, analise a estrutura atual do projeto para aproveitar as tabelas, permissões, componentes e regras existentes.
+
+Não faça alterações estruturais desnecessárias e não modifique funcionalidades que já estejam funcionando corretamente.
+
+Após a implementação, execute os testes necessários e informe quais arquivos, regras e funcionalidades foram alterados.

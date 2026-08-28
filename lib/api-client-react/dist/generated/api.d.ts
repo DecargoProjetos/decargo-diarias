@@ -1,183 +1,4 @@
-import type { QueryKey, UseMutationOptions, UseMutationResult, UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
-import type { ActivityItem, AuditPage, BulkActionResult, BulkIdsInput, BulkRejectInput, BulkSetPaymentDateInput, DashboardSummary, Diaria, DiariaActionNote, DiariaDeletionResult, DiariaIdsResult, DiariaInput, DiariaUpdate, DiariasAnaliseSummary, DiariasPage, DiariasReport, ErrorResponse, ExportInput, ExportResult, GetDiariasAnaliseSummaryParams, GetReportDiariasParams, HealthStatus, ListAuditLogsParams, ListDiariaIdsParams, ListDiariasParams, ListProvidersParams, MessageResponse, PaymentDateInput, Provider, ProviderMetrics, ProviderUpdate, SyncResult, Team, TeamInput, TeamMetrics, TeamUpdate, User, UserCreate, UserSyncResult, UserUpdate } from './api.schemas';
-import { customFetch } from '../custom-fetch';
-import type { ErrorType, BodyType } from '../custom-fetch';
-type AwaitedInput<T> = PromiseLike<T> | T;
-type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
-type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
-export declare const getHealthCheckUrl: () => string;
-/**
- * @summary Health check
- */
-export declare const healthCheck: (options?: RequestInit) => Promise<HealthStatus>;
-export declare const getHealthCheckQueryKey: () => readonly ["/api/healthz"];
-export declare const getHealthCheckQueryOptions: <TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData> & {
-    queryKey: QueryKey;
-};
-export type HealthCheckQueryResult = NonNullable<Awaited<ReturnType<typeof healthCheck>>>;
-export type HealthCheckQueryError = ErrorType<unknown>;
-/**
- * @summary Health check
- */
-export declare function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-};
-export declare const getGetMeUrl: () => string;
-/**
- * @summary Get current user session
- */
-export declare const getMe: (options?: RequestInit) => Promise<User>;
-export declare const getGetMeQueryKey: () => readonly ["/api/auth/me"];
-export declare const getGetMeQueryOptions: <TData = Awaited<ReturnType<typeof getMe>>, TError = ErrorType<ErrorResponse>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData> & {
-    queryKey: QueryKey;
-};
-export type GetMeQueryResult = NonNullable<Awaited<ReturnType<typeof getMe>>>;
-export type GetMeQueryError = ErrorType<ErrorResponse>;
-/**
- * @summary Get current user session
- */
-export declare function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = ErrorType<ErrorResponse>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-};
-export declare const getLogoutUrl: () => string;
-/**
- * @summary End session
- */
-export declare const logout: (options?: RequestInit) => Promise<MessageResponse>;
-export declare const getLogoutMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
-export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>;
-export type LogoutMutationError = ErrorType<unknown>;
-/**
-* @summary End session
-*/
-export declare const useLogout: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseMutationResult<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
-export declare const getListUsersUrl: () => string;
-/**
- * @summary List all users (admin only)
- */
-export declare const listUsers: (options?: RequestInit) => Promise<User[]>;
-export declare const getListUsersQueryKey: () => readonly ["/api/users"];
-export declare const getListUsersQueryOptions: <TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData> & {
-    queryKey: QueryKey;
-};
-export type ListUsersQueryResult = NonNullable<Awaited<ReturnType<typeof listUsers>>>;
-export type ListUsersQueryError = ErrorType<unknown>;
-/**
- * @summary List all users (admin only)
- */
-export declare function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-};
-export declare const getCreateUserUrl: () => string;
-/**
- * @summary Manually create a user (admin only)
- */
-export declare const createUser: (userCreate: UserCreate, options?: RequestInit) => Promise<User>;
-export declare const getCreateUserMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError, {
-        data: BodyType<UserCreate>;
-    }, TContext>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError, {
-    data: BodyType<UserCreate>;
-}, TContext>;
-export type CreateUserMutationResult = NonNullable<Awaited<ReturnType<typeof createUser>>>;
-export type CreateUserMutationBody = BodyType<UserCreate>;
-export type CreateUserMutationError = ErrorType<unknown>;
-/**
-* @summary Manually create a user (admin only)
-*/
-export declare const useCreateUser: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError, {
-        data: BodyType<UserCreate>;
-    }, TContext>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseMutationResult<Awaited<ReturnType<typeof createUser>>, TError, {
-    data: BodyType<UserCreate>;
-}, TContext>;
-export declare const getSyncUsersUrl: () => string;
-/**
- * @summary Sync users (funcionários) from DECARGO People (admin only)
- */
-export declare const syncUsers: (options?: RequestInit) => Promise<UserSyncResult>;
-export declare const getSyncUsersMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError, void, TContext>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError, void, TContext>;
-export type SyncUsersMutationResult = NonNullable<Awaited<ReturnType<typeof syncUsers>>>;
-export type SyncUsersMutationError = ErrorType<unknown>;
-/**
-* @summary Sync users (funcionários) from DECARGO People (admin only)
-*/
-export declare const useSyncUsers: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError, void, TContext>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseMutationResult<Awaited<ReturnType<typeof syncUsers>>, TError, void, TContext>;
-export declare const getGetUserUrl: (id: number) => string;
-/**
- * @summary Get a user by ID
- */
-export declare const getUser: (id: number, options?: RequestInit) => Promise<User>;
-export declare const getGetUserQueryKey: (id: number) => readonly [`/api/users/${number}`];
-export declare const getGetUserQueryOptions: <TData = Awaited<ReturnType<typeof getUser>>, TError = ErrorType<ErrorResponse>>(id: number, options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getUser>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseQueryOptions<Awaited<ReturnType<typeof getUser>>, TError, TData> & {
-    queryKey: QueryKey;
-};
-export type GetUserQueryResult = NonNullable<Awaited<ReturnType<typeof getUser>>>;
-export type GetUserQueryError = ErrorType<ErrorResponse>;
-/**
- * @summary Get a user by ID
- */
-export declare function useGetUser<TData = Awaited<ReturnType<typeof getUser>>, TError = ErrorType<ErrorResponse>>(id: number, options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getUser>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-};
-export declare const getUpdateUserUrl: (id: number) => string;
-/**
- * @summary Update user role, team, name, email or status (admin only)
- */
-export declare const updateUser: (id: number, userUpdate: UserUpdate, options?: RequestInit) => Promise<User>;
-export declare const getUpdateUserMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError, {
-        id: number;
-        data: BodyType<UserUpdate>;
-    }, TContext>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError, {
-    id: number;
-    data: BodyType<UserUpdate>;
-}, TContext>;
-export type UpdateUserMutationResult = NonNullable<Awaited<ReturnType<typeof updateUser>>>;
-export type UpdateUserMutationBody = BodyType<UserUpdate>;
-export type UpdateUserMutationError = ErrorType<unknown>;
+ErrorType<unknown>;
 /**
 * @summary Update user role, team, name, email or status (admin only)
 */
@@ -932,6 +753,250 @@ export declare const useExportDiarias: <TError = ErrorType<unknown>, TContext = 
     request?: SecondParameter<typeof customFetch>;
 }) => UseMutationResult<Awaited<ReturnType<typeof exportDiarias>>, TError, {
     data: BodyType<ExportInput>;
+}, TContext>;
+export declare const getListCompetencePeriodsUrl: () => string;
+/**
+ * @summary List competence registration periods (admin only)
+ */
+export declare const listCompetencePeriods: (options?: RequestInit) => Promise<CompetencePeriod[]>;
+export declare const getListCompetencePeriodsQueryKey: () => readonly ["/api/competence-periods"];
+export declare const getListCompetencePeriodsQueryOptions: <TData = Awaited<ReturnType<typeof listCompetencePeriods>>, TError = ErrorType<unknown>>(options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listCompetencePeriods>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof listCompetencePeriods>>, TError, TData> & {
+    queryKey: QueryKey;
+};
+export type ListCompetencePeriodsQueryResult = NonNullable<Awaited<ReturnType<typeof listCompetencePeriods>>>;
+export type ListCompetencePeriodsQueryError = ErrorType<unknown>;
+/**
+ * @summary List competence registration periods (admin only)
+ */
+export declare function useListCompetencePeriods<TData = Awaited<ReturnType<typeof listCompetencePeriods>>, TError = ErrorType<unknown>>(options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listCompetencePeriods>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+};
+export declare const getCreateCompetencePeriodUrl: () => string;
+/**
+ * @summary Create a competence registration period (admin only)
+ */
+export declare const createCompetencePeriod: (competencePeriodInput: CompetencePeriodInput, options?: RequestInit) => Promise<CompetencePeriod>;
+export declare const getCreateCompetencePeriodMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createCompetencePeriod>>, TError, {
+        data: BodyType<CompetencePeriodInput>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof createCompetencePeriod>>, TError, {
+    data: BodyType<CompetencePeriodInput>;
+}, TContext>;
+export type CreateCompetencePeriodMutationResult = NonNullable<Awaited<ReturnType<typeof createCompetencePeriod>>>;
+export type CreateCompetencePeriodMutationBody = BodyType<CompetencePeriodInput>;
+export type CreateCompetencePeriodMutationError = ErrorType<unknown>;
+/**
+* @summary Create a competence registration period (admin only)
+*/
+export declare const useCreateCompetencePeriod: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createCompetencePeriod>>, TError, {
+        data: BodyType<CompetencePeriodInput>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof createCompetencePeriod>>, TError, {
+    data: BodyType<CompetencePeriodInput>;
+}, TContext>;
+export declare const getGetCompetenceWorkDateStatusUrl: (workDate: string) => string;
+/**
+ * @summary Get authenticated user's registration authorization for a work date
+ */
+export declare const getCompetenceWorkDateStatus: (workDate: string, options?: RequestInit) => Promise<CompetenceAuthorization>;
+export declare const getGetCompetenceWorkDateStatusQueryKey: (workDate: string) => readonly [`/api/competence-periods/status/work-date/${string}`];
+export declare const getGetCompetenceWorkDateStatusQueryOptions: <TData = Awaited<ReturnType<typeof getCompetenceWorkDateStatus>>, TError = ErrorType<unknown>>(workDate: string, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getCompetenceWorkDateStatus>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getCompetenceWorkDateStatus>>, TError, TData> & {
+    queryKey: QueryKey;
+};
+export type GetCompetenceWorkDateStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getCompetenceWorkDateStatus>>>;
+export type GetCompetenceWorkDateStatusQueryError = ErrorType<unknown>;
+/**
+ * @summary Get authenticated user's registration authorization for a work date
+ */
+export declare function useGetCompetenceWorkDateStatus<TData = Awaited<ReturnType<typeof getCompetenceWorkDateStatus>>, TError = ErrorType<unknown>>(workDate: string, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getCompetenceWorkDateStatus>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+};
+export declare const getUpdateCompetencePeriodUrl: (id: number) => string;
+/**
+ * @summary Update a competence registration period (admin only)
+ */
+export declare const updateCompetencePeriod: (id: number, competencePeriodInput: CompetencePeriodInput, options?: RequestInit) => Promise<CompetencePeriod>;
+export declare const getUpdateCompetencePeriodMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof updateCompetencePeriod>>, TError, {
+        id: number;
+        data: BodyType<CompetencePeriodInput>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof updateCompetencePeriod>>, TError, {
+    id: number;
+    data: BodyType<CompetencePeriodInput>;
+}, TContext>;
+export type UpdateCompetencePeriodMutationResult = NonNullable<Awaited<ReturnType<typeof updateCompetencePeriod>>>;
+export type UpdateCompetencePeriodMutationBody = BodyType<CompetencePeriodInput>;
+export type UpdateCompetencePeriodMutationError = ErrorType<unknown>;
+/**
+* @summary Update a competence registration period (admin only)
+*/
+export declare const useUpdateCompetencePeriod: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof updateCompetencePeriod>>, TError, {
+        id: number;
+        data: BodyType<CompetencePeriodInput>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof updateCompetencePeriod>>, TError, {
+    id: number;
+    data: BodyType<CompetencePeriodInput>;
+}, TContext>;
+export declare const getDeleteCompetencePeriodUrl: (id: number) => string;
+/**
+ * @summary Delete a competence registration period (admin only)
+ */
+export declare const deleteCompetencePeriod: (id: number, options?: RequestInit) => Promise<MessageResponse>;
+export declare const getDeleteCompetencePeriodMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof deleteCompetencePeriod>>, TError, {
+        id: number;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof deleteCompetencePeriod>>, TError, {
+    id: number;
+}, TContext>;
+export type DeleteCompetencePeriodMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCompetencePeriod>>>;
+export type DeleteCompetencePeriodMutationError = ErrorType<unknown>;
+/**
+* @summary Delete a competence registration period (admin only)
+*/
+export declare const useDeleteCompetencePeriod: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof deleteCompetencePeriod>>, TError, {
+        id: number;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof deleteCompetencePeriod>>, TError, {
+    id: number;
+}, TContext>;
+export declare const getSetCompetencePeriodStatusUrl: (id: number, status: "open" | "close" | "reopen") => string;
+/**
+ * @summary Close, open, or reopen a competence period (admin only)
+ */
+export declare const setCompetencePeriodStatus: (id: number, status: "open" | "close" | "reopen", options?: RequestInit) => Promise<CompetencePeriod>;
+export declare const getSetCompetencePeriodStatusMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof setCompetencePeriodStatus>>, TError, {
+        id: number;
+        status: "open" | "close" | "reopen";
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof setCompetencePeriodStatus>>, TError, {
+    id: number;
+    status: "open" | "close" | "reopen";
+}, TContext>;
+export type SetCompetencePeriodStatusMutationResult = NonNullable<Awaited<ReturnType<typeof setCompetencePeriodStatus>>>;
+export type SetCompetencePeriodStatusMutationError = ErrorType<unknown>;
+/**
+* @summary Close, open, or reopen a competence period (admin only)
+*/
+export declare const useSetCompetencePeriodStatus: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof setCompetencePeriodStatus>>, TError, {
+        id: number;
+        status: "open" | "close" | "reopen";
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof setCompetencePeriodStatus>>, TError, {
+    id: number;
+    status: "open" | "close" | "reopen";
+}, TContext>;
+export declare const getListCompetencePeriodReleasesUrl: (id: number) => string;
+/**
+ * @summary List releases for a period with manager names (admin only)
+ */
+export declare const listCompetencePeriodReleases: (id: number, options?: RequestInit) => Promise<CompetenceRelease[]>;
+export declare const getListCompetencePeriodReleasesQueryKey: (id: number) => readonly [`/api/competence-periods/${number}/releases`];
+export declare const getListCompetencePeriodReleasesQueryOptions: <TData = Awaited<ReturnType<typeof listCompetencePeriodReleases>>, TError = ErrorType<unknown>>(id: number, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listCompetencePeriodReleases>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof listCompetencePeriodReleases>>, TError, TData> & {
+    queryKey: QueryKey;
+};
+export type ListCompetencePeriodReleasesQueryResult = NonNullable<Awaited<ReturnType<typeof listCompetencePeriodReleases>>>;
+export type ListCompetencePeriodReleasesQueryError = ErrorType<unknown>;
+/**
+ * @summary List releases for a period with manager names (admin only)
+ */
+export declare function useListCompetencePeriodReleases<TData = Awaited<ReturnType<typeof listCompetencePeriodReleases>>, TError = ErrorType<unknown>>(id: number, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listCompetencePeriodReleases>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+};
+export declare const getCreateCompetencePeriodReleaseUrl: (id: number) => string;
+/**
+ * @summary Grant exceptional manager release (admin only)
+ */
+export declare const createCompetencePeriodRelease: (id: number, competenceReleaseInput: CompetenceReleaseInput, options?: RequestInit) => Promise<CompetenceRelease>;
+export declare const getCreateCompetencePeriodReleaseMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createCompetencePeriodRelease>>, TError, {
+        id: number;
+        data: BodyType<CompetenceReleaseInput>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof createCompetencePeriodRelease>>, TError, {
+    id: number;
+    data: BodyType<CompetenceReleaseInput>;
+}, TContext>;
+export type CreateCompetencePeriodReleaseMutationResult = NonNullable<Awaited<ReturnType<typeof createCompetencePeriodRelease>>>;
+export type CreateCompetencePeriodReleaseMutationBody = BodyType<CompetenceReleaseInput>;
+export type CreateCompetencePeriodReleaseMutationError = ErrorType<unknown>;
+/**
+* @summary Grant exceptional manager release (admin only)
+*/
+export declare const useCreateCompetencePeriodRelease: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createCompetencePeriodRelease>>, TError, {
+        id: number;
+        data: BodyType<CompetenceReleaseInput>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof createCompetencePeriodRelease>>, TError, {
+    id: number;
+    data: BodyType<CompetenceReleaseInput>;
+}, TContext>;
+export declare const getCancelCompetencePeriodReleaseUrl: (id: number, releaseId: number) => string;
+/**
+ * @summary Cancel exceptional manager release (admin only)
+ */
+export declare const cancelCompetencePeriodRelease: (id: number, releaseId: number, options?: RequestInit) => Promise<MessageResponse>;
+export declare const getCancelCompetencePeriodReleaseMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof cancelCompetencePeriodRelease>>, TError, {
+        id: number;
+        releaseId: number;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof cancelCompetencePeriodRelease>>, TError, {
+    id: number;
+    releaseId: number;
+}, TContext>;
+export type CancelCompetencePeriodReleaseMutationResult = NonNullable<Awaited<ReturnType<typeof cancelCompetencePeriodRelease>>>;
+export type CancelCompetencePeriodReleaseMutationError = ErrorType<unknown>;
+/**
+* @summary Cancel exceptional manager release (admin only)
+*/
+export declare const useCancelCompetencePeriodRelease: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof cancelCompetencePeriodRelease>>, TError, {
+        id: number;
+        releaseId: number;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof cancelCompetencePeriodRelease>>, TError, {
+    id: number;
+    releaseId: number;
 }, TContext>;
 export declare const getListAuditLogsUrl: (params?: ListAuditLogsParams) => string;
 /**

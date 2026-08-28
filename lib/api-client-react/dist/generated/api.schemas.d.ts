@@ -14,6 +14,75 @@ export interface ErrorResponse {
 export interface MessageResponse {
     message: string;
 }
+export type CompetencePeriodStatus = typeof CompetencePeriodStatus[keyof typeof CompetencePeriodStatus];
+export declare const CompetencePeriodStatus: {
+    readonly open: "open";
+    readonly closed: "closed";
+};
+export interface CompetencePeriod {
+    id: number;
+    name: string;
+    workStartDate: string;
+    workEndDate: string;
+    /** Instant shown in America/Sao_Paulo */
+    deadlineAt: string;
+    /** @nullable */
+    observations?: string | null;
+    status: CompetencePeriodStatus;
+    createdAt: string;
+    updatedAt: string;
+    /** @nullable */
+    createdBy?: number | null;
+}
+export interface CompetencePeriodInput {
+    /** @minLength 1 */
+    name: string;
+    workStartDate: string;
+    workEndDate: string;
+    deadlineAt: string;
+    observations?: string;
+}
+export interface CompetenceRelease {
+    id: number;
+    periodId: number;
+    managerId: number;
+    managerName?: string;
+    startsAt: string;
+    expiresAt: string;
+    active: boolean;
+    /** @nullable */
+    reason?: string | null;
+    createdAt: string;
+    /** @nullable */
+    createdBy?: number | null;
+    /** @nullable */
+    cancelledAt?: string | null;
+    /** @nullable */
+    cancelledBy?: number | null;
+}
+export interface CompetenceReleaseInput {
+    managerId: number;
+    startsAt: string;
+    expiresAt: string;
+    reason?: string;
+}
+export type CompetenceAuthorizationSource = typeof CompetenceAuthorizationSource[keyof typeof CompetenceAuthorizationSource];
+export declare const CompetenceAuthorizationSource: {
+    readonly admin: "admin";
+    readonly no_period: "no_period";
+    readonly period: "period";
+    readonly release: "release";
+    readonly closed: "closed";
+    readonly expired: "expired";
+};
+export interface CompetenceAuthorization {
+    allowed: boolean;
+    source: CompetenceAuthorizationSource;
+    periodId?: number;
+    releaseId?: number;
+    message?: string;
+    period?: CompetencePeriod;
+}
 export interface DiariaDeletionResult {
     id: number;
     deleted: boolean;

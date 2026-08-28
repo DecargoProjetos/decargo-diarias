@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { getGestorTeamIds } from "../lib/gestorTeams";
+import { authorizeCompetenceRegistration } from "../lib/competenceAuthorization";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -236,6 +237,17 @@ router.post("/preview", requireRole("admin", "gestor"), upload.single("file"), a
       errors.push({ campo: "Data", motivo: `Formato inválido ("${dataStr}"). Use dd/mm/aaaa.` });
     }
 
+    if (me.role === "gestor" && workDate) {
+      const authorization = await authorizeCompetenceRegistration({
+        role: me.role,
+        managerId: me.id,
+        workDate,
+      });
+      if (!authorization.allowed) {
+        errors.push({ campo: "Data", motivo: authorization.message });
+      }
+    }
+
     // ── Times ─────────────────────────────────────────────────────────────
     const startTimeRaw = String(f.horarioIni ?? "").trim();
     const endTimeRaw = String(f.horarioFim ?? "").trim();
@@ -387,6 +399,38 @@ router.post("/confirm", requireRole("admin", "gestor"), async (req, res) => {
       continue;
     }
 
+    // The preview is client-controlled after it leaves this server.  Resolve
+    // every relationship again instead of accepting its provider/team/type IDs.
+    const [[provider], [diariaType]] = await Promise.all([
+      db.select({
+        id: providersTable.id,
+        teamId: providersTable.teamId,
+        active: providersTable.active,
+        dailyRate: providersTable.dailyRate,
+      }).from(providersTable).where(eq(providersTable.id, row.providerId)).limit(1),
+      db.select({
+        id: diariaTypesTable.id,
+        active: diariaTypesTable.active,
+      }).from(diariaTypesTable).where(eq(diariaTypesTable.id, row.typeId)).limit(1),
+    ]);
+    if (!provider || !provider.active) {
+      skipped.push({ line: row.line, motivo: "Prestador inexistente ou inativo." });
+      continue;
+    }
+    if (!diariaType || !diariaType.active) {
+      skipped.push({ line: row.line, motivo: "Tipo de diária inexistente ou inativo." });
+      continue;
+    }
+    const authoritativeTeamId = provider.teamId;
+    if (!authoritativeTeamId) {
+      skipped.push({ line: row.line, motivo: "Prestador sem equipe vinculada." });
+      continue;
+    }
+    if (row.teamId !== authoritativeTeamId) {
+      skipped.push({ line: row.line, motivo: "A equipe informada não corresponde à equipe atual do prestador." });
+      continue;
+    }
+
     // Re-check duplicate
     const dupKey = `${row.providerId}:${row.workDate}`;
     if (existingSet.has(dupKey)) {
@@ -395,23 +439,31 @@ router.post("/confirm", requireRole("admin", "gestor"), async (req, res) => {
     }
 
     // Re-check gestor scope
-    if (me.role === "gestor" && !gestorTeamIds.includes(row.teamId)) {
+    if (me.role === "gestor" && !gestorTeamIds.includes(authoritativeTeamId)) {
       skipped.push({ line: row.line, motivo: "Sem permissão para lançar para este prestador." });
       continue;
     }
 
-    // Re-fetch provider dailyRate if gestor
+    if (me.role === "gestor") {
+      const authorization = await authorizeCompetenceRegistration({
+        role: me.role,
+        managerId: me.id,
+        workDate: row.workDate,
+      });
+      if (!authorization.allowed) {
+        skipped.push({ line: row.line, motivo: authorization.message });
+        continue;
+      }
+    }
+
+    // Daily rates for managers always come from the current provider record.
     let effectiveValue = row.valor;
     if (me.role === "gestor") {
-      const [prov] = await db
-        .select({ dailyRate: providersTable.dailyRate })
-        .from(providersTable)
-        .where(eq(providersTable.id, row.providerId));
-      if (!prov || prov.dailyRate == null) {
+      if (provider.dailyRate == null) {
         skipped.push({ line: row.line, motivo: `Prestador sem valor de diária configurado.` });
         continue;
       }
-      effectiveValue = Number(prov.dailyRate);
+      effectiveValue = Number(provider.dailyRate);
     }
 
     if (effectiveValue == null || effectiveValue <= 0) {
@@ -424,8 +476,8 @@ router.post("/confirm", requireRole("admin", "gestor"), async (req, res) => {
         .insert(diariasTable)
         .values({
           providerId: row.providerId,
-          teamId: row.teamId,
-          typeId: row.typeId,
+          teamId: authoritativeTeamId,
+          typeId: diariaType.id,
           managerId: me.id,
           workDate: row.workDate,
           startTime: row.startTime ?? null,
@@ -444,8 +496,8 @@ router.post("/confirm", requireRole("admin", "gestor"), async (req, res) => {
         userId: me.id,
         newValues: {
           providerId: row.providerId,
-          teamId: row.teamId,
-          typeId: row.typeId,
+          teamId: authoritativeTeamId,
+          typeId: diariaType.id,
           workDate: row.workDate,
           value: effectiveValue,
           source: "planilha",
