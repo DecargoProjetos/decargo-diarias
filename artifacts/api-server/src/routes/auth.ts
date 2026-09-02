@@ -30,7 +30,7 @@ function mapPapelToLocalRole(papel: string): "admin" | "gestor" | "prestador" {
  * Body: { token: string }  — JWT that arrived in the URL fragment #handoff=<token>
  *
  * 1. Verifies the handoff JWT (issuer, audience, signature, expiry, jti one-time-use)
- * 2. Looks up the user by decargoId (authoritative) or email (fallback for existing rows)
+ * 2. Looks up the user by verified email
  * 3. JIT-provisions when not found
  * 4. Returns a local Bearer JWT
  */
@@ -55,32 +55,76 @@ router.post("/handoff", async (req, res) => {
   }
 
   const decargoId = String(claims.id_usuario);
-  const email = claims.email.toLowerCase();
+  const email = claims.email.trim().toLowerCase();
 
-  // 1. Primary lookup by decargoId (stable, authoritative)
-  let [user] = await db
+  // The users sync stores id_funcionario, while handoff carries id_usuario.
+  // Those independent numeric domains can collide. The signed/verified email
+  // identifies the correct local account. A decargoId match with another email
+  // is treated as a collision, never as proof of identity.
+  const usersByEmail = await db
+    .select()
+    .from(usersTable)
+    .where(sql`lower(${usersTable.email}) = ${email}`)
+    .limit(2);
+
+  if (usersByEmail.length > 1) {
+    req.log.warn(
+      { email, matchingUserIds: usersByEmail.map((candidate) => candidate.id) },
+      "Handoff encontrou e-mail duplicado na base local",
+    );
+    res.status(409).json({
+      error: "Há mais de um cadastro local para este e-mail. Contate o administrador.",
+    });
+    return;
+  }
+
+  let [userByEmail] = usersByEmail;
+
+  let [userByDecargoId] = await db
     .select()
     .from(usersTable)
     .where(eq(usersTable.decargoId, decargoId))
     .limit(1);
 
-  // 2. Fallback: existing row keyed only by email (migration path for rows
-  //    created before decargoId was tracked)
-  if (!user) {
-    [user] = await db
-      .select()
-      .from(usersTable)
-      .where(sql`lower(${usersTable.email}) = ${email}`)
-      .limit(1);
+  let user = userByEmail;
 
-    if (user) {
-      // Bind the authoritative decargoId now
+  if (userByEmail && userByEmail.decargoId !== decargoId) {
+    if (!userByDecargoId) {
+      // No collision: replace the HR-record identifier with the authoritative
+      // auth-account identifier for faster future handoffs.
       await db
         .update(usersTable)
         .set({ decargoId, updatedAt: new Date() })
-        .where(eq(usersTable.id, user.id));
-      user = { ...user, decargoId };
+        .where(eq(usersTable.id, userByEmail.id));
+      userByEmail = { ...userByEmail, decargoId };
+      user = userByEmail;
+    } else if (userByDecargoId.id !== userByEmail.id) {
+      // Preserve both rows instead of violating the unique constraint. Email
+      // remains authoritative for this login; an admin can reconcile the
+      // stale conflicting row later.
+      req.log.warn(
+        {
+          handoffUserId: decargoId,
+          emailUserId: userByEmail.id,
+          conflictingUserId: userByDecargoId.id,
+        },
+        "Colisão entre id_usuario do handoff e decargo_id local",
+      );
     }
+  }
+
+  if (!user && userByDecargoId) {
+    req.log.warn(
+      {
+        handoffUserId: decargoId,
+        conflictingUserId: userByDecargoId.id,
+      },
+      "Handoff sem correspondência de e-mail colidiu com decargo_id local",
+    );
+    res.status(409).json({
+      error: "Não foi possível associar sua conta pelo e-mail. Contate o administrador.",
+    });
+    return;
   }
 
   if (!user) {
