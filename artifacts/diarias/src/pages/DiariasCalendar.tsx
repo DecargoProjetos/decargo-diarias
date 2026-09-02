@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   useGetMe,
@@ -48,6 +48,9 @@ const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const toDateKey = (date: Date): string => format(date, 'yyyy-MM-dd');
 const truncateTime = (value: string | null | undefined): string | null =>
   value ? value.slice(0, 5) : null;
+const DEFAULT_SHEET_WIDTH = 560;
+const MIN_SHEET_WIDTH = 360;
+const MAX_SHEET_WIDTH = 900;
 
 // Inline fetch para Tipos de Diária (evita dependência de geração orval)
 import { getToken } from '@/lib/auth';
@@ -73,6 +76,54 @@ export default function DiariasCalendar() {
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [sheetWidth, setSheetWidth] = useState(() => {
+    try {
+      const saved = Number(window.localStorage.getItem('diarias-day-panel-width'));
+      return Number.isFinite(saved) ? Math.min(Math.max(saved, MIN_SHEET_WIDTH), MAX_SHEET_WIDTH) : DEFAULT_SHEET_WIDTH;
+    } catch {
+      return DEFAULT_SHEET_WIDTH;
+    }
+  });
+  const resizingSheet = useRef(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('diarias-day-panel-width', String(sheetWidth));
+    } catch {
+      // The panel remains usable when browser storage is unavailable.
+    }
+  }, [sheetWidth]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!resizingSheet.current) return;
+      const maxWidth = Math.min(MAX_SHEET_WIDTH, window.innerWidth - 16);
+      setSheetWidth(Math.min(Math.max(window.innerWidth - event.clientX, MIN_SHEET_WIDTH), maxWidth));
+    };
+    const stopResizing = () => {
+      if (!resizingSheet.current) return;
+      resizingSheet.current = false;
+      document.body.style.removeProperty('cursor');
+      document.body.style.removeProperty('user-select');
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopResizing);
+    window.addEventListener('pointercancel', stopResizing);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopResizing);
+      window.removeEventListener('pointercancel', stopResizing);
+    };
+  }, []);
+
+  const startSheetResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (window.innerWidth < MIN_SHEET_WIDTH) return;
+    event.preventDefault();
+    resizingSheet.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   const canCreate = user?.role === 'admin' || user?.role === 'gestor';
 
@@ -231,7 +282,34 @@ export default function DiariasCalendar() {
       </Card>
 
       <Sheet open={!!selectedDateKey} onOpenChange={open => { if (!open) setSelectedDateKey(null); }}>
-        <SheetContent className="sm:max-w-2xl overflow-y-auto">
+        <SheetContent
+          className="overflow-y-auto"
+          style={{ width: `${sheetWidth}px`, maxWidth: 'calc(100vw - 16px)' }}
+        >
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Redimensionar painel lateral"
+            aria-valuemin={MIN_SHEET_WIDTH}
+            aria-valuemax={MAX_SHEET_WIDTH}
+            aria-valuenow={sheetWidth}
+            tabIndex={0}
+            data-testid="sheet-resize-handle"
+            onPointerDown={startSheetResize}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowLeft') {
+                event.preventDefault();
+                setSheetWidth(width => Math.min(width + 40, MAX_SHEET_WIDTH));
+              }
+              if (event.key === 'ArrowRight') {
+                event.preventDefault();
+                setSheetWidth(width => Math.max(width - 40, MIN_SHEET_WIDTH));
+              }
+            }}
+            className="absolute inset-y-0 left-0 z-10 hidden w-3 -translate-x-1/2 cursor-col-resize items-center justify-center sm:flex"
+          >
+            <span className="h-16 w-1 rounded-full bg-border transition-colors hover:bg-primary focus:bg-primary" />
+          </div>
           <SheetHeader>
             <SheetTitle className="capitalize">
               {selectedDateKey && format(parseISO(selectedDateKey), "EEEE, d 'de' MMMM", { locale: ptBR })}
