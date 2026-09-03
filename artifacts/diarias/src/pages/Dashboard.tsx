@@ -21,8 +21,27 @@ export default function Dashboard() {
   if (!user) return <div>Carregando dashboard...</div>;
 
   if (isGestor) {
-    return <div>Consulte suas diárias em "Diárias" ou "Diárias da Equipe".</div>;
-  }
+  return (
+    <div className="space-y-4 text-sm leading-6">
+      <p>
+        Seja bem-vindo ao Controle de Diárias! Para registrar uma diária da sua
+        equipe, clique no menu à esquerda em <strong>Diárias</strong>.
+      </p>
+
+      <p>
+        Para consultar as diárias registradas, clique em{' '}
+        <strong>Diárias da Equipe</strong>.
+      </p>
+
+      <p>
+        <strong>Atenção!</strong> Os gestores não têm permissão para excluir ou
+        alterar as diárias já salvas. Portanto, se algum dado for salvo
+        incorretamente, entre em contato com um dos colaboradores do RH
+        (Recursos Humanos).
+      </p>
+    </div>
+  );
+}
 
   if (isLoadingSummary || isLoadingActivity) return <div>Carregando dashboard...</div>;
 
