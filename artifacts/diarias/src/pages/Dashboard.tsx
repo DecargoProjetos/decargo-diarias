@@ -21,7 +21,7 @@ export default function Dashboard() {
   if (!user) return <div>Carregando dashboard...</div>;
 
   if (isGestor) {
-    return <div>Acesso negado. Consulte suas diárias em "Diárias" ou "Diárias da Equipe".</div>;
+    return <div>Consulte suas diárias em "Diárias" ou "Diárias da Equipe".</div>;
   }
 
   if (isLoadingSummary || isLoadingActivity) return <div>Carregando dashboard...</div>;
