@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetMe, useListUsers, useListProviders, useListTeams,
   useSyncUsers, useSyncProviders,
@@ -74,6 +75,7 @@ const normalize = (value: string): string =>
     .toLowerCase();
 
 export default function PeopleList() {
+  const queryClient = useQueryClient();
   const { data: currentUser } = useGetMe();
   const isAdmin = currentUser?.role === 'admin';
 
@@ -167,9 +169,8 @@ export default function PeopleList() {
     });
   }, [rows, filterTipo, filterTeamId, filterStatus, searchName]);
 
-  const refetchAll = () => {
-    refetchUsers();
-    refetchProviders();
+  const refetchAll = async () => {
+    await Promise.all([refetchUsers(), refetchProviders()]);
   };
 
   // Registros de funcionário (independente do papel: admin/gestor/funcionário)
@@ -256,9 +257,22 @@ export default function PeopleList() {
     if (row.sourceId === currentUser?.id && isUserRow(row)) return;
     if (!confirm(`Tem certeza que deseja excluir ${isUserRow(row) ? 'este funcionário' : 'este prestador'}? Esta ação não pode ser desfeita.`)) return;
 
-    const onDone = () => {
+    const onDone = async () => {
+      // Remove the deleted records from every cached Pessoas query before
+      // refetching. This prevents a successful deletion from leaving the row
+      // visible while React Query still holds the previous response.
+      queryClient.setQueriesData<any[]>(
+        { queryKey: ['listUsers'] },
+        current => current?.filter(user => user.id !== row.sourceId),
+      );
+      queryClient.setQueriesData<any[]>(
+        { queryKey: ['/api/providers'] },
+        current => current?.filter(provider =>
+          provider.id !== row.sourceId && provider.id !== row.linkedProviderId
+        ),
+      );
+      await refetchAll();
       toast({ title: `${row.tipo} excluído.` });
-      refetchAll();
     };
     const onFail = (err: any) => toast({ title: 'Erro ao excluir', description: err?.message, variant: 'destructive' });
 
