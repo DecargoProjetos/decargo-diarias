@@ -94,7 +94,7 @@ router.get("/", requireAuth, async (req, res) => {
   const gestorTeamIds = me.role === "gestor" ? await getGestorTeamIds(me.id) : [];
   const { where, params } = buildDiariaFilters(me, query, { gestorTeamIds });
   const orderBy = sortBy === "providerName"
-    ? "lower(p.name) ASC, d.created_at DESC, d.id DESC"
+    ? "lower(p.name) ASC, d.work_date DESC, d.created_at DESC, d.id DESC"
     : "d.created_at DESC";
 
   const [countResult, rows] = await Promise.all([

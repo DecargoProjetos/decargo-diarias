@@ -352,7 +352,7 @@ export const ListDiariasQueryParams = zod.object({
   "maxValue": zod.coerce.number().nullish(),
   "value": zod.coerce.number().nullish().describe('Valor exato da diária'),
   "hasPaymentDate": zod.union([zod.literal('sim'),zod.literal('nao'),zod.literal(null)]).nullish().describe('Filtra diárias com ou sem data de pagamento'),
-  "sortBy": zod.union([zod.literal('providerName'),zod.literal(null)]).nullish().describe('Ordenação opcional da listagem'),
+  "sortBy": zod.union([zod.literal('providerName'),zod.literal(null)]).nullish().describe('Agrupa por nome do prestador em ordem alfabética e ordena suas datas trabalhadas da mais recente para a mais antiga'),
   "page": zod.coerce.number().nullish(),
   "pageSize": zod.coerce.number().nullish()
 })

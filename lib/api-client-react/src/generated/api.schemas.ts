@@ -560,7 +560,7 @@ value?: number | null;
  */
 hasPaymentDate?: ListDiariasHasPaymentDate;
 /**
- * Ordenação opcional da listagem
+ * Agrupa por nome do prestador em ordem alfabética e ordena suas datas trabalhadas da mais recente para a mais antiga
  * @nullable
  */
 sortBy?: ListDiariasSortBy;

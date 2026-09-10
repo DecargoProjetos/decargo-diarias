@@ -20,6 +20,7 @@ type DiariaList = {
     providerId: number;
     providerName: string;
     teamId: number;
+    workDate: string;
     value: string | null;
   }>;
   total: number;
@@ -254,7 +255,17 @@ describe("GET /api/diarias — permissões por papel", () => {
     });
   }
 
-  it("ordena por nome do prestador antes da paginação quando solicitado", async () => {
+  it("agrupa por prestador e ordena suas datas trabalhadas da maior para a menor antes da paginação", async () => {
+    const [newerPrestadorDiaria] = await db.insert(diariasTable).values({
+      providerId: fixture.managedPrestador.providerId,
+      teamId: fixture.managedPrestador.teamId,
+      workDate: "2097-04-03",
+      value: "111.00",
+      status: "pendente_aprovacao",
+      createdBy: userIds[0],
+    }).returning();
+    diariaIds.push(newerPrestadorDiaria.id);
+
     const response = await authenticatedGet(
       `/api/diarias?startDate=${startDate}&endDate=${endDate}&sortBy=providerName&pageSize=100`,
       "admin",
@@ -266,6 +277,13 @@ describe("GET /api/diarias — permissões por papel", () => {
       "__TEST_READ_PERMISSIONS_PROVIDER_FUNCIONARIO__",
       "__TEST_READ_PERMISSIONS_PROVIDER_OUTSIDE__",
       "__TEST_READ_PERMISSIONS_PROVIDER_PRESTADOR__",
+      "__TEST_READ_PERMISSIONS_PROVIDER_PRESTADOR__",
+    ]);
+    expect(body.data.map((row) => row.workDate)).toEqual([
+      "2097-04-02",
+      endDate,
+      "2097-04-03",
+      startDate,
     ]);
   });
 });
