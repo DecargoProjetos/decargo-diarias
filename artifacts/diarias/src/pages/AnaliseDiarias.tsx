@@ -313,20 +313,32 @@ export default function AnaliseDiarias() {
         setExportConfirmOpen(false);
         setExportFallbackDate('');
         const skippedCount = res.skipped?.length ?? 0;
+        setSelected(new Set(res.skipped?.map((item) => item.id) ?? []));
+        const skippedDetails = res.skipped
+          ?.slice(0, 10)
+          .map((item) => `Diária #${item.id}: ${item.reason}`)
+          .join('\n');
+        const remainingCount = Math.max(0, skippedCount - 10);
         setLastResult({
           title: 'Exportação para o DECARGO People concluída',
           description: skippedCount > 0
-            ? `${res.exported} exportadas com sucesso (lote ${res.integrationRef}). ${skippedCount} não puderam ser exportadas.`
+            ? `${res.exported} exportadas com sucesso (lote ${res.integrationRef}). ${skippedCount} não puderam ser exportadas.\n\n${skippedDetails}${remainingCount ? `\n... e mais ${remainingCount}.` : ''}`
             : `${res.exported} diárias exportadas com sucesso. Lote: ${res.integrationRef}.`,
         });
         refreshAll();
       },
       onError: (err: any) => {
         setExportConfirmOpen(false);
-        toast({
-          title: 'Erro na exportação',
-          description: err?.response?.data?.error ?? err?.message,
-          variant: 'destructive',
+        const errorData = err?.data ?? err?.response?.data;
+        const details = Array.isArray(errorData?.details)
+          ? errorData.details
+              .slice(0, 10)
+              .map((item: { id: number; reason: string }) => `Diária #${item.id}: ${item.reason}`)
+              .join('\n')
+          : '';
+        setLastResult({
+          title: 'Exportação não realizada',
+          description: [errorData?.error ?? err?.message, details].filter(Boolean).join('\n\n'),
         });
       },
     });
@@ -813,7 +825,7 @@ export default function AnaliseDiarias() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{lastResult?.title}</DialogTitle>
-            <DialogDescription>{lastResult?.description}</DialogDescription>
+            <DialogDescription className="whitespace-pre-line">{lastResult?.description}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setLastResult(null)}>Fechar</Button>

@@ -572,7 +572,8 @@ router.post("/export", requireRole("admin"), async (req, res) => {
 
   const byId = new Map(rows.rows.map((r) => [r.id, r]));
 
-  // Validate every requested record before touching anything (all-or-nothing).
+  // Validate every requested record before touching anything. Invalid records
+  // remain unchanged while valid records continue through the export.
   const validationErrors: { id: number; reason: string }[] = [];
   for (const id of diariaIds) {
     const row = byId.get(id);
@@ -580,7 +581,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
     if (row.status !== "disponivel_exportacao") {
       validationErrors.push({ id, reason: "Diária não está aprovada/disponível para exportação" }); continue;
     }
-    if (!row.exportTarget) {
+    if (!row.exportTarget || !["diaria_extra", "falta"].includes(row.exportTarget)) {
       validationErrors.push({ id, reason: "Tipo de diária não definido — configure o tipo antes de exportar" }); continue;
     }
     // Diárias extras need a payment date; faltas have auto-calculated discount date.
@@ -598,14 +599,17 @@ router.post("/export", requireRole("admin"), async (req, res) => {
     }
   }
 
-  if (validationErrors.length > 0) {
+  const invalidIds = new Set(validationErrors.map(({ id }) => id));
+  const eligibleIds = diariaIds.filter((id) => !invalidIds.has(id));
+
+  if (eligibleIds.length === 0) {
     res.status(400).json({ error: "Algumas diárias não passaram na validação", details: validationErrors });
     return;
   }
 
   // Separate by export target
-  const diariaExtraIds = diariaIds.filter((id) => byId.get(id)!.exportTarget === "diaria_extra");
-  const faltaIds = diariaIds.filter((id) => byId.get(id)!.exportTarget === "falta");
+  const diariaExtraIds = eligibleIds.filter((id) => byId.get(id)!.exportTarget === "diaria_extra");
+  const faltaIds = eligibleIds.filter((id) => byId.get(id)!.exportTarget === "falta");
 
   const integrationRef = `EXP-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
   const now = new Date();
@@ -620,13 +624,13 @@ router.post("/export", requireRole("admin"), async (req, res) => {
         .update(diariasTable)
         .set({ integrationId: integrationRef, updatedAt: now })
         .where(and(
-          inArray(diariasTable.id, diariaIds),
+          inArray(diariasTable.id, eligibleIds),
           eq(diariasTable.status, "disponivel_exportacao"),
           isNull(diariasTable.integrationId),
         ))
         .returning({ id: diariasTable.id });
 
-      if (reserved.length !== diariaIds.length) {
+      if (reserved.length !== eligibleIds.length) {
         const error = new Error("Uma ou mais diárias foram alteradas durante a preparação da exportação");
         (error as Error & { code?: string }).code = "EXPORT_RESERVATION_CONFLICT";
         throw error;
@@ -660,7 +664,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
         }),
       );
     } catch (err) {
-      await Promise.all(diariaIds.map((id) => logAudit({
+      await Promise.all(eligibleIds.map((id) => logAudit({
         entityType: "diaria",
         entityId: id,
         action: "exportacao_aguardando_conferencia",
@@ -695,7 +699,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
         }),
       );
     } catch (err) {
-      await Promise.all(diariaIds.map((id) => logAudit({
+      await Promise.all(eligibleIds.map((id) => logAudit({
         entityType: "diaria",
         entityId: id,
         action: "exportacao_aguardando_conferencia",
@@ -712,7 +716,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
     }
   }
 
-  const succeededIds = diariaIds.filter((id) => !allFailedLocalIds.has(id));
+  const succeededIds = eligibleIds.filter((id) => !allFailedLocalIds.has(id));
 
   // A known rejection from DECARGO People is safe to retry, so release only
   // those reservations. Unknown transport failures intentionally remain
@@ -771,7 +775,10 @@ router.post("/export", requireRole("admin"), async (req, res) => {
     exported: succeededIds.length,
     integrationRef,
     exportedAt: now,
-    skipped: [...allFailedLocalIds].map((id) => ({ id, reason: "Rejeitado pelo DECARGO People" })),
+    skipped: [
+      ...validationErrors,
+      ...[...allFailedLocalIds].map((id) => ({ id, reason: "Rejeitado pelo DECARGO People" })),
+    ],
   });
 });
 
