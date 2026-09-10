@@ -236,4 +236,87 @@ describe("mutações de /api/diarias/:id — permissões por papel", () => {
     const [persisted] = await db.select().from(diariasTable).where(eq(diariasTable.id, diaria.id));
     expect(persisted).toBeUndefined();
   });
+
+  it("admin pode revogar aprovações em lote antes da exportação", async () => {
+    const first = await createDiaria("disponivel_exportacao");
+    const second = await createDiaria("disponivel_exportacao");
+    const approvedAt = new Date("2098-02-02T12:00:00Z");
+    await db.update(diariasTable).set({
+      approvedAt,
+      approvedBy: adminId,
+    }).where(inArray(diariasTable.id, [first.id, second.id]));
+
+    const response = await fetch(`${apiBaseUrl}/api/diarias/bulk-reject`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.admin}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        diariaIds: [first.id, second.id],
+        note: "__TEST_REVOKED_APPROVAL__",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      succeeded: [first.id, second.id],
+      failed: [],
+    });
+
+    const persisted = await db.select({
+      status: diariasTable.status,
+      actionNote: diariasTable.actionNote,
+      approvedAt: diariasTable.approvedAt,
+      approvedBy: diariasTable.approvedBy,
+    }).from(diariasTable).where(inArray(diariasTable.id, [first.id, second.id]));
+
+    expect(persisted).toHaveLength(2);
+    for (const row of persisted) {
+      expect(row).toEqual({
+        status: "rejeitada",
+        actionNote: "__TEST_REVOKED_APPROVAL__",
+        approvedAt: null,
+        approvedBy: null,
+      });
+    }
+  });
+
+  it("não revoga aprovação reservada por uma exportação em andamento", async () => {
+    const diaria = await createDiaria("disponivel_exportacao");
+    await db.update(diariasTable).set({
+      integrationId: "__TEST_EXPORT_IN_PROGRESS__",
+      approvedAt: new Date("2098-02-02T12:00:00Z"),
+      approvedBy: adminId,
+    }).where(eq(diariasTable.id, diaria.id));
+
+    const response = await fetch(`${apiBaseUrl}/api/diarias/bulk-reject`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.admin}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        diariaIds: [diaria.id],
+        note: "__TEST_MUST_REMAIN_APPROVED__",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      succeeded: [],
+      failed: [{ id: diaria.id, reason: "Diária está em processo de exportação" }],
+    });
+
+    const [persisted] = await db.select({
+      status: diariasTable.status,
+      integrationId: diariasTable.integrationId,
+      approvedBy: diariasTable.approvedBy,
+    }).from(diariasTable).where(eq(diariasTable.id, diaria.id));
+    expect(persisted).toEqual({
+      status: "disponivel_exportacao",
+      integrationId: "__TEST_EXPORT_IN_PROGRESS__",
+      approvedBy: adminId,
+    });
+  });
 });

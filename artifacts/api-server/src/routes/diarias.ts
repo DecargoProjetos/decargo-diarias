@@ -276,11 +276,18 @@ router.post("/bulk-reject", requireRole("admin"), async (req, res) => {
   }
 
   const rows = await db
-    .select({ id: diariasTable.id, status: diariasTable.status })
+    .select({
+      id: diariasTable.id,
+      status: diariasTable.status,
+      integrationId: diariasTable.integrationId,
+    })
     .from(diariasTable)
     .where(inArray(diariasTable.id, diariaIds));
 
-  const rejectable = ["pendente_aprovacao", "em_analise"];
+  const rejectable = ["pendente_aprovacao", "em_analise", "disponivel_exportacao"];
+  const canReject = (row: typeof rows[number]) =>
+    rejectable.includes(row.status) &&
+    (row.status !== "disponivel_exportacao" || row.integrationId === null);
   const foundIds = new Set(rows.map((r) => r.id));
   const succeeded: number[] = [];
   const failed: { id: number; reason: string }[] = [];
@@ -288,10 +295,15 @@ router.post("/bulk-reject", requireRole("admin"), async (req, res) => {
   for (const id of diariaIds) {
     if (!foundIds.has(id)) failed.push({ id, reason: "Diária não encontrada" });
   }
-  const toReject = rows.filter((r) => rejectable.includes(r.status));
+  const toReject = rows.filter(canReject);
   for (const r of rows) {
-    if (!rejectable.includes(r.status)) {
-      failed.push({ id: r.id, reason: "Diária não pode ser reprovada no status atual" });
+    if (!canReject(r)) {
+      failed.push({
+        id: r.id,
+        reason: r.status === "disponivel_exportacao" && r.integrationId
+          ? "Diária está em processo de exportação"
+          : "Diária não pode ser reprovada no status atual",
+      });
     }
   }
 
@@ -299,7 +311,13 @@ router.post("/bulk-reject", requireRole("admin"), async (req, res) => {
     const now = new Date();
     await db
       .update(diariasTable)
-      .set({ status: "rejeitada", actionNote: note, updatedAt: now })
+      .set({
+        status: "rejeitada",
+        actionNote: note,
+        approvedAt: null,
+        approvedBy: null,
+        updatedAt: now,
+      })
       .where(inArray(diariasTable.id, toReject.map((r) => r.id)));
 
     for (const r of toReject) {
@@ -1002,8 +1020,11 @@ router.post("/:id/reject", requireRole("admin"), async (req, res) => {
   const [diaria] = await db.select().from(diariasTable).where(eq(diariasTable.id, id)).limit(1);
   if (!diaria) { res.status(404).json({ error: "Diária não encontrada" }); return; }
 
-  const rejectable = ["pendente_aprovacao", "em_analise"];
-  if (!rejectable.includes(diaria.status)) {
+  const rejectable = ["pendente_aprovacao", "em_analise", "disponivel_exportacao"];
+  if (
+    !rejectable.includes(diaria.status) ||
+    (diaria.status === "disponivel_exportacao" && diaria.integrationId !== null)
+  ) {
     res.status(400).json({ error: "Diária não pode ser reprovada no status atual" });
     return;
   }
@@ -1012,6 +1033,8 @@ router.post("/:id/reject", requireRole("admin"), async (req, res) => {
   await db.update(diariasTable).set({
     status: "rejeitada",
     actionNote: note,
+    approvedAt: null,
+    approvedBy: null,
     updatedAt: now,
   }).where(eq(diariasTable.id, id));
 

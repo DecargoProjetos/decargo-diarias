@@ -227,7 +227,9 @@ function integrationApiKey(): string {
  * Pushes a batch of faltas to DECARGO People > Folha Mensal > Descontos
  * via POST /api/integration/descontos, chunking at 500 items per request.
  *
- * TODO: verify exact endpoint path and field names with the DECARGO People team.
+ * Confirmed integration contract:
+ * - request: { descontos: [{ cnpj, tipo, valor, data_desconto, anotacoes_gerais? }] }
+ * - response: { total, inserted, updated, skipped, errors }
  */
 export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<DiariaExportResult> {
   const apiKey = integrationApiKey();
