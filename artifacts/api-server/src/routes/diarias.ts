@@ -663,6 +663,20 @@ router.post("/export", requireRole("admin"), async (req, res) => {
   }
 
   const allFailedLocalIds = new Set<number>();
+  const blockUnidentifiedResult = async (source: string) => {
+    await Promise.all(eligibleIds.map((id) => logAudit({
+      entityType: "diaria",
+      entityId: id,
+      action: "exportacao_aguardando_conferencia",
+      userId: me.id,
+      oldValues: { status: "disponivel_exportacao" },
+      newValues: { integrationId: integrationRef, reason: "resultado_externo_nao_identificavel", source },
+    })));
+    res.status(502).json({
+      error: `O DECARGO People devolveu um resultado externo não identificável para ${source}; os registros foram bloqueados para conferência`,
+      integrationRef,
+    });
+  };
 
   // --- Export Diárias Extras ---
   if (diariaExtraIds.length > 0) {
@@ -693,6 +707,13 @@ router.post("/export", requireRole("admin"), async (req, res) => {
       res.status(502).json({ error: `Falha ao enviar diárias extras; os registros foram bloqueados para conferência: ${err instanceof Error ? err.message : String(err)}` });
       return;
     }
+    const hasUnidentifiedExtraError =
+      (extraResult.unidentifiedErrors ?? 0) > 0 ||
+      (extraResult.errors ?? []).some((e) => typeof (e as { __localId?: number }).__localId !== "number");
+    if (hasUnidentifiedExtraError) {
+      await blockUnidentifiedResult("diárias extras");
+      return;
+    }
     for (const e of extraResult.errors ?? []) {
       const lid = (e as { __localId?: number }).__localId;
       if (typeof lid === "number") allFailedLocalIds.add(lid);
@@ -717,7 +738,59 @@ router.post("/export", requireRole("admin"), async (req, res) => {
         }),
       );
     } catch (err) {
-      await Promise.all(eligibleIds.map((id) => logAudit({
+      const partial = err && typeof err === "object"
+        && Array.isArray((err as { completedLocalIds?: unknown }).completedLocalIds)
+        && Array.isArray((err as { rejectedLocalIds?: unknown }).rejectedLocalIds)
+        && Array.isArray((err as { uncertainLocalIds?: unknown }).uncertainLocalIds)
+        && Array.isArray((err as { pendingLocalIds?: unknown }).pendingLocalIds)
+        ? err as {
+            completedLocalIds: number[];
+            rejectedLocalIds: number[];
+            uncertainLocalIds: number[];
+            pendingLocalIds: number[];
+          }
+        : null;
+      const confirmedExtraIds = diariaExtraIds.filter((id) => !allFailedLocalIds.has(id));
+      const confirmedIds = [...confirmedExtraIds, ...(partial?.completedLocalIds ?? [])];
+      const rejectedIds = [...allFailedLocalIds, ...(partial?.rejectedLocalIds ?? [])];
+      const pendingIds = partial?.pendingLocalIds ?? [];
+      const uncertainIds = partial?.uncertainLocalIds ?? faltaIds;
+      const retryableIds = [...rejectedIds, ...pendingIds];
+
+      if (confirmedIds.length > 0) {
+        await db.update(diariasTable).set({
+          status: "exportada", exportedAt: now, exportedBy: me.id, integrationId: integrationRef, updatedAt: now,
+        }).where(and(
+          inArray(diariasTable.id, confirmedIds),
+          eq(diariasTable.integrationId, integrationRef),
+        ));
+        const confirmedFaltaIds = confirmedIds.filter((id) => byId.get(id)?.exportTarget === "falta");
+        for (const id of confirmedFaltaIds) {
+          const row = byId.get(id)!;
+          if (!row.paymentDate) {
+            await db.update(diariasTable).set({
+              paymentDate: calcDiscountDate(row.workDate),
+              updatedAt: now,
+            }).where(eq(diariasTable.id, id));
+          }
+        }
+      }
+      if (retryableIds.length > 0) {
+        await db.update(diariasTable).set({ integrationId: null, updatedAt: now }).where(and(
+          inArray(diariasTable.id, retryableIds),
+          eq(diariasTable.integrationId, integrationRef),
+        ));
+      }
+
+      await Promise.all(confirmedIds.map((id) => logAudit({
+        entityType: "diaria",
+        entityId: id,
+        action: "exportado",
+        userId: me.id,
+        oldValues: { status: "disponivel_exportacao" },
+        newValues: { status: "exportada", integrationId: integrationRef, exportTarget: byId.get(id)?.exportTarget },
+      })));
+      await Promise.all(uncertainIds.map((id) => logAudit({
         entityType: "diaria",
         entityId: id,
         action: "exportacao_aguardando_conferencia",
@@ -725,7 +798,20 @@ router.post("/export", requireRole("admin"), async (req, res) => {
         oldValues: { status: "disponivel_exportacao" },
         newValues: { integrationId: integrationRef },
       })));
-      res.status(502).json({ error: `Falha ao enviar faltas para o DECARGO People; os registros foram bloqueados para conferência: ${err instanceof Error ? err.message : String(err)}` });
+      res.status(502).json({
+        error: `Falha ao enviar faltas para o DECARGO People; o lote sem confirmação foi bloqueado para conferência: ${err instanceof Error ? err.message : String(err)}`,
+        exported: confirmedIds,
+        awaitingConfirmation: uncertainIds,
+        retryable: retryableIds,
+        integrationRef,
+      });
+      return;
+    }
+    const hasUnidentifiedFaltaError =
+      (faltaResult.unidentifiedErrors ?? 0) > 0 ||
+      (faltaResult.errors ?? []).some((e) => typeof (e as { __localId?: number }).__localId !== "number");
+    if (hasUnidentifiedFaltaError) {
+      await blockUnidentifiedResult("faltas");
       return;
     }
     for (const e of faltaResult.errors ?? []) {

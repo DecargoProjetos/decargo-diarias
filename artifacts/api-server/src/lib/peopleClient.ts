@@ -213,6 +213,25 @@ export interface DiariaExportResult {
   updated: number;
   skipped: number;
   errors: DiariaExportError[];
+  /**
+   * Number of external errors that could not be mapped back to a local record.
+   * Callers must treat any positive value as an uncertain batch result.
+   */
+  unidentifiedErrors?: number;
+}
+
+export class PeopleBatchExportError extends Error {
+  constructor(
+    message: string,
+    public readonly completedLocalIds: number[],
+    public readonly rejectedLocalIds: number[],
+    public readonly uncertainLocalIds: number[],
+    public readonly pendingLocalIds: number[],
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "PeopleBatchExportError";
+  }
 }
 
 const INTEGRATION_BATCH_SIZE = 500;
@@ -233,21 +252,43 @@ function integrationApiKey(): string {
  */
 export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<DiariaExportResult> {
   const apiKey = integrationApiKey();
-  const merged: DiariaExportResult = { total: 0, inserted: 0, updated: 0, skipped: 0, errors: [] };
+  const merged: DiariaExportResult = {
+    total: 0, inserted: 0, updated: 0, skipped: 0, errors: [], unidentifiedErrors: 0,
+  };
+  const completedLocalIds: number[] = [];
+  const rejectedLocalIds: number[] = [];
 
   for (let i = 0; i < items.length; i += INTEGRATION_BATCH_SIZE) {
     const chunk = items.slice(i, i + INTEGRATION_BATCH_SIZE);
     const payload = chunk.map(({ __localId: _localId, ...rest }) => rest);
 
-    const res = await fetch(`${baseUrl()}/api/integration/descontos`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-      body: JSON.stringify({ descontos: payload }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl()}/api/integration/descontos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        body: JSON.stringify({ descontos: payload }),
+      });
+    } catch (cause) {
+      throw new PeopleBatchExportError(
+        `Falha de rede ao enviar lote de descontos: ${cause instanceof Error ? cause.message : String(cause)}`,
+        completedLocalIds,
+        rejectedLocalIds,
+        chunk.map((item) => item.__localId),
+        items.slice(i + chunk.length).map((item) => item.__localId),
+        { cause },
+      );
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => "(no body)");
-      throw new Error(`People API /api/integration/descontos → ${res.status}: ${text}`);
+      throw new PeopleBatchExportError(
+        `People API /api/integration/descontos → ${res.status}: ${text}`,
+        completedLocalIds,
+        rejectedLocalIds,
+        chunk.map((item) => item.__localId),
+        items.slice(i + chunk.length).map((item) => item.__localId),
+      );
     }
 
     const data = (await res.json()) as DiariaExportResult;
@@ -256,12 +297,33 @@ export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<Diar
     merged.updated += data.updated ?? 0;
     merged.skipped += data.skipped ?? 0;
 
+    const chunkRejectedIds: number[] = [];
+    let chunkHasUnidentifiedError = false;
     for (const err of data.errors ?? []) {
-      const match = chunk.find(
+      const matches = chunk.filter(
         (c) => String((err as Record<string, unknown>).cnpj) === String(c.cnpj),
       );
-      merged.errors.push({ ...err, __localId: match?.__localId });
+      if (matches.length !== 1) {
+        merged.unidentifiedErrors!++;
+        chunkHasUnidentifiedError = true;
+      } else {
+        chunkRejectedIds.push(matches[0].__localId);
+      }
+      merged.errors.push({ ...err, __localId: matches.length === 1 ? matches[0].__localId : undefined });
     }
+
+    if (chunkHasUnidentifiedError) {
+      throw new PeopleBatchExportError(
+        "People API devolveu rejeição de desconto sem identificação local inequívoca",
+        completedLocalIds,
+        rejectedLocalIds,
+        chunk.map((item) => item.__localId),
+        items.slice(i + chunk.length).map((item) => item.__localId),
+      );
+    }
+    rejectedLocalIds.push(...chunkRejectedIds);
+    const rejectedSet = new Set(chunkRejectedIds);
+    completedLocalIds.push(...chunk.filter((item) => !rejectedSet.has(item.__localId)).map((item) => item.__localId));
   }
 
   return merged;
@@ -276,7 +338,9 @@ export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<Diar
  */
 export async function pushDiariasToPeople(items: DiariaExportItem[]): Promise<DiariaExportResult> {
   const apiKey = integrationApiKey();
-  const merged: DiariaExportResult = { total: 0, inserted: 0, updated: 0, skipped: 0, errors: [] };
+  const merged: DiariaExportResult = {
+    total: 0, inserted: 0, updated: 0, skipped: 0, errors: [], unidentifiedErrors: 0,
+  };
 
   for (let i = 0; i < items.length; i += INTEGRATION_BATCH_SIZE) {
     const chunk = items.slice(i, i + INTEGRATION_BATCH_SIZE);
@@ -299,16 +363,16 @@ export async function pushDiariasToPeople(items: DiariaExportItem[]): Promise<Di
     merged.updated += data.updated ?? 0;
     merged.skipped += data.skipped ?? 0;
 
-    // The People API's error entries don't carry our local id — tag each by
-    // matching id_prestador + dia_trabalhado back to the chunk we just sent,
-    // since that pair is unique within a single export request.
+    // The People API's error entries don't carry our local id. Only tag an
+    // error when its external key identifies exactly one submitted item.
     for (const err of data.errors ?? []) {
-      const match = chunk.find(
+      const matches = chunk.filter(
         (c) =>
           String((err as Record<string, unknown>).id_prestador) === String(c.id_prestador) &&
           String((err as Record<string, unknown>).dia_trabalhado) === String(c.dia_trabalhado),
       );
-      merged.errors.push({ ...err, __localId: match?.__localId });
+      if (matches.length !== 1) merged.unidentifiedErrors!++;
+      merged.errors.push({ ...err, __localId: matches.length === 1 ? matches[0].__localId : undefined });
     }
   }
 

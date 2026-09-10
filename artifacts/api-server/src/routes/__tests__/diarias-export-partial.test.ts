@@ -490,4 +490,216 @@ describe("POST /api/diarias/export — lote misto", () => {
     });
     expect(retried.exportedAt).toBeInstanceOf(Date);
   });
+
+  it("mantém o lote reservado quando o People devolve erro sem identificação local", async () => {
+    const [first, second] = await db.insert(diariasTable).values([
+      {
+        providerId,
+        teamId,
+        managerId: adminId,
+        typeId,
+        workDate: "2026-08-07",
+        value: "155.00",
+        paymentDate: "2026-08-31",
+        status: "disponivel_exportacao",
+        createdBy: adminId,
+      },
+      {
+        providerId,
+        teamId,
+        managerId: adminId,
+        typeId,
+        workDate: "2026-08-07",
+        value: "160.00",
+        paymentDate: "2026-08-31",
+        status: "disponivel_exportacao",
+        createdBy: adminId,
+      },
+    ]).returning({ id: diariasTable.id });
+    diariaIds.push(first.id, second.id);
+
+    peopleMocks.pushDiariasToPeople.mockResolvedValueOnce({
+      total: 2,
+      inserted: 1,
+      updated: 0,
+      skipped: 1,
+      errors: [{ error: "Rejeição sem campos de identificação" }],
+      unidentifiedErrors: 1,
+    });
+
+    const response = await fetch(`${apiBaseUrl}/api/diarias/export`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ diariaIds: [first.id, second.id] }),
+    });
+
+    expect(response.status).toBe(502);
+    const body = await response.json() as { error: string; integrationRef: string };
+    expect(body.error).toContain("resultado externo não identificável");
+    expect(body.error).toContain("bloqueados para conferência");
+
+    const rows = await db.select({
+      status: diariasTable.status,
+      integrationId: diariasTable.integrationId,
+      exportedAt: diariasTable.exportedAt,
+    }).from(diariasTable).where(inArray(diariasTable.id, [first.id, second.id]));
+
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        status: "disponivel_exportacao",
+        integrationId: body.integrationRef,
+        exportedAt: null,
+      });
+    }
+
+    const callsBeforeRetry = peopleMocks.pushDiariasToPeople.mock.calls.length;
+    const retryResponse = await fetch(`${apiBaseUrl}/api/diarias/export`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ diariaIds: [first.id, second.id] }),
+    });
+    expect(retryResponse.status).toBe(409);
+    expect(peopleMocks.pushDiariasToPeople).toHaveBeenCalledTimes(callsBeforeRetry);
+  });
+
+  it("mantém faltas com CNPJ repetido reservadas quando a rejeição é ambígua", async () => {
+    const [first, second] = await db.insert(diariasTable).values([
+      {
+        providerId,
+        teamId,
+        managerId: adminId,
+        typeId: faltaTypeId,
+        workDate: "2026-08-09",
+        value: "165.00",
+        status: "disponivel_exportacao",
+        createdBy: adminId,
+      },
+      {
+        providerId,
+        teamId,
+        managerId: adminId,
+        typeId: faltaTypeId,
+        workDate: "2026-08-10",
+        value: "170.00",
+        status: "disponivel_exportacao",
+        createdBy: adminId,
+      },
+    ]).returning({ id: diariasTable.id });
+    diariaIds.push(first.id, second.id);
+
+    peopleMocks.pushFaltasToPeople.mockResolvedValueOnce({
+      total: 2,
+      inserted: 1,
+      updated: 0,
+      skipped: 1,
+      errors: [{ cnpj: "11111111000111", error: "Rejeição ambígua" }],
+      unidentifiedErrors: 1,
+    });
+
+    const response = await fetch(`${apiBaseUrl}/api/diarias/export`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ diariaIds: [first.id, second.id] }),
+    });
+
+    expect(response.status).toBe(502);
+    const body = await response.json() as { error: string; integrationRef: string };
+    expect(body.error).toContain("resultado externo não identificável");
+
+    const rows = await db.select({
+      status: diariasTable.status,
+      integrationId: diariasTable.integrationId,
+      exportedAt: diariasTable.exportedAt,
+    }).from(diariasTable).where(inArray(diariasTable.id, [first.id, second.id]));
+
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toEqual({
+        status: "disponivel_exportacao",
+        integrationId: body.integrationRef,
+        exportedAt: null,
+      });
+    }
+  });
+
+  it("retoma somente faltas ainda não enviadas após falha de rede entre lotes", async () => {
+    const created = await db.insert(diariasTable).values([
+      {
+        providerId, teamId, managerId: adminId, typeId: faltaTypeId,
+        workDate: "2026-08-11", value: "140.00",
+        status: "disponivel_exportacao", createdBy: adminId,
+      },
+      {
+        providerId: secondProviderId, teamId, managerId: adminId, typeId: faltaTypeId,
+        workDate: "2026-08-12", value: "145.00",
+        status: "disponivel_exportacao", createdBy: adminId,
+      },
+      {
+        providerId, teamId, managerId: adminId, typeId: faltaTypeId,
+        workDate: "2026-08-13", value: "150.00",
+        status: "disponivel_exportacao", createdBy: adminId,
+      },
+    ]).returning({ id: diariasTable.id });
+    const [confirmed, uncertain, pending] = created;
+    diariaIds.push(...created.map(({ id }) => id));
+
+    peopleMocks.pushFaltasToPeople.mockRejectedValueOnce(Object.assign(new Error("connection reset"), {
+      completedLocalIds: [confirmed.id],
+      rejectedLocalIds: [],
+      uncertainLocalIds: [uncertain.id],
+      pendingLocalIds: [pending.id],
+    }));
+
+    const response = await fetch(`${apiBaseUrl}/api/diarias/export`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ diariaIds: created.map(({ id }) => id) }),
+    });
+
+    expect(response.status).toBe(502);
+    const body = await response.json() as {
+      exported: number[];
+      awaitingConfirmation: number[];
+      retryable: number[];
+      integrationRef: string;
+    };
+    expect(body).toMatchObject({
+      exported: [confirmed.id],
+      awaitingConfirmation: [uncertain.id],
+      retryable: [pending.id],
+    });
+
+    const afterFailure = await db.select({
+      id: diariasTable.id,
+      status: diariasTable.status,
+      integrationId: diariasTable.integrationId,
+    }).from(diariasTable).where(inArray(diariasTable.id, created.map(({ id }) => id)));
+    const byId = new Map(afterFailure.map((row) => [row.id, row]));
+    expect(byId.get(confirmed.id)).toMatchObject({ status: "exportada", integrationId: body.integrationRef });
+    expect(byId.get(uncertain.id)).toMatchObject({ status: "disponivel_exportacao", integrationId: body.integrationRef });
+    expect(byId.get(pending.id)).toMatchObject({ status: "disponivel_exportacao", integrationId: null });
+
+    peopleMocks.pushFaltasToPeople.mockResolvedValueOnce({
+      total: 1, inserted: 1, updated: 0, skipped: 0, errors: [], unidentifiedErrors: 0,
+    });
+    const retryResponse = await fetch(`${apiBaseUrl}/api/diarias/export`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ diariaIds: body.retryable }),
+    });
+
+    expect(retryResponse.status).toBe(200);
+    expect(peopleMocks.pushFaltasToPeople).toHaveBeenLastCalledWith([
+      expect.objectContaining({ __localId: pending.id }),
+    ]);
+  });
 });
