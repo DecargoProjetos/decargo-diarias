@@ -485,6 +485,12 @@ paths:
           schema:
             type: ["string", "null"]
             enum: [sim, nao, null]
+        - name: sortBy
+          in: query
+          description: Ordenação opcional da listagem
+          schema:
+            type: ["string", "null"]
+            enum: [providerName, null]
         - name: page
           in: query
           schema:

@@ -92,7 +92,12 @@ export default function AnaliseDiarias() {
   }), [filters]);
 
   const { data: summary } = useGetDiariasAnaliseSummary(queryFilters);
-  const { data: page1, isLoading, refetch } = useListDiarias({ ...queryFilters, page, pageSize: 20 });
+  const { data: page1, isLoading, refetch } = useListDiarias({
+    ...queryFilters,
+    sortBy: 'providerName',
+    page,
+    pageSize: 20,
+  });
 
   const approve = useApproveDiaria();
   const reject = useRejectDiaria();

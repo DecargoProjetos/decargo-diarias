@@ -560,6 +560,11 @@ value?: number | null;
  */
 hasPaymentDate?: ListDiariasHasPaymentDate;
 /**
+ * Ordenação opcional da listagem
+ * @nullable
+ */
+sortBy?: ListDiariasSortBy;
+/**
  * @nullable
  */
 page?: number | null;
@@ -590,6 +595,13 @@ export type ListDiariasHasPaymentDate = typeof ListDiariasHasPaymentDate[keyof t
 export const ListDiariasHasPaymentDate = {
   sim: 'sim',
   nao: 'nao',
+} as const;
+
+export type ListDiariasSortBy = typeof ListDiariasSortBy[keyof typeof ListDiariasSortBy] | null;
+
+
+export const ListDiariasSortBy = {
+  providerName: 'providerName',
 } as const;
 
 export type GetDiariasAnaliseSummaryParams = {

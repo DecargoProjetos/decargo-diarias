@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListDiariasHasPaymentDate } from './listDiariasHasPaymentDate';
+import type { ListDiariasSortBy } from './listDiariasSortBy';
 import type { ListDiariasStatus } from './listDiariasStatus';
 
 export type ListDiariasParams = {
@@ -56,6 +57,11 @@ value?: number | null;
  * @nullable
  */
 hasPaymentDate?: ListDiariasHasPaymentDate;
+/**
+ * Ordenação opcional da listagem
+ * @nullable
+ */
+sortBy?: ListDiariasSortBy;
 /**
  * @nullable
  */

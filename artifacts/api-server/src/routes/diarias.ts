@@ -17,14 +17,11 @@ import { pushDiariasToPeople, pushFaltasToPeople } from "../lib/peopleClient";
 import { getGestorTeamIds } from "../lib/gestorTeams";
 import { buildDiariaFilters, type AnaliseFilterQuery } from "../lib/diariaFilters";
 import { authorizeCompetenceRegistration } from "../lib/competenceAuthorization";
+import { canSeeDiariaValue } from "../lib/diariaPermissions";
 
 const router = Router();
 
 // Gestor não deve ver valores de diárias em nenhuma tela ou chamada de API.
-function canSeeValue(role: string) {
-  return role === "admin";
-}
-
 // Statuses considered "locked" — financial fields and status may not change
 // once a diária reaches one of these (Bloqueio Pós-Exportação).
 const LOCKED_STATUSES = ["exportada", "paga"];
@@ -76,7 +73,7 @@ async function getDiariaById(id: number, userId: number, role: string, gestorTea
   }
 
   const { providerDecargoId: _omit, ...rest } = row;
-  return { ...rest, value: canSeeValue(role) ? rest.value : null };
+  return { ...rest, value: canSeeDiariaValue(role) ? rest.value : null };
 }
 
 // GET /api/diarias
@@ -87,7 +84,7 @@ router.get("/", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   const me = req.currentUser!;
   const query = req.query as AnaliseFilterQuery;
-  const { page = "1", pageSize = "20" } = req.query as Record<string, string>;
+  const { page = "1", pageSize = "20", sortBy } = req.query as Record<string, string>;
 
   const pageNum = Math.max(1, Number(page));
   const pageSz = Math.min(100, Math.max(1, Number(pageSize)));
@@ -96,6 +93,9 @@ router.get("/", requireAuth, async (req, res) => {
   // Scope for gestor is derived from teams.manager_id, not users.team_id.
   const gestorTeamIds = me.role === "gestor" ? await getGestorTeamIds(me.id) : [];
   const { where, params } = buildDiariaFilters(me, query, { gestorTeamIds });
+  const orderBy = sortBy === "providerName"
+    ? "lower(p.name) ASC, d.created_at DESC, d.id DESC"
+    : "d.created_at DESC";
 
   const [countResult, rows] = await Promise.all([
     pool.query<{ total: string }>(
@@ -126,7 +126,7 @@ router.get("/", requireAuth, async (req, res) => {
         LEFT JOIN users eu ON eu.id = d.exported_by
         LEFT JOIN diaria_types dt ON dt.id = d.type_id
         WHERE ${where}
-        ORDER BY d.created_at DESC
+        ORDER BY ${orderBy}
         LIMIT ${pageSz} OFFSET ${offset}`,
       params
     ),
@@ -135,7 +135,7 @@ router.get("/", requireAuth, async (req, res) => {
   const total = Number(countResult.rows[0]?.total ?? 0);
   const data = rows.rows.map((row) => ({
     ...row,
-    value: canSeeValue(me.role) ? row.value : null,
+    value: canSeeDiariaValue(me.role) ? row.value : null,
   }));
 
   res.json({
@@ -802,9 +802,11 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
 
   if (!diaria) { res.status(404).json({ error: "Diária não encontrada" }); return; }
 
-  // Admin pode corrigir qualquer campo em qualquer status. Diárias já
-  // exportadas precisam de atenção extra, mas a regra de negócio permite
-  // que o admin faça ajustes retroativos (ex.: atribuir tipo a registros antigos).
+  if (LOCKED_STATUSES.includes(diaria.status)) {
+    res.status(400).json({ error: "Diária já exportada/paga — não pode mais ser alterada" });
+    return;
+  }
+
   const { workDate, startTime, endTime, value, typeId, providerId, paymentDate, observations } = req.body as {
     workDate?: string;
     startTime?: string | null;
@@ -1019,6 +1021,10 @@ router.post("/:id/request-correction", requireRole("admin"), async (req, res) =>
 
   const [diaria] = await db.select().from(diariasTable).where(eq(diariasTable.id, id)).limit(1);
   if (!diaria) { res.status(404).json({ error: "Diária não encontrada" }); return; }
+  if (LOCKED_STATUSES.includes(diaria.status)) {
+    res.status(400).json({ error: "Diária já exportada/paga — status não pode mais ser alterado" });
+    return;
+  }
 
   const now = new Date();
   await db.update(diariasTable).set({
