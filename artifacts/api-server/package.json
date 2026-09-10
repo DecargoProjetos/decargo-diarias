@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:critical": "vitest run src/routes/__tests__/calendar-rules.test.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

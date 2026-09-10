@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { fetchPrestadores } from "../lib/peopleClient";
 import { getGestorTeamIds } from "../lib/gestorTeams";
+import { redactProviderDailyRates } from "../lib/diariaPermissions";
 
 const router = Router();
 
@@ -58,10 +59,9 @@ router.get("/", requireAuth, async (req, res) => {
 
   const providers = await query.orderBy(providersTable.name);
 
-  // Gestor não deve ver o valor da diária (dailyRate) de nenhum prestador.
-  const data = me.role === "gestor"
-    ? providers.map((p) => ({ ...p, dailyRate: null }))
-    : providers;
+  // Financial rates are admin-only. This also protects prestador and
+  // funcionario responses if they call the endpoint directly.
+  const data = redactProviderDailyRates(me.role, providers);
 
   res.json(data);
 });
@@ -254,7 +254,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     }
   }
 
-  res.json(provider);
+  res.json(redactProviderDailyRates(me.role, [provider])[0]);
 });
 
 export default router;

@@ -16,14 +16,10 @@ import {
   addDays,
   addMonths,
   addWeeks,
-  endOfMonth,
-  endOfWeek,
   format,
   isSameMonth,
   isToday,
   parseISO,
-  startOfMonth,
-  startOfWeek,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,12 +32,21 @@ import { ChevronLeft, ChevronRight, Plus, Edit2, X, Save, Trash2, AlertTriangle,
 import { Link } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
 import ImportarPlanilhaDialog from '@/components/ImportarPlanilhaDialog';
+import {
+  canCreateDiaria,
+  canEditDiaria,
+  canSeeCalendarFinancials,
+  getCalendarDays,
+  getCalendarRange,
+  groupVisibleDiariasByDay,
+  type CalendarViewMode,
+} from '@/lib/calendarRules';
 
 // Referência visual: app de Calendário do Android — grade mensal com
 // indicador de quantidade por dia, alternância mensal/semanal/diária e um
 // painel (Sheet) por dia para consultar/lançar/editar diárias sem sair da
 // tela de calendário.
-type ViewMode = 'month' | 'week' | 'day';
+type ViewMode = CalendarViewMode;
 
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -125,27 +130,14 @@ export default function DiariasCalendar() {
     document.body.style.userSelect = 'none';
   };
 
-  const canCreate = user?.role === 'admin' || user?.role === 'gestor';
+  const canCreate = user ? canCreateDiaria(user.role) : false;
 
-  const { rangeStart, rangeEnd } = useMemo(() => {
-    if (viewMode === 'month') {
-      return { rangeStart: startOfWeek(startOfMonth(anchorDate)), rangeEnd: endOfWeek(endOfMonth(anchorDate)) };
-    }
-    if (viewMode === 'week') {
-      return { rangeStart: startOfWeek(anchorDate), rangeEnd: endOfWeek(anchorDate) };
-    }
-    return { rangeStart: anchorDate, rangeEnd: anchorDate };
-  }, [viewMode, anchorDate]);
+  const { rangeStart, rangeEnd } = useMemo(
+    () => getCalendarRange(viewMode, anchorDate),
+    [viewMode, anchorDate],
+  );
 
-  const gridDays = useMemo(() => {
-    const days: Date[] = [];
-    let cursor = rangeStart;
-    while (cursor <= rangeEnd) {
-      days.push(cursor);
-      cursor = addDays(cursor, 1);
-    }
-    return days;
-  }, [rangeStart, rangeEnd]);
+  const gridDays = useMemo(() => getCalendarDays(viewMode, anchorDate), [viewMode, anchorDate]);
 
   // GET /diarias caps pageSize at 100 server-side, so a single page can
   // silently drop entries for a busy month/team. Page through the full
@@ -175,16 +167,10 @@ export default function DiariasCalendar() {
     { query: { enabled: !!canCreate, queryKey: ['listProviders', 'activeOnly'] } },
   );
 
-  const diariasByDay = useMemo(() => {
-    const map = new Map<string, Diaria[]>();
-    for (const diaria of allDiarias ?? []) {
-      if (diaria.status === 'cancelada') continue;   // excluídas não aparecem no calendário
-      const key = diaria.workDate.split('T')[0];
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(diaria);
-    }
-    return map;
-  }, [allDiarias]);
+  const diariasByDay = useMemo(
+    () => groupVisibleDiariasByDay(allDiarias ?? []),
+    [allDiarias],
+  );
 
   const navigate = (dir: 1 | -1) => {
     setAnchorDate(prev => {
@@ -480,11 +466,11 @@ function DayAgenda({
   const showNewForm = canCreate && !isBlocked;
 
   // Gestor não deve ver valores de diárias em nenhuma tela.
-  const showFinancials = user.role === 'admin';
+  const showFinancials = canSeeCalendarFinancials(user.role);
 
   // Diária, uma vez salva, nunca é editável pelo gestor — correção é
   // exclusiva do admin (via fluxo de aprovação/solicitação de correção).
-  const canEdit = (_d: Diaria) => user.role === 'admin';
+  const canEdit = (d: Diaria) => canEditDiaria(user.role, d.status);
   // Exclusão permanente é exclusiva do admin e nunca é permitida após integração financeira.
   const canDelete = (d: Diaria) => user.role === 'admin' && !['exportada', 'paga'].includes(d.status);
 

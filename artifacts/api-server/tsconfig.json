@@ -8,6 +8,7 @@
     "types": ["node"]
   },
   "include": ["src"],
+  "exclude": ["src/routes/__tests__/calendar-rules.test.ts"],
   "references": [
     {
       "path": "../../lib/db"
