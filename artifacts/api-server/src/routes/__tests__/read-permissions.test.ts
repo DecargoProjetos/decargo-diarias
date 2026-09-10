@@ -255,7 +255,7 @@ describe("GET /api/diarias — permissões por papel", () => {
     });
   }
 
-  it("agrupa por prestador e ordena suas datas trabalhadas da maior para a menor antes da paginação", async () => {
+  it("agrupa por prestador e ordena suas datas trabalhadas da menor para a maior antes da paginação", async () => {
     const [newerPrestadorDiaria] = await db.insert(diariasTable).values({
       providerId: fixture.managedPrestador.providerId,
       teamId: fixture.managedPrestador.teamId,
@@ -282,8 +282,8 @@ describe("GET /api/diarias — permissões por papel", () => {
     expect(body.data.map((row) => row.workDate)).toEqual([
       "2097-04-02",
       endDate,
-      "2097-04-03",
       startDate,
+      "2097-04-03",
     ]);
   });
 });
