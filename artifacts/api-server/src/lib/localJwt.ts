@@ -8,6 +8,7 @@ export interface LocalJwtPayload {
   name: string;
   role: string;
   teamId: number | null;
+  peopleSyncSessionId?: string;
 }
 
 const TTL_SECONDS = 8 * 60 * 60; // 8 hours

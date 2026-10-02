@@ -2,8 +2,9 @@ import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { verifyHandoffToken } from "../lib/handoff";
-import { signLocalJwt } from "../lib/localJwt";
+import { signLocalJwt, verifyLocalJwt } from "../lib/localJwt";
 import { requireAuth } from "../middlewares/requireAuth";
+import { createPeopleSyncSession, peopleUserSyncEnabled, PeopleUserSyncError, revokePeopleSyncSession } from "../lib/peopleUserSync";
 
 const router = Router();
 
@@ -12,8 +13,8 @@ const router = Router();
  * Existing users keep their locally-assigned role; only new accounts
  * are provisioned with this default (least-privilege fallback).
  */
-function mapPapelToLocalRole(papel: string): "admin" | "gestor" | "prestador" {
-  switch (papel.toLowerCase()) {
+function mapPapelToLocalRole(papel?: string): "admin" | "gestor" | "prestador" {
+  switch ((papel ?? "").toLowerCase()) {
     case "admin":
     case "administrador":
       return "admin";
@@ -156,6 +157,19 @@ router.post("/handoff", async (req, res) => {
     }
   }
 
+  let peopleSyncSessionId: string | undefined;
+  if (peopleUserSyncEnabled() && user.role === "admin") {
+    try {
+      peopleSyncSessionId = await createPeopleSyncSession(user.id, claims);
+    } catch (error) {
+      if (error instanceof PeopleUserSyncError) {
+        res.status(error.status).json({ error: error.message, code: error.code });
+        return;
+      }
+      throw error;
+    }
+  }
+
   const accessToken = signLocalJwt({
     userId: user.id,
     decargoId: user.decargoId,
@@ -163,6 +177,7 @@ router.post("/handoff", async (req, res) => {
     name: user.name,
     role: user.role,
     teamId: user.teamId,
+    ...(peopleSyncSessionId ? { peopleSyncSessionId } : {}),
   });
 
   res.json({
@@ -181,9 +196,18 @@ router.post("/handoff", async (req, res) => {
 
 /**
  * POST /api/auth/logout
- * Stateless — client drops the token. Returns 200 for consistency.
+ * Client drops the local JWT; any linked People delegation is removed/revoked.
+ * Returns 200 for consistency with existing clients.
  */
-router.post("/logout", (_req, res) => {
+router.post("/logout", async (req, res) => {
+  const token = req.headers.authorization?.replace(/^Bearer /, "");
+  if (token) {
+    let payload;
+    try { payload = verifyLocalJwt(token); } catch { /* logout remains idempotent */ }
+    if (payload?.peopleSyncSessionId) {
+      await revokePeopleSyncSession(payload.userId, payload.peopleSyncSessionId);
+    }
+  }
   res.json({ message: "Sessão encerrada" });
 });
 

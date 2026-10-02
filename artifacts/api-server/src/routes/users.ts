@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { fetchFuncionarios } from "../lib/peopleClient";
+import { getPeopleSyncAccess, peopleUserSyncEnabled, PeopleUserSyncError } from "../lib/peopleUserSync";
 
 const router = Router();
 
@@ -71,7 +72,8 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   // error" in production; this route is admin-only, so it's safe to surface
   // details here instead (never our own secrets, only upstream/DB errors).
   try {
-    const remote = await fetchFuncionarios();
+    const access = peopleUserSyncEnabled() ? await getPeopleSyncAccess(req) : undefined;
+    const remote = await fetchFuncionarios(access);
 
     let created = 0;
     let skipped = 0;
@@ -137,6 +139,10 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
 
     res.json({ synced: remote.length, created, skipped });
   } catch (err) {
+    if (err instanceof PeopleUserSyncError) {
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
     req.log.error({ err }, "User sync failed");
     res.status(502).json({
       error: `Falha ao sincronizar usuários: ${err instanceof Error ? err.message : String(err)}`,

@@ -1,5 +1,6 @@
 export * from "./teams";
 export * from "./users";
+export * from "./people-sync-sessions";
 export * from "./providers";
 export * from "./diaria-types";
 export * from "./diarias";

@@ -4,6 +4,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { fetchPrestadores } from "../lib/peopleClient";
+import { getPeopleSyncAccess, peopleUserSyncEnabled, PeopleUserSyncError } from "../lib/peopleUserSync";
 import { getGestorTeamIds } from "../lib/gestorTeams";
 import { redactProviderDailyRates } from "../lib/diariaPermissions";
 
@@ -81,7 +82,8 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
   // admin-only, so it's safe to surface these details — they never contain
   // our own secrets, only the People API's response or Postgres' own error.
   try {
-    const remote = await fetchPrestadores();
+    const access = peopleUserSyncEnabled() ? await getPeopleSyncAccess(req) : undefined;
+    const remote = await fetchPrestadores(access);
     // Guard against an unexpected response shape (e.g. the endpoint switching
     // to a paginated `{ data: [...] }` wrapper like /api/funcionarios).
     if (!Array.isArray(remote)) {
@@ -135,6 +137,10 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
 
     res.json({ synced: remote.length, created, skipped });
   } catch (err) {
+    if (err instanceof PeopleUserSyncError) {
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
     req.log.error({ err }, "Provider sync failed");
     res.status(502).json({
       error: `Falha ao sincronizar prestadores: ${err instanceof Error ? err.message : String(err)}`,
