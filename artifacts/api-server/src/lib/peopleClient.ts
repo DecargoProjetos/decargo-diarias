@@ -1,9 +1,9 @@
 /**
  * Client for the DECARGO People REST API.
  *
- * Auth model: JWT via POST /api/auth/login (service-account credentials stored
- * in PEOPLE_SERVICE_LOGIN / PEOPLE_SERVICE_PASSWORD).  The token is cached in
- * process memory and refreshed automatically on 401.
+ * Auth model: per-user delegated access when PEOPLE_USER_SYNC_ENABLED=true.
+ * Legacy service-account JWT is retained only while that rollout flag is off.
+ * Financial export below keeps its separate integration-key authentication.
  *
  * Note on IDs: The funcionarios endpoint exposes `id_funcionario` (the HR
  * record ID).  The DECARGO ID handoff JWT carries `id_usuario` (the auth
@@ -11,6 +11,8 @@
  * when syncing; the first login via handoff resolves any mismatch through the
  * email-fallback / rebind flow in auth.ts.
  */
+
+import { peopleUserSyncEnabled, requestPeopleSync, PeopleUserSyncError, type PeopleSyncAccess } from "./peopleUserSync";
 
 const baseUrl = (): string => {
   const url = process.env.PEOPLE_API_URL;
@@ -140,15 +142,18 @@ async function request<T>(path: string, retried = false): Promise<T> {
 // ---------------------------------------------------------------------------
 
 /** Returns all active funcionários, paging automatically. */
-export async function fetchFuncionarios(): Promise<Funcionario[]> {
+export async function fetchFuncionarios(access?: PeopleSyncAccess): Promise<Funcionario[]> {
+  if (peopleUserSyncEnabled() && !access) {
+    throw new PeopleUserSyncError(409, "PEOPLE_SYNC_REAUTH_REQUIRED", "Entre novamente pelo DECARGO ID para sincronizar.");
+  }
   const PAGE_SIZE = 100;
   let page = 1;
   const all: Funcionario[] = [];
 
   while (true) {
-    const result = await request<FuncionarioPage>(
-      `/api/funcionarios?todos=false&limit=${PAGE_SIZE}&page=${page}`
-    );
+    const result = access
+      ? await requestPeopleSync<FuncionarioPage>(`/funcionarios?limit=${PAGE_SIZE}&page=${page}`, access)
+      : await request<FuncionarioPage>(`/api/funcionarios?todos=false&limit=${PAGE_SIZE}&page=${page}`);
     all.push(...result.data);
     if (all.length >= result.total || result.data.length === 0) break;
     page++;
@@ -158,7 +163,11 @@ export async function fetchFuncionarios(): Promise<Funcionario[]> {
 }
 
 /** Returns all active prestadores (endpoint returns full list, no paging). */
-export async function fetchPrestadores(): Promise<Prestador[]> {
+export async function fetchPrestadores(access?: PeopleSyncAccess): Promise<Prestador[]> {
+  if (peopleUserSyncEnabled() && !access) {
+    throw new PeopleUserSyncError(409, "PEOPLE_SYNC_REAUTH_REQUIRED", "Entre novamente pelo DECARGO ID para sincronizar.");
+  }
+  if (access) return requestPeopleSync<Prestador[]>("/prestadores", access);
   return request<Prestador[]>("/api/prestadores?ativo=true");
 }
 

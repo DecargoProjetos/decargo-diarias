@@ -7,6 +7,7 @@ export const logger = pino({
   redact: [
     "req.headers.authorization",
     "req.headers.cookie",
+    "req.headers['x-diarias-sync-key']",
     "res.headers['set-cookie']",
   ],
   ...(isProduction

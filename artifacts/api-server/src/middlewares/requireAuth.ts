@@ -9,6 +9,7 @@ declare global {
   namespace Express {
     interface Request {
       currentUser?: User;
+      peopleSyncSessionId?: string;
     }
   }
 }
@@ -52,6 +53,10 @@ export async function requireAuth(
   }
 
   req.currentUser = user;
+  if (typeof payload.peopleSyncSessionId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.peopleSyncSessionId)) {
+    req.peopleSyncSessionId = payload.peopleSyncSessionId;
+  }
   next();
 }
 

@@ -7,7 +7,8 @@ export interface HandoffClaims {
   email: string;
   name: string;
   id_usuario: number;
-  papel: string;       // coarse role from People ("admin", "rh", "gestor", "prestador", …)
+  papel?: string;      // legacy role: current People keeps permissions local to each app
+  people_sync_code?: string;
   prioridade?: number;
   modulos?: string[];
   jti: string;
