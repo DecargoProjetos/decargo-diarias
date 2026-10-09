@@ -62,12 +62,25 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem)
 /**
  * @summary Manually create a user (admin only)
  */
+export const createUserBodyNameMax = 200;
+
+export const createUserBodyEmailMax = 254;
+
+
+export const createUserBodyEmailRegExp = new RegExp('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$');
+
+export const createUserBodyDailyRateMin = 0;
+export const createUserBodyDailyRateMax = 99999999.99;
+
+
+
 export const CreateUserBody = zod.object({
-  "name": zod.string(),
-  "email": zod.string(),
+  "name": zod.string().min(1).max(createUserBodyNameMax),
+  "email": zod.string().max(createUserBodyEmailMax).regex(createUserBodyEmailRegExp),
   "role": zod.enum(['admin', 'gestor', 'prestador', 'funcionario']),
-  "teamId": zod.number().nullish(),
-  "active": zod.boolean().optional()
+  "teamId": zod.number().min(1).nullish(),
+  "active": zod.boolean().optional(),
+  "dailyRate": zod.number().min(createUserBodyDailyRateMin).max(createUserBodyDailyRateMax).nullish()
 })
 
 export const CreateUserResponse = zod.object({

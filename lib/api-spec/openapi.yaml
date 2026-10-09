@@ -109,14 +109,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
-        "200":
-          description: >-
-            An existing user was found with this email — it was updated in
-            place (name/role/team/active) instead of creating a duplicate.
+        "409":
+          description: Person already registered by email or normalized full name, including inactive records
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/ErrorResponse"
 
   /users/sync:
     post:
@@ -1385,15 +1383,24 @@ components:
       properties:
         name:
           type: string
+          minLength: 1
+          maxLength: 200
         email:
           type: string
+          pattern: '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+          maxLength: 254
         role:
           type: string
           enum: [admin, gestor, prestador, funcionario]
         teamId:
           type: ["integer", "null"]
+          minimum: 1
         active:
           type: boolean
+        dailyRate:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 99999999.99
       required: [name, email, role]
 
     # ── TEAMS ────────────────────────────────────────────────────────────

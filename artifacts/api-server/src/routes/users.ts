@@ -6,6 +6,8 @@ import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { fetchFuncionarios } from "../lib/peopleClient";
 import { getPeopleSyncAccess, peopleUserSyncEnabled, PeopleUserSyncError } from "../lib/peopleUserSync";
+import { CreateUserBody } from "@workspace/api-zod";
+import { normalizePersonEmail, normalizePersonName } from "../lib/personIdentity";
 
 const router = Router();
 
@@ -156,87 +158,74 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
 // this person later logs in via DECARGO ID, auth.ts's email-fallback lookup
 // rebinds the row to their real decargoId automatically.
 router.post("/", requireRole("admin"), async (req, res) => {
-  const { name, email, role, teamId, active } = req.body as {
-    name?: string;
-    email?: string;
-    role?: string;
-    teamId?: number | null;
-    active?: boolean;
-  };
-
-  if (!name || !email || !role) {
-    res.status(400).json({ error: "Nome, e-mail e papel são obrigatórios." });
+  const body = req.body;
+  const parsed = CreateUserBody.safeParse(body && typeof body === "object" ? {
+    ...body,
+    name: typeof body.name === "string" ? body.name.trim().replace(/\s+/g, " ") : body.name,
+    email: typeof body.email === "string" ? normalizePersonEmail(body.email) : body.email,
+  } : body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Preencha nome, e-mail e tipo válidos. Confira também a equipe e o valor da diária." });
     return;
   }
-  if (!VALID_ROLES.includes(role)) {
-    res.status(400).json({ error: `Papel inválido. Use um de: ${VALID_ROLES.join(", ")}` });
+  const { name, email, role, teamId, active, dailyRate } = parsed.data;
+  const normalizedName = normalizePersonName(name);
+  if (!normalizedName) {
+    res.status(400).json({ error: "Informe o nome completo da pessoa." });
     return;
   }
 
-  const normalizedEmail = email.toLowerCase();
-  const [existing] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(sql`lower(${usersTable.email}) = ${normalizedEmail}`)
-    .limit(1);
-
-  // A pessoa já existe (veio de sync ou de um cadastro manual anterior) —
-  // em vez de bloquear com um erro de duplicidade, atualizamos o registro
-  // existente com os dados informados no formulário. Isso evita duplicar a
-  // pessoa na lista e permite corrigir/promover alguém já cadastrado
-  // simplesmente reenviando o formulário de "novo usuário" com o mesmo
-  // e-mail.
-  if (existing) {
-    const [updated] = await db
-      .update(usersTable)
-      .set({
-        name,
-        role,
-        teamId: teamId ?? null,
-        active: active ?? true,
-        updatedAt: new Date(),
-      })
-      .where(eq(usersTable.id, existing.id))
-      .returning();
-
-    await logAudit({
-      entityType: "user",
-      entityId: updated.id,
-      action: "atualizado via cadastro manual (e-mail já existente)",
-      userId: req.currentUser!.id,
-      newValues: { name, email: normalizedEmail, role, teamId: teamId ?? null, active: active ?? true },
-    });
-
-    if (isManualUser(updated.decargoId)) {
-      await ensureProviderForManualUser(updated);
+  const result = await db.transaction(async tx => {
+    // Serialize manual registrations across processes/replicas, not just this
+    // request, and keep the user + diária-provider creation atomic.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(724091513)`);
+    const identities = [
+      ...await tx.select({ name: usersTable.name, email: usersTable.email }).from(usersTable),
+      ...await tx.select({ name: providersTable.name, email: providersTable.email }).from(providersTable),
+    ];
+    if (identities.some(person =>
+      normalizePersonName(person.name) === normalizedName ||
+      (person.email && normalizePersonEmail(person.email) === email)
+    )) {
+      return { error: "duplicate" as const };
     }
-
-    res.status(200).json(updated);
-    return;
-  }
-
-  const [created] = await db
-    .insert(usersTable)
-    .values({
+    if (teamId != null) {
+      const [team] = await tx.select({ id: teamsTable.id }).from(teamsTable)
+        .where(eq(teamsTable.id, teamId)).limit(1);
+      if (!team) return { error: "team" as const };
+    }
+    const [created] = await tx.insert(usersTable).values({
       decargoId: `manual-${randomUUID()}`,
       name,
-      email: normalizedEmail,
+      email,
       role,
       teamId: teamId ?? null,
       active: active ?? true,
-    })
-    .returning();
-
-  if (isManualUser(created.decargoId)) {
-    await ensureProviderForManualUser(created);
+    }).returning();
+    await tx.insert(providersTable).values({
+      decargoId: created.decargoId, name, email,
+      teamId: created.teamId, active: created.active,
+      dailyRate: dailyRate == null ? null : dailyRate.toFixed(2),
+    });
+    return { created };
+  });
+  if ("error" in result) {
+    res.status(result.error === "duplicate" ? 409 : 400).json({
+      error: result.error === "duplicate"
+        ? "Esta pessoa já possui registro no sistema. Localize o cadastro existente para editar os dados."
+        : "A equipe selecionada não existe. Selecione uma equipe válida.",
+      code: result.error === "duplicate" ? "PERSON_ALREADY_REGISTERED" : "INVALID_TEAM",
+    });
+    return;
   }
+  const { created } = result;
 
   await logAudit({
     entityType: "user",
     entityId: created.id,
     action: "criado manualmente",
     userId: req.currentUser!.id,
-    newValues: { name, email: normalizedEmail, role, teamId: teamId ?? null },
+    newValues: { name, email, role, teamId: teamId ?? null, dailyRate: dailyRate ?? null },
   });
 
   res.status(201).json(created);

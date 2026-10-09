@@ -8,10 +8,27 @@
 import type { UserCreateRole } from './userCreateRole';
 
 export interface UserCreate {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
   name: string;
+  /**
+     * @maxLength 254
+     * @pattern ^[^\s@]+@[^\s@]+\.[^\s@]+$
+     */
   email: string;
   role: UserCreateRole;
-  /** @nullable */
+  /**
+     * @minimum 1
+     * @nullable
+     */
   teamId?: number | null;
   active?: boolean;
+  /**
+     * @minimum 0
+     * @maximum 99999999.99
+     * @nullable
+     */
+  dailyRate?: number | null;
 }
