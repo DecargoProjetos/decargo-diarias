@@ -74,6 +74,8 @@ const normalize = (value: string): string =>
   value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
     .toLowerCase();
 
 export default function PeopleList() {
@@ -104,8 +106,8 @@ export default function PeopleList() {
 
   const rows = useMemo<PersonRow[]>(() => {
     // O Valor da Diária vive exclusivamente na linha de `providers`. Pessoas
-    // com papel "Prestador" já são representadas inteiramente pela linha de
-    // provider (tipo fixo "Prestador" abaixo), então não entram aqui. Já
+    // com papel "Prestador" só são representadas pela linha de provider
+    // quando há realmente um provider da mesma pessoa. Já
     // pessoas cadastradas manualmente (decargoId "manual-...") com outro
     // papel de acesso (Admin/Gestor/Funcionário) também podem ter ganhado
     // uma linha de provider — o backend cria isso automaticamente — então
@@ -114,10 +116,15 @@ export default function PeopleList() {
     const providersByDecargoId = new Map((providers ?? []).map(p => [p.decargoId, p]));
 
     const fromUsers: PersonRow[] = (users ?? [])
-      .filter(u => u.role !== 'prestador')
-      .map(u => {
-        const linkedProvider = providersByDecargoId.get(u.decargoId);
-        return {
+      .flatMap(u => {
+        // IDs numéricos de funcionários e prestadores pertencem a domínios
+        // diferentes no People. Igualdade de ID sozinha não prova vínculo.
+        const byId = providersByDecargoId.get(u.decargoId);
+        const email = u.email?.trim().toLowerCase();
+        const linkedProvider = byId && (u.decargoId.startsWith('manual-') ||
+          (email && byId.email?.trim().toLowerCase() === email)) ? byId : undefined;
+        if (u.role === 'prestador' && linkedProvider) return [];
+        return [{
           key: `user-${u.id}`,
           tipo: roleToTipo(u.role),
           sourceId: u.id,
@@ -130,7 +137,7 @@ export default function PeopleList() {
           active: u.active,
           syncedAt: linkedProvider?.syncedAt ?? null,
           linkedProviderId: linkedProvider?.id,
-        };
+        }];
       });
 
     // Providers já "casados" com uma linha de usuário acima não devem
@@ -163,7 +170,9 @@ export default function PeopleList() {
       if (filterTeamId !== 'todas' && row.teamId?.toString() !== filterTeamId) return false;
       if (filterStatus === 'ativo' && !row.active) return false;
       if (filterStatus === 'inativo' && row.active) return false;
-      if (normalizedSearch && !normalize(row.name).includes(normalizedSearch)) return false;
+      if (normalizedSearch &&
+          !normalize(row.name).includes(normalizedSearch) &&
+          !normalize(row.email ?? '').includes(normalizedSearch)) return false;
       return true;
     });
   }, [rows, filterTipo, filterTeamId, filterStatus, searchName]);
@@ -352,7 +361,18 @@ export default function PeopleList() {
       </div>
 
       {isCreateOpen && (
-        <ManualPersonDialog teams={teams ?? []} onClose={() => setIsCreateOpen(false)} onCreated={() => {
+        <ManualPersonDialog teams={teams ?? []} existingPeople={rows}
+          onClose={() => setIsCreateOpen(false)}
+          onLocateExisting={person => {
+            setIsCreateOpen(false);
+            setEditingKey(null);
+            setSearchName(person.email?.trim() || person.name);
+            setFilterTipo('todos');
+            setFilterTeamId('todas');
+            setFilterStatus('todos');
+          }}
+          onRefresh={() => { void refetchAll(); }}
+          onCreated={() => {
           setIsCreateOpen(false);
           setSearchName('');
           setFilterTipo('todos');
@@ -362,14 +382,14 @@ export default function PeopleList() {
           void queryClient.invalidateQueries({ queryKey: ['listUsers'] });
           void queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
           void queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() });
-        }} />
+          }} />
       )}
 
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row flex-wrap gap-3">
             <Input
-              placeholder="Pesquisar por nome..."
+              placeholder="Pesquisar por nome ou e-mail..."
               value={searchName}
               onChange={e => setSearchName(e.target.value)}
               className="h-9 sm:max-w-xs"
