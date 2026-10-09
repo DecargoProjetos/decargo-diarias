@@ -7,6 +7,7 @@ import { requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { getGestorTeamIds } from "../lib/gestorTeams";
 import { authorizeCompetenceRegistration } from "../lib/competenceAuthorization";
+import { indexImportProviders, resolveImportProvider } from "../lib/importProviderLookup";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -197,11 +198,8 @@ router.post("/preview", requireRole("admin", "gestor"), upload.single("file"), a
     me.role === "gestor" ? getGestorTeamIds(me.id) : Promise.resolve<number[]>([]),
   ]);
 
-  // Build lookup maps (name → provider, case-insensitive)
-  const providerByName = new Map<string, typeof providers[0]>();
-  for (const p of providers) {
-    providerByName.set(p.name.toLowerCase(), p);
-  }
+  // Preserve every candidate, rather than letting the last duplicate name win.
+  const providerByName = indexImportProviders(providers);
   const typeByDesc = new Map<string, typeof types[0]>();
   for (const t of types) {
     typeByDesc.set(t.description.toLowerCase(), t);
@@ -273,15 +271,22 @@ router.post("/preview", requireRole("admin", "gestor"), upload.single("file"), a
     // ── Lookup provider ───────────────────────────────────────────────────
     let resolvedProvider: typeof providers[0] | undefined;
     if (prestadorNome) {
-      resolvedProvider = providerByName.get(prestadorNome.toLowerCase());
-      if (!resolvedProvider) {
+      const match = resolveImportProvider(providerByName, prestadorNome,
+        me.role === "gestor" ? gestorTeamIds : undefined);
+      if (match.status === "not_found") {
         errors.push({ campo: "Prestador", motivo: `Prestador não localizado: "${prestadorNome}".` });
-      } else if (!resolvedProvider.active) {
+      } else if (match.status === "inactive") {
         errors.push({ campo: "Prestador", motivo: `Prestador "${prestadorNome}" está inativo.` });
-        resolvedProvider = undefined;
-      } else if (me.role === "gestor") {
-        const provTeam = resolvedProvider.teamId;
-        if (provTeam === null || !gestorTeamIds.includes(provTeam)) {
+      } else if (match.status === "ambiguous") {
+        errors.push({ campo: "Prestador", motivo: `Há mais de um prestador ativo com o nome "${prestadorNome}". Revise os cadastros antes de importar; nenhum deles foi selecionado automaticamente.` });
+      } else if (match.status === "forbidden") {
+        errors.push({ campo: "Prestador", motivo: `Você não tem permissão para lançar diárias do prestador "${prestadorNome}".` });
+      } else if (match.status === "found") {
+        resolvedProvider = match.provider;
+        if (resolvedProvider.teamId == null) {
+          errors.push({ campo: "Prestador", motivo: `Prestador "${prestadorNome}" sem equipe vinculada. Defina a equipe em Pessoas antes de importar.` });
+          resolvedProvider = undefined;
+        } else if (me.role === "gestor" && !gestorTeamIds.includes(resolvedProvider.teamId)) {
           errors.push({ campo: "Prestador", motivo: `Você não tem permissão para lançar diárias do prestador "${prestadorNome}".` });
           resolvedProvider = undefined;
         }
