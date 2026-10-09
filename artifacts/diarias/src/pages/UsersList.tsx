@@ -108,11 +108,8 @@ export default function UsersList() {
         },
       },
       {
-        // O backend faz upsert por e-mail: se já existir alguém com este
-        // e-mail, os dados dessa pessoa são atualizados em vez de criar uma
-        // duplicata — por isso a mensagem cobre os dois casos.
         onSuccess: () => {
-          toast({ title: 'Usuário salvo com sucesso.', description: 'Se o e-mail já existia, os dados foram atualizados em vez de duplicar.' });
+          toast({ title: 'Usuário cadastrado com sucesso.' });
           setIsCreateOpen(false);
           setNewUser(EMPTY_NEW_USER);
           refetch();

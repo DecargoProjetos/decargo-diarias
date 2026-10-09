@@ -4,6 +4,7 @@ import {
   useGetMe, useListUsers, useListProviders, useListTeams,
   useSyncUsers, useSyncProviders,
   useUpdateUser, useDeleteUser, useUpdateProvider, useDeleteProvider,
+  getListUsersQueryKey, getListProvidersQueryKey,
 } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatDateTime } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, CheckCircle2, XCircle, Edit2, Trash2, Save, X } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, Edit2, Trash2, Save, X, UserPlus } from 'lucide-react';
+import { ManualPersonDialog } from '@/components/ManualPersonDialog';
 
 // Unified "Pessoas" view — funcionários (users) e prestadores estão ambos
 // vinculados a equipes e prestadores se reportam a funcionários, então
@@ -98,10 +100,7 @@ export default function PeopleList() {
   const [filterTeamId, setFilterTeamId] = useState<'todas' | string>('todas');
   const [filterStatus, setFilterStatus] = useState<'todos' | 'ativo' | 'inativo'>('todos');
   const [searchName, setSearchName] = useState('');
-
-  if (!isAdmin) {
-    return <div>Acesso negado. Apenas administradores.</div>;
-  }
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const rows = useMemo<PersonRow[]>(() => {
     // O Valor da Diária vive exclusivamente na linha de `providers`. Pessoas
@@ -329,6 +328,10 @@ export default function PeopleList() {
 
   const isSyncing = syncUsers.isPending || syncProviders.isPending;
 
+  if (!isAdmin) {
+    return <div>Acesso negado. Apenas administradores.</div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -336,13 +339,31 @@ export default function PeopleList() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Pessoas</h1>
           <p className="text-muted-foreground mt-1">Funcionários e prestadores sincronizados com DECARGO People.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setIsCreateOpen(true)}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Cadastrar pessoa
+          </Button>
           <Button onClick={handleSync} disabled={isSyncing} className="bg-indigo-600 hover:bg-indigo-700">
             <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
             Sincronizar com DECARGO People
           </Button>
         </div>
       </div>
+
+      {isCreateOpen && (
+        <ManualPersonDialog teams={teams ?? []} onClose={() => setIsCreateOpen(false)} onCreated={() => {
+          setIsCreateOpen(false);
+          setSearchName('');
+          setFilterTipo('todos');
+          setFilterTeamId('todas');
+          setFilterStatus('todos');
+          toast({ title: 'Pessoa cadastrada com sucesso.' });
+          void queryClient.invalidateQueries({ queryKey: ['listUsers'] });
+          void queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
+          void queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() });
+        }} />
+      )}
 
       <Card>
         <CardContent className="p-4">
