@@ -19,6 +19,8 @@ import { buildDiariaFilters, type AnaliseFilterQuery } from "../lib/diariaFilter
 import { authorizeCompetenceRegistration } from "../lib/competenceAuthorization";
 import { canSeeDiariaValue } from "../lib/diariaPermissions";
 
+import exportRecoveryRouter from "./exportRecovery";
+
 const router = Router();
 
 // Gestor não deve ver valores de diárias em nenhuma tela ou chamada de API.
@@ -564,6 +566,7 @@ function calcDiscountDate(workDate: string): string {
 }
 
 // POST /api/diarias/export (must come before /:id)
+router.use("/export", exportRecoveryRouter);
 router.post("/export", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;
   const { diariaIds, paymentDate: fallbackPaymentDate } = req.body as { diariaIds: number[]; paymentDate?: string };

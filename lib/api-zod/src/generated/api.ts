@@ -869,6 +869,67 @@ export const MarkDiariaPaidResponse = zod.object({
 
 
 /**
+ * @summary Review failed export reservations without changing records (admin only)
+ */
+
+export const previewExportRecoveryBodyDiariaIdsMax = 2000;
+
+
+
+export const PreviewExportRecoveryBody = zod.object({
+  "diariaIds": zod.array(zod.number().min(1)).min(1).max(previewExportRecoveryBodyDiariaIdsMax)
+})
+
+
+export const previewExportRecoveryResponseEligibleItemIntegrationIdMax = 100;
+
+
+
+export const PreviewExportRecoveryResponse = zod.object({
+  "eligible": zod.array(zod.object({
+  "id": zod.number().min(1),
+  "integrationId": zod.string().min(1).max(previewExportRecoveryResponseEligibleItemIntegrationIdMax)
+})),
+  "skipped": zod.array(zod.object({
+  "id": zod.number(),
+  "reason": zod.string()
+}))
+})
+
+
+/**
+ * @summary Release failed reservations after confirmed non-export in People (admin only)
+ */
+
+export const resolveExportRecoveryBodyReservationsItemIntegrationIdMax = 100;
+
+export const resolveExportRecoveryBodyReservationsMax = 2000;
+
+export const resolveExportRecoveryBodyReasonMin = 10;
+export const resolveExportRecoveryBodyReasonMax = 1000;
+
+
+
+export const ResolveExportRecoveryBody = zod.object({
+  "reservations": zod.array(zod.object({
+  "id": zod.number().min(1),
+  "integrationId": zod.string().min(1).max(resolveExportRecoveryBodyReservationsItemIntegrationIdMax)
+})).min(1).max(resolveExportRecoveryBodyReservationsMax),
+  "confirmedNotExported": zod.literal(true),
+  "reason": zod.string().min(resolveExportRecoveryBodyReasonMin).max(resolveExportRecoveryBodyReasonMax)
+})
+
+export const resolveExportRecoveryResponseReleasedMin = 0;
+
+
+
+export const ResolveExportRecoveryResponse = zod.object({
+  "released": zod.number().min(resolveExportRecoveryResponseReleasedMin),
+  "releasedIds": zod.array(zod.number())
+})
+
+
+/**
  * @summary Export approved daily rates to DECARGO People (admin only)
  */
 export const ExportDiariasBody = zod.object({

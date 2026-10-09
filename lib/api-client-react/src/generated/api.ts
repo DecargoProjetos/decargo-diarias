@@ -43,6 +43,10 @@ import type {
   DiariasReport,
   ErrorResponse,
   ExportInput,
+  ExportRecoveryConfirmation,
+  ExportRecoveryPreview,
+  ExportRecoveryResult,
+  ExportRecoverySelection,
   ExportResult,
   GetDiariasAnaliseSummaryParams,
   GetReportDiariasParams,
@@ -2686,6 +2690,148 @@ export const useMarkDiariaPaid = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getMarkDiariaPaidMutationOptions(options));
+    }
+
+export const getPreviewExportRecoveryUrl = () => {
+
+
+
+
+  return `/api/diarias/export/recovery/preview`
+}
+
+/**
+ * @summary Review failed export reservations without changing records (admin only)
+ */
+export const previewExportRecovery = async (exportRecoverySelection: ExportRecoverySelection, options?: RequestInit): Promise<ExportRecoveryPreview> => {
+
+  return customFetch<ExportRecoveryPreview>(getPreviewExportRecoveryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportRecoverySelection)
+  }
+);}
+
+
+
+
+
+export const getPreviewExportRecoveryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewExportRecovery>>, TError,{data: BodyType<ExportRecoverySelection>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewExportRecovery>>, TError,{data: BodyType<ExportRecoverySelection>}, TContext> => {
+
+const mutationKey = ['previewExportRecovery'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewExportRecovery>>, {data: BodyType<ExportRecoverySelection>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewExportRecovery(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewExportRecoveryMutationResult = NonNullable<Awaited<ReturnType<typeof previewExportRecovery>>>
+    export type PreviewExportRecoveryMutationBody = BodyType<ExportRecoverySelection>
+    export type PreviewExportRecoveryMutationError = ErrorType<void>
+
+    /**
+ * @summary Review failed export reservations without changing records (admin only)
+ */
+export const usePreviewExportRecovery = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewExportRecovery>>, TError,{data: BodyType<ExportRecoverySelection>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewExportRecovery>>,
+        TError,
+        {data: BodyType<ExportRecoverySelection>},
+        TContext
+      > => {
+      return useMutation(getPreviewExportRecoveryMutationOptions(options));
+    }
+
+export const getResolveExportRecoveryUrl = () => {
+
+
+
+
+  return `/api/diarias/export/recovery`
+}
+
+/**
+ * @summary Release failed reservations after confirmed non-export in People (admin only)
+ */
+export const resolveExportRecovery = async (exportRecoveryConfirmation: ExportRecoveryConfirmation, options?: RequestInit): Promise<ExportRecoveryResult> => {
+
+  return customFetch<ExportRecoveryResult>(getResolveExportRecoveryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportRecoveryConfirmation)
+  }
+);}
+
+
+
+
+
+export const getResolveExportRecoveryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveExportRecovery>>, TError,{data: BodyType<ExportRecoveryConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveExportRecovery>>, TError,{data: BodyType<ExportRecoveryConfirmation>}, TContext> => {
+
+const mutationKey = ['resolveExportRecovery'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveExportRecovery>>, {data: BodyType<ExportRecoveryConfirmation>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resolveExportRecovery(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveExportRecoveryMutationResult = NonNullable<Awaited<ReturnType<typeof resolveExportRecovery>>>
+    export type ResolveExportRecoveryMutationBody = BodyType<ExportRecoveryConfirmation>
+    export type ResolveExportRecoveryMutationError = ErrorType<void>
+
+    /**
+ * @summary Release failed reservations after confirmed non-export in People (admin only)
+ */
+export const useResolveExportRecovery = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveExportRecovery>>, TError,{data: BodyType<ExportRecoveryConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resolveExportRecovery>>,
+        TError,
+        {data: BodyType<ExportRecoveryConfirmation>},
+        TContext
+      > => {
+      return useMutation(getResolveExportRecoveryMutationOptions(options));
     }
 
 export const getExportDiariasUrl = () => {

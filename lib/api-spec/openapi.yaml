@@ -927,6 +927,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/Diaria"
 
+  /diarias/export/recovery/preview:
+    post:
+      operationId: previewExportRecovery
+      tags: [diarias]
+      summary: Review failed export reservations without changing records (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExportRecoverySelection" }
+      responses:
+        "200":
+          description: Reservations eligible for explicit external reconciliation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportRecoveryPreview" }
+        "400": { description: Invalid selection }
+        "401": { description: Authentication required }
+        "403": { description: Administrator required }
+
+  /diarias/export/recovery:
+    post:
+      operationId: resolveExportRecovery
+      tags: [diarias]
+      summary: Release failed reservations after confirmed non-export in People (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExportRecoveryConfirmation" }
+      responses:
+        "200":
+          description: Reservations released and audited atomically; no external export
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportRecoveryResult" }
+        "400": { description: External confirmation and reason required }
+        "401": { description: Authentication required }
+        "403": { description: Administrator required }
+        "409": { description: Reservation changed or export not known to have failed }
+        "503": { description: Recovery result could not be confirmed }
+
   /diarias/export:
     post:
       operationId: exportDiarias
@@ -1242,6 +1284,57 @@ components:
       schema:
         type: integer
   schemas:
+    ExportRecoverySelection:
+      type: object
+      required: [diariaIds]
+      properties:
+        diariaIds:
+          type: array
+          minItems: 1
+          maxItems: 2000
+          uniqueItems: true
+          items: { type: integer, minimum: 1 }
+    ExportRecoveryReservation:
+      type: object
+      required: [id, integrationId]
+      properties:
+        id: { type: integer, minimum: 1 }
+        integrationId: { type: string, minLength: 1, maxLength: 100 }
+    ExportRecoverySkipped:
+      type: object
+      required: [id, reason]
+      properties:
+        id: { type: integer }
+        reason: { type: string }
+    ExportRecoveryPreview:
+      type: object
+      required: [eligible, skipped]
+      properties:
+        eligible:
+          type: array
+          items: { $ref: "#/components/schemas/ExportRecoveryReservation" }
+        skipped:
+          type: array
+          items: { $ref: "#/components/schemas/ExportRecoverySkipped" }
+    ExportRecoveryConfirmation:
+      type: object
+      required: [reservations, confirmedNotExported, reason]
+      properties:
+        reservations:
+          type: array
+          minItems: 1
+          maxItems: 2000
+          items: { $ref: "#/components/schemas/ExportRecoveryReservation" }
+        confirmedNotExported: { type: boolean, enum: [true] }
+        reason: { type: string, minLength: 10, maxLength: 1000 }
+    ExportRecoveryResult:
+      type: object
+      required: [released, releasedIds]
+      properties:
+        released: { type: integer, minimum: 0 }
+        releasedIds:
+          type: array
+          items: { type: integer }
     HealthStatus:
       type: object
       properties:

@@ -31,6 +31,7 @@ import {
   Clock, ThumbsUp, ThumbsDown, PackageCheck, X, RotateCcw, Trash2,
 } from 'lucide-react';
 import { Link } from 'wouter';
+import ExportRecoveryDialog from '@/components/ExportRecoveryDialog';
 
 const ANALISE_STATUSES = [
   'pendente_aprovacao',
@@ -498,6 +499,7 @@ export default function AnaliseDiarias() {
           <Button size="sm" variant="outline" disabled={isBusy} onClick={() => setExportConfirmOpen(true)}>
             <FileDown size={16} className="mr-2" /> Exportar selecionadas
           </Button>
+          {user?.role === 'admin' && <ExportRecoveryDialog selectedIds={[...selected]} disabled={isBusy} onDone={refreshAll} />}
           <Button size="sm" variant="outline" disabled={isBusy} onClick={openBulkPaymentDate}>
             <CalendarClock size={16} className="mr-2" /> Definir data de pagamento
           </Button>

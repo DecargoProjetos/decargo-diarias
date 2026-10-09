@@ -5,6 +5,55 @@
  * Controle de Diárias de Prestadores de Serviços
  * OpenAPI spec version: 0.1.0
  */
+export interface ExportRecoverySelection {
+  /**
+     * @minItems 1
+     * @maxItems 2000
+     * @items.minimum 1
+     */
+  diariaIds: number[];
+}
+
+export interface ExportRecoveryReservation {
+  /** @minimum 1 */
+  id: number;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  integrationId: string;
+}
+
+export interface ExportRecoverySkipped {
+  id: number;
+  reason: string;
+}
+
+export interface ExportRecoveryPreview {
+  eligible: ExportRecoveryReservation[];
+  skipped: ExportRecoverySkipped[];
+}
+
+export interface ExportRecoveryConfirmation {
+  /**
+     * @minItems 1
+     * @maxItems 2000
+     */
+  reservations: ExportRecoveryReservation[];
+  confirmedNotExported: true;
+  /**
+     * @minLength 10
+     * @maxLength 1000
+     */
+  reason: string;
+}
+
+export interface ExportRecoveryResult {
+  /** @minimum 0 */
+  released: number;
+  releasedIds: number[];
+}
+
 export interface HealthStatus {
   status: string;
 }
