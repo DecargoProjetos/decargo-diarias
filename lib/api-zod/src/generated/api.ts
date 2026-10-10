@@ -869,6 +869,105 @@ export const MarkDiariaPaidResponse = zod.object({
 
 
 /**
+ * @summary Review selected records and integrated payees for a payment correction (admin only)
+ */
+export const previewExportCorrectionBodyDiariaIdsItemMax = 2147483647;
+
+export const previewExportCorrectionBodyDiariaIdsMax = 500;
+
+
+
+export const PreviewExportCorrectionBody = zod.object({
+  "diariaIds": zod.array(zod.number().min(1).max(previewExportCorrectionBodyDiariaIdsItemMax)).min(1).max(previewExportCorrectionBodyDiariaIdsMax)
+})
+
+export const PreviewExportCorrectionResponse = zod.object({
+  "rows": zod.array(zod.object({
+  "id": zod.number(),
+  "providerId": zod.number(),
+  "providerName": zod.string(),
+  "providerDecargoId": zod.string(),
+  "cnpj": zod.string().nullable(),
+  "typeId": zod.number().nullable(),
+  "typeName": zod.string().nullable(),
+  "exportTarget": zod.string().nullable(),
+  "status": zod.string(),
+  "integrationId": zod.string().nullable(),
+  "exportedAt": zod.string().nullable(),
+  "exportedBy": zod.number().nullable(),
+  "workDate": zod.string(),
+  "paymentDate": zod.string().nullable(),
+  "value": zod.string(),
+  "updatedAt": zod.string(),
+  "approvedAt": zod.string().nullable(),
+  "approvedBy": zod.number().nullable()
+})),
+  "skipped": zod.array(zod.object({
+  "id": zod.number(),
+  "reason": zod.string()
+})),
+  "providers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "decargoId": zod.string(),
+  "cnpj": zod.string().nullable()
+})),
+  "types": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+}))
+})
+
+
+/**
+ * @summary Audited payee or extra-payment type correction, returning changed rows to approval (admin only)
+ */
+export const resolveExportCorrectionBodyCorrectionsItemIdMax = 2147483647;
+
+export const resolveExportCorrectionBodyCorrectionsItemExpectedProviderIdMax = 2147483647;
+
+export const resolveExportCorrectionBodyCorrectionsItemExpectedUpdatedAtMax = 100;
+
+export const resolveExportCorrectionBodyCorrectionsItemExpectedProviderDecargoIdMax = 200;
+
+export const resolveExportCorrectionBodyCorrectionsItemExpectedPeopleIdRegExp = new RegExp('^[1-9][0-9]*$');
+export const resolveExportCorrectionBodyCorrectionsItemProviderIdMax = 2147483647;
+
+export const resolveExportCorrectionBodyCorrectionsItemTypeIdMax = 2147483647;
+
+export const resolveExportCorrectionBodyCorrectionsItemVerifiedCnpjMin = 14;
+export const resolveExportCorrectionBodyCorrectionsItemVerifiedCnpjMax = 18;
+
+export const resolveExportCorrectionBodyCorrectionsMax = 500;
+
+export const resolveExportCorrectionBodyReasonMin = 10;
+export const resolveExportCorrectionBodyReasonMax = 1000;
+
+
+
+export const ResolveExportCorrectionBody = zod.object({
+  "corrections": zod.array(zod.object({
+  "id": zod.number().min(1).max(resolveExportCorrectionBodyCorrectionsItemIdMax),
+  "expectedProviderId": zod.number().min(1).max(resolveExportCorrectionBodyCorrectionsItemExpectedProviderIdMax),
+  "expectedTypeId": zod.number().nullable(),
+  "expectedUpdatedAt": zod.string().min(1).max(resolveExportCorrectionBodyCorrectionsItemExpectedUpdatedAtMax),
+  "expectedProviderDecargoId": zod.string().max(resolveExportCorrectionBodyCorrectionsItemExpectedProviderDecargoIdMax),
+  "expectedPeopleId": zod.string().regex(resolveExportCorrectionBodyCorrectionsItemExpectedPeopleIdRegExp),
+  "providerId": zod.number().min(1).max(resolveExportCorrectionBodyCorrectionsItemProviderIdMax),
+  "typeId": zod.number().min(1).max(resolveExportCorrectionBodyCorrectionsItemTypeIdMax),
+  "verifiedCnpj": zod.string().min(resolveExportCorrectionBodyCorrectionsItemVerifiedCnpjMin).max(resolveExportCorrectionBodyCorrectionsItemVerifiedCnpjMax).optional()
+})).min(1).max(resolveExportCorrectionBodyCorrectionsMax),
+  "confirmed": zod.literal(true),
+  "reason": zod.string().min(resolveExportCorrectionBodyReasonMin).max(resolveExportCorrectionBodyReasonMax)
+})
+
+export const ResolveExportCorrectionResponse = zod.object({
+  "correctedIds": zod.array(zod.number()),
+  "unchangedIds": zod.array(zod.number())
+})
+
+
+/**
  * @summary Review failed export reservations without changing records (admin only)
  */
 

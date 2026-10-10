@@ -927,6 +927,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/Diaria"
 
+  /diarias/export/correction/preview:
+    post:
+      operationId: previewExportCorrection
+      tags: [diarias]
+      summary: Review selected records and integrated payees for a payment correction (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExportCorrectionSelection" }
+      responses:
+        "200":
+          description: Eligible records, integrated active providers and extra-payment types
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportCorrectionPreview" }
+        "400": { description: Invalid selection }
+        "401": { description: Authentication required }
+        "403": { description: Administrator required }
+  /diarias/export/correction:
+    post:
+      operationId: resolveExportCorrection
+      tags: [diarias]
+      summary: Audited payee or extra-payment type correction, returning changed rows to approval (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExportCorrectionConfirmation" }
+      responses:
+        "200":
+          description: Correction committed atomically, without an external export
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportCorrectionResult" }
+        "400": { description: Invalid or unchanged correction }
+        "401": { description: Authentication required }
+        "403": { description: Administrator required }
+        "409": { description: "Changed selection, protected record, unavailable identity or CNPJ mismatch" }
+        "503": { description: Correction result could not be confirmed }
+
   /diarias/export/recovery/preview:
     post:
       operationId: previewExportRecovery
@@ -1284,6 +1325,102 @@ components:
       schema:
         type: integer
   schemas:
+    ExportCorrectionSelection:
+      type: object
+      required: [diariaIds]
+      properties:
+        diariaIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items: { type: integer, minimum: 1, maximum: 2147483647 }
+    ExportCorrectionRow:
+      type: object
+      required: [id, providerId, providerName, providerDecargoId, cnpj, typeId, typeName, exportTarget, status, integrationId, exportedAt, exportedBy, workDate, paymentDate, value, updatedAt, approvedAt, approvedBy]
+      properties:
+        id: { type: integer }
+        providerId: { type: integer }
+        providerName: { type: string }
+        providerDecargoId: { type: string }
+        cnpj: { type: [string, "null"] }
+        typeId: { type: [integer, "null"] }
+        typeName: { type: [string, "null"] }
+        exportTarget: { type: [string, "null"] }
+        status: { type: string }
+        integrationId: { type: [string, "null"] }
+        exportedAt: { type: [string, "null"] }
+        exportedBy: { type: [integer, "null"] }
+        workDate: { type: string }
+        paymentDate: { type: [string, "null"] }
+        value: { type: string }
+        updatedAt: { type: string }
+        approvedAt: { type: [string, "null"] }
+        approvedBy: { type: [integer, "null"] }
+    ExportCorrectionProvider:
+      type: object
+      required: [id, name, decargoId, cnpj]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        decargoId: { type: string }
+        cnpj: { type: [string, "null"] }
+    ExportCorrectionType:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+    ExportCorrectionPreview:
+      type: object
+      required: [rows, skipped, providers, types]
+      properties:
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/ExportCorrectionRow" }
+        skipped:
+          type: array
+          items: { $ref: "#/components/schemas/ExportRecoverySkipped" }
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/ExportCorrectionProvider" }
+        types:
+          type: array
+          items: { $ref: "#/components/schemas/ExportCorrectionType" }
+    ExportCorrectionItem:
+      type: object
+      required: [id, expectedProviderId, expectedTypeId, expectedUpdatedAt, expectedProviderDecargoId, expectedPeopleId, providerId, typeId]
+      properties:
+        id: { type: integer, minimum: 1, maximum: 2147483647 }
+        expectedProviderId: { type: integer, minimum: 1, maximum: 2147483647 }
+        expectedTypeId: { type: [integer, "null"] }
+        expectedUpdatedAt: { type: string, minLength: 1, maxLength: 100 }
+        expectedProviderDecargoId: { type: string, maxLength: 200 }
+        expectedPeopleId: { type: string, pattern: "^[1-9][0-9]*$" }
+        providerId: { type: integer, minimum: 1, maximum: 2147483647 }
+        typeId: { type: integer, minimum: 1, maximum: 2147483647 }
+        verifiedCnpj: { type: string, minLength: 14, maxLength: 18 }
+    ExportCorrectionConfirmation:
+      type: object
+      required: [corrections, confirmed, reason]
+      properties:
+        corrections:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: "#/components/schemas/ExportCorrectionItem" }
+        confirmed: { type: boolean, enum: [true] }
+        reason: { type: string, minLength: 10, maxLength: 1000 }
+    ExportCorrectionResult:
+      type: object
+      required: [correctedIds, unchangedIds]
+      properties:
+        correctedIds:
+          type: array
+          items: { type: integer }
+        unchangedIds:
+          type: array
+          items: { type: integer }
     ExportRecoverySelection:
       type: object
       required: [diariaIds]

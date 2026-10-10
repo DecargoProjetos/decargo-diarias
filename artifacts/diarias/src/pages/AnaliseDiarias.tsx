@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import { Link } from 'wouter';
 import ExportRecoveryDialog from '@/components/ExportRecoveryDialog';
+import ExportCorrectionDialog from '@/components/ExportCorrectionDialog';
+import { useQueryClient } from '@tanstack/react-query';
 
 const ANALISE_STATUSES = [
   'pendente_aprovacao',
@@ -62,6 +64,7 @@ const EMPTY_FILTERS: Filters = {
 export default function AnaliseDiarias() {
   const { data: user } = useGetMe();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: teams } = useListTeams();
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -151,6 +154,16 @@ export default function AnaliseDiarias() {
   function refreshAll() {
     refetch();
     setSelected(new Set());
+  }
+
+  function handleCorrectionDone() {
+    setSelected(new Set());
+    setPage(1);
+    setFilters((f) => ({ ...f, name: '', status: 'pendente_aprovacao' }));
+    void queryClient.invalidateQueries({
+      predicate: (query) => typeof query.queryKey[0] === 'string'
+        && (query.queryKey[0].includes('/diarias') || query.queryKey[0].includes('/dashboard') || query.queryKey[0].includes('/audit')),
+    });
   }
 
   function handleApprove(ids: number[]) {
@@ -500,6 +513,7 @@ export default function AnaliseDiarias() {
             <FileDown size={16} className="mr-2" /> Exportar selecionadas
           </Button>
           {user?.role === 'admin' && <ExportRecoveryDialog selectedIds={[...selected]} disabled={isBusy} onDone={refreshAll} />}
+          {user?.role === 'admin' && <ExportCorrectionDialog diariaIds={[...selected]} disabled={isBusy} onDone={handleCorrectionDone} />}
           <Button size="sm" variant="outline" disabled={isBusy} onClick={openBulkPaymentDate}>
             <CalendarClock size={16} className="mr-2" /> Definir data de pagamento
           </Button>

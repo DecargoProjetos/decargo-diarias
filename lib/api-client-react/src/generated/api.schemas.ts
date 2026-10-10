@@ -5,6 +5,130 @@
  * Controle de Diárias de Prestadores de Serviços
  * OpenAPI spec version: 0.1.0
  */
+export interface ExportCorrectionSelection {
+  /**
+     * @minItems 1
+     * @maxItems 500
+     * @items.minimum 1
+     * @items.maximum 2147483647
+     */
+  diariaIds: number[];
+}
+
+export interface ExportCorrectionRow {
+  id: number;
+  providerId: number;
+  providerName: string;
+  providerDecargoId: string;
+  /** @nullable */
+  cnpj: string | null;
+  /** @nullable */
+  typeId: number | null;
+  /** @nullable */
+  typeName: string | null;
+  /** @nullable */
+  exportTarget: string | null;
+  status: string;
+  /** @nullable */
+  integrationId: string | null;
+  /** @nullable */
+  exportedAt: string | null;
+  /** @nullable */
+  exportedBy: number | null;
+  workDate: string;
+  /** @nullable */
+  paymentDate: string | null;
+  value: string;
+  updatedAt: string;
+  /** @nullable */
+  approvedAt: string | null;
+  /** @nullable */
+  approvedBy: number | null;
+}
+
+export interface ExportCorrectionProvider {
+  id: number;
+  name: string;
+  decargoId: string;
+  /** @nullable */
+  cnpj: string | null;
+}
+
+export interface ExportCorrectionType {
+  id: number;
+  name: string;
+}
+
+export interface ExportRecoverySkipped {
+  id: number;
+  reason: string;
+}
+
+export interface ExportCorrectionPreview {
+  rows: ExportCorrectionRow[];
+  skipped: ExportRecoverySkipped[];
+  providers: ExportCorrectionProvider[];
+  types: ExportCorrectionType[];
+}
+
+export interface ExportCorrectionItem {
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
+  id: number;
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
+  expectedProviderId: number;
+  /** @nullable */
+  expectedTypeId: number | null;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  expectedUpdatedAt: string;
+  /** @maxLength 200 */
+  expectedProviderDecargoId: string;
+  /** @pattern ^[1-9][0-9]*$ */
+  expectedPeopleId: string;
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
+  providerId: number;
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
+  typeId: number;
+  /**
+     * @minLength 14
+     * @maxLength 18
+     */
+  verifiedCnpj?: string;
+}
+
+export interface ExportCorrectionConfirmation {
+  /**
+     * @minItems 1
+     * @maxItems 500
+     */
+  corrections: ExportCorrectionItem[];
+  confirmed: true;
+  /**
+     * @minLength 10
+     * @maxLength 1000
+     */
+  reason: string;
+}
+
+export interface ExportCorrectionResult {
+  correctedIds: number[];
+  unchangedIds: number[];
+}
+
 export interface ExportRecoverySelection {
   /**
      * @minItems 1
@@ -22,11 +146,6 @@ export interface ExportRecoveryReservation {
      * @maxLength 100
      */
   integrationId: string;
-}
-
-export interface ExportRecoverySkipped {
-  id: number;
-  reason: string;
 }
 
 export interface ExportRecoveryPreview {

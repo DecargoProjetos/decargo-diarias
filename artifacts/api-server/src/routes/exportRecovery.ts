@@ -2,7 +2,10 @@ import { Router } from "express";
 import { pool } from "@workspace/db";
 import { requireRole } from "../middlewares/requireAuth";
 
+import exportCorrectionRouter from "./exportCorrection";
+
 const router = Router();
+router.use(exportCorrectionRouter);
 const MAX_SELECTION = 2000;
 
 interface ReservationRow {

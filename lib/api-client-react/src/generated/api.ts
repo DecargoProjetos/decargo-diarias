@@ -42,6 +42,10 @@ import type {
   DiariasPage,
   DiariasReport,
   ErrorResponse,
+  ExportCorrectionConfirmation,
+  ExportCorrectionPreview,
+  ExportCorrectionResult,
+  ExportCorrectionSelection,
   ExportInput,
   ExportRecoveryConfirmation,
   ExportRecoveryPreview,
@@ -73,6 +77,7 @@ import type {
 
 import { customFetch } from '../custom-fetch';
 import type { ErrorType , BodyType } from '../custom-fetch';
+
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -2690,6 +2695,148 @@ export const useMarkDiariaPaid = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getMarkDiariaPaidMutationOptions(options));
+    }
+
+export const getPreviewExportCorrectionUrl = () => {
+
+
+
+
+  return `/api/diarias/export/correction/preview`
+}
+
+/**
+ * @summary Review selected records and integrated payees for a payment correction (admin only)
+ */
+export const previewExportCorrection = async (exportCorrectionSelection: ExportCorrectionSelection, options?: RequestInit): Promise<ExportCorrectionPreview> => {
+
+  return customFetch<ExportCorrectionPreview>(getPreviewExportCorrectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportCorrectionSelection)
+  }
+);}
+
+
+
+
+
+export const getPreviewExportCorrectionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewExportCorrection>>, TError,{data: BodyType<ExportCorrectionSelection>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewExportCorrection>>, TError,{data: BodyType<ExportCorrectionSelection>}, TContext> => {
+
+const mutationKey = ['previewExportCorrection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewExportCorrection>>, {data: BodyType<ExportCorrectionSelection>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewExportCorrection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewExportCorrectionMutationResult = NonNullable<Awaited<ReturnType<typeof previewExportCorrection>>>
+    export type PreviewExportCorrectionMutationBody = BodyType<ExportCorrectionSelection>
+    export type PreviewExportCorrectionMutationError = ErrorType<void>
+
+    /**
+ * @summary Review selected records and integrated payees for a payment correction (admin only)
+ */
+export const usePreviewExportCorrection = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewExportCorrection>>, TError,{data: BodyType<ExportCorrectionSelection>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewExportCorrection>>,
+        TError,
+        {data: BodyType<ExportCorrectionSelection>},
+        TContext
+      > => {
+      return useMutation(getPreviewExportCorrectionMutationOptions(options));
+    }
+
+export const getResolveExportCorrectionUrl = () => {
+
+
+
+
+  return `/api/diarias/export/correction`
+}
+
+/**
+ * @summary Audited payee or extra-payment type correction, returning changed rows to approval (admin only)
+ */
+export const resolveExportCorrection = async (exportCorrectionConfirmation: ExportCorrectionConfirmation, options?: RequestInit): Promise<ExportCorrectionResult> => {
+
+  return customFetch<ExportCorrectionResult>(getResolveExportCorrectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportCorrectionConfirmation)
+  }
+);}
+
+
+
+
+
+export const getResolveExportCorrectionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveExportCorrection>>, TError,{data: BodyType<ExportCorrectionConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveExportCorrection>>, TError,{data: BodyType<ExportCorrectionConfirmation>}, TContext> => {
+
+const mutationKey = ['resolveExportCorrection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveExportCorrection>>, {data: BodyType<ExportCorrectionConfirmation>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resolveExportCorrection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveExportCorrectionMutationResult = NonNullable<Awaited<ReturnType<typeof resolveExportCorrection>>>
+    export type ResolveExportCorrectionMutationBody = BodyType<ExportCorrectionConfirmation>
+    export type ResolveExportCorrectionMutationError = ErrorType<void>
+
+    /**
+ * @summary Audited payee or extra-payment type correction, returning changed rows to approval (admin only)
+ */
+export const useResolveExportCorrection = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveExportCorrection>>, TError,{data: BodyType<ExportCorrectionConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resolveExportCorrection>>,
+        TError,
+        {data: BodyType<ExportCorrectionConfirmation>},
+        TContext
+      > => {
+      return useMutation(getResolveExportCorrectionMutationOptions(options));
     }
 
 export const getPreviewExportRecoveryUrl = () => {
