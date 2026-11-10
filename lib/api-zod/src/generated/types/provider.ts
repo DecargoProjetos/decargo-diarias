@@ -9,6 +9,13 @@
 export interface Provider {
   id: number;
   decargoId: string;
+  /**
+     * Stable local identity retained after administrator reconciliation
+     * @nullable
+     */
+  localReference?: string | null;
+  /** @nullable */
+  cnpj?: string | null;
   name: string;
   /** @nullable */
   email?: string | null;
@@ -24,4 +31,5 @@ export interface Provider {
   active: boolean;
   /** @nullable */
   syncedAt?: Date | null;
+  updatedAt?: Date;
 }

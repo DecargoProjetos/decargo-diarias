@@ -155,6 +155,7 @@ beforeAll(async () => {
 
   const [provider] = await db.insert(providersTable).values({
     decargoId: byRole.prestador.decargoId,
+    email: byRole.prestador.email,
     name: "__TEST_WRITE_PERMISSIONS_PROVIDER__",
     teamId,
     dailyRate: "123.45",

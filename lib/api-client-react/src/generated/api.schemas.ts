@@ -177,6 +177,92 @@ export interface HealthStatus {
   status: string;
 }
 
+export type UserSyncRetentionHealthStatus = typeof UserSyncRetentionHealthStatus[keyof typeof UserSyncRetentionHealthStatus];
+
+
+export const UserSyncRetentionHealthStatus = {
+  ok: 'ok',
+  degraded: 'degraded',
+} as const;
+
+export type UserSyncRetentionHealthThreshold = typeof UserSyncRetentionHealthThreshold[keyof typeof UserSyncRetentionHealthThreshold];
+
+
+export const UserSyncRetentionHealthThreshold = {
+  NUMBER_3: 3,
+} as const;
+
+export interface UserSyncRetentionHealth {
+  status: UserSyncRetentionHealthStatus;
+  alertActive: boolean;
+  /** @minimum 0 */
+  consecutiveFailures: number;
+  threshold: UserSyncRetentionHealthThreshold;
+  firstFailureAt: string | null;
+  lastSuccessAt: string | null;
+}
+
+export interface PeopleExportReviewInput {
+  /**
+     * @minItems 1
+     * @items.minimum 1
+     * @items.maximum 2147483647
+     */
+  diariaIds: number[];
+}
+
+export type PeopleExportReviewSupportedTargetsItem = typeof PeopleExportReviewSupportedTargetsItem[keyof typeof PeopleExportReviewSupportedTargetsItem];
+
+
+export const PeopleExportReviewSupportedTargetsItem = {
+  diarias: 'diarias',
+  descontos: 'descontos',
+} as const;
+
+export type PeopleExportIncompatibleRecordRequiredTarget = typeof PeopleExportIncompatibleRecordRequiredTarget[keyof typeof PeopleExportIncompatibleRecordRequiredTarget] | null;
+
+
+export const PeopleExportIncompatibleRecordRequiredTarget = {
+  diarias: 'diarias',
+  descontos: 'descontos',
+} as const;
+
+export type PeopleExportIncompatibleRecordReason = typeof PeopleExportIncompatibleRecordReason[keyof typeof PeopleExportIncompatibleRecordReason];
+
+
+export const PeopleExportIncompatibleRecordReason = {
+  unsupported_target: 'unsupported_target',
+  unconfigured_type: 'unconfigured_type',
+} as const;
+
+export interface PeopleExportIncompatibleRecord {
+  id: number;
+  providerName: string;
+  workDate: string;
+  typeName: string | null;
+  requiredTarget: PeopleExportIncompatibleRecordRequiredTarget;
+  reason: PeopleExportIncompatibleRecordReason;
+}
+
+export interface PeopleExportReview {
+  supportedTargets: PeopleExportReviewSupportedTargetsItem[];
+  reviewedCount: number;
+  missingIds: number[];
+  incompatibleRecords: PeopleExportIncompatibleRecord[];
+}
+
+export type PeopleExportCapabilitiesSupportedTargetsItem = typeof PeopleExportCapabilitiesSupportedTargetsItem[keyof typeof PeopleExportCapabilitiesSupportedTargetsItem];
+
+
+export const PeopleExportCapabilitiesSupportedTargetsItem = {
+  diarias: 'diarias',
+  descontos: 'descontos',
+} as const;
+
+export interface PeopleExportCapabilities {
+  supportedTargets: PeopleExportCapabilitiesSupportedTargetsItem[];
+}
+
 export interface ErrorResponse {
   error: string;
 }
@@ -294,6 +380,22 @@ export interface User {
   avatarUrl?: string | null;
   active: boolean;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface UserDiariasEnablement {
+  confirmed: true;
+  /**
+     * @minimum 0
+     * @maximum 99999999.99
+     */
+  dailyRate: number;
+}
+
+export interface UserDiariasEnablementResult {
+  providerId: number;
+  dailyRate: number;
+  localOnly: true;
 }
 
 export type UserUpdateRole = typeof UserUpdateRole[keyof typeof UserUpdateRole];
@@ -307,11 +409,38 @@ export const UserUpdateRole = {
 } as const;
 
 export interface UserUpdate {
+  /** Access record version captured when editing began */
+  expectedUpdatedAt?: string;
+  /**
+     * Linked financial record version captured when editing began
+     * @nullable
+     */
+  expectedProviderUpdatedAt?: string | null;
+  /**
+     * Expected link (null if not enabled); never used to choose an identity
+     * @minimum 1
+     * @nullable
+     */
+  expectedProviderId?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 99999999.99
+     * @nullable
+     */
+  dailyRate?: number | null;
   role?: UserUpdateRole;
   /** @nullable */
   teamId?: number | null;
   active?: boolean;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
   name?: string;
+  /**
+     * @maxLength 254
+     * @pattern ^[^\s@]+@[^\s@]+\.[^\s@]+$
+     */
   email?: string;
 }
 
@@ -379,6 +508,13 @@ export interface TeamUpdate {
 export interface Provider {
   id: number;
   decargoId: string;
+  /**
+     * Stable local identity retained after administrator reconciliation
+     * @nullable
+     */
+  localReference?: string | null;
+  /** @nullable */
+  cnpj?: string | null;
   name: string;
   /** @nullable */
   email?: string | null;
@@ -394,15 +530,68 @@ export interface Provider {
   active: boolean;
   /** @nullable */
   syncedAt?: string | null;
+  updatedAt?: string;
+}
+
+export interface ProviderReconciliationCandidate {
+  externalId: string;
+  name: string;
+  /** @nullable */
+  cnpj: string | null;
+  /** @nullable */
+  existingProviderId: number | null;
+  /** @nullable */
+  conflict: string | null;
+}
+
+export type ProviderReconciliationInputAction = typeof ProviderReconciliationInputAction[keyof typeof ProviderReconciliationInputAction];
+
+
+export const ProviderReconciliationInputAction = {
+  link: 'link',
+  separate: 'separate',
+} as const;
+
+export interface ProviderReconciliationInput {
+  /** @pattern ^[1-9][0-9]*$ */
+  externalId: string;
+  action: ProviderReconciliationInputAction;
+  /** @minimum 1 */
+  localProviderId?: number;
+  verifiedCnpj?: string;
+  /**
+     * Description of independently checked contract/document, without credentials
+     * @minLength 10
+     * @maxLength 500
+     */
+  evidence: string;
+  confirmed: boolean;
 }
 
 export interface ProviderUpdate {
+  expectedUpdatedAt?: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
   name?: string;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^[^\s@]+@[^\s@]+\.[^\s@]+$
+     */
   email?: string | null;
   /** @nullable */
+  cnpj?: string | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
   teamId?: number | null;
-  /** @nullable */
+  /**
+     * @minimum 0
+     * @maximum 99999999.99
+     * @nullable
+     */
   dailyRate?: number | null;
   active?: boolean;
 }
@@ -414,6 +603,49 @@ export interface SyncResult {
   synced: number;
   created: number;
   skipped: number;
+  /** Records withheld for explicit administrator identity review */
+  pending?: number;
+}
+
+export interface UserSyncEmployee {
+  /** People employee ID (id_funcionario), not a login account or local user ID. */
+  employeeId: string;
+  name: string;
+  /**
+     * Trimmed, lowercase email, or null when absent.
+     * @nullable
+     */
+  email: string | null;
+  active: boolean;
+}
+
+export type UserSyncConflictReasonsItem = typeof UserSyncConflictReasonsItem[keyof typeof UserSyncConflictReasonsItem];
+
+
+export const UserSyncConflictReasonsItem = {
+  employee_id_account_collision: 'employee_id_account_collision',
+  ambiguous_local_email: 'ambiguous_local_email',
+  duplicate_source: 'duplicate_source',
+  invalid_employee_id: 'invalid_employee_id',
+} as const;
+
+export interface UserSyncLocalAccount {
+  /** Local Diárias user ID, suitable for locating the existing record. */
+  localUserId: number;
+  /** Stored decargoId; its origin may be legacy employee, login account or manual. Not proof of identity. */
+  externalReference: string;
+  name: string;
+  email: string;
+  active: boolean;
+}
+
+export interface UserSyncConflict {
+  employee: UserSyncEmployee;
+  /** @minItems 1 */
+  reasons: UserSyncConflictReasonsItem[];
+  localAccounts: UserSyncLocalAccount[];
+  /** All source records sharing this employee ID or normalized email, including the ignored record. */
+  sourceEmployees: UserSyncEmployee[];
 }
 
 /**
@@ -423,6 +655,57 @@ export interface UserSyncResult {
   synced: number;
   created: number;
   skipped: number;
+  conflicts: number;
+  /** Admin-only, read-only report for this sync; one entry per ignored source record. */
+  conflictDetails: UserSyncConflict[];
+}
+
+export interface UserSyncReportSummary {
+  id: string;
+  completedAt: string;
+  expiresAt: string;
+  synced: number;
+  created: number;
+  skipped: number;
+  conflicts: number;
+}
+
+export type UserSyncReportPageRetentionDays = typeof UserSyncReportPageRetentionDays[keyof typeof UserSyncReportPageRetentionDays];
+
+
+export const UserSyncReportPageRetentionDays = {
+  NUMBER_30: 30,
+} as const;
+
+export interface UserSyncReportPage {
+  reports: UserSyncReportSummary[];
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  retentionDays: UserSyncReportPageRetentionDays;
+}
+
+export type UserSyncReportLookupRetentionDays = typeof UserSyncReportLookupRetentionDays[keyof typeof UserSyncReportLookupRetentionDays];
+
+
+export const UserSyncReportLookupRetentionDays = {
+  NUMBER_30: 30,
+} as const;
+
+/**
+ * Snapshot administrativo, sem dados de pessoas importadas sem conflito, tokens ou payload bruto do People.
+ */
+export interface UserSyncReport {
+  /** @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ */
+  id: string;
+  completedAt: string;
+  expiresAt: string;
+  result: UserSyncResult;
+}
+
+export interface UserSyncReportLookup {
+  retentionDays: UserSyncReportLookupRetentionDays;
+  report: UserSyncReport | null;
 }
 
 export type DiariaStatus = typeof DiariaStatus[keyof typeof DiariaStatus];
@@ -536,6 +819,36 @@ export interface ExportInput {
   paymentDate?: string;
 }
 
+export type ExportAttemptStatus = typeof ExportAttemptStatus[keyof typeof ExportAttemptStatus];
+
+
+export const ExportAttemptStatus = {
+  running: 'running',
+  completed: 'completed',
+  interrupted: 'interrupted',
+} as const;
+
+export interface ExportSkippedItem {
+  id: number;
+  reason: string;
+}
+
+export interface ExportAttempt {
+  integrationRef: string;
+  status: ExportAttemptStatus;
+  createdAt: string;
+  updatedAt: string;
+  total: number;
+  confirmed: number[];
+  rejected: number[];
+  /** In-flight or unconfirmed records; never automatically resent */
+  uncertain: number[];
+  unsent: number[];
+  skipped: ExportSkippedItem[];
+  /** @nullable */
+  message: string | null;
+}
+
 export interface BulkActionFailure {
   id: number;
   reason: string;
@@ -596,6 +909,40 @@ export interface DiariasPage {
   totalPages: number;
 }
 
+/**
+ * @nullable
+ */
+export type AuditLogOldValues = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type AuditLogNewValues = { [key: string]: unknown } | null;
+
+export interface ConfirmationProvider {
+  id: number;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  decargoId: string | null;
+}
+
+export interface PeopleConfirmation {
+  /**
+     * Responsible user's name recorded at confirmation time; null for legacy records without a snapshot. Never inferred from the current user record.
+     * @nullable
+     */
+  confirmedByName: string | null;
+  /** @nullable */
+  externalId: string | null;
+  /** @nullable */
+  verifiedCnpj: string | null;
+  /** @nullable */
+  documentDescription: string | null;
+  preservedProvider: ConfirmationProvider | null;
+  removedProvider: ConfirmationProvider | null;
+}
+
 export interface AuditLog {
   id: number;
   entityType: string;
@@ -603,13 +950,23 @@ export interface AuditLog {
   action: string;
   /** @nullable */
   userId?: number | null;
-  /** @nullable */
+  /**
+     * Current name from the user record; not a historical snapshot.
+     * @nullable
+     */
   userName?: string | null;
+  /**
+     * Authenticated user's name recorded when the action occurred. Null for system actions and legacy records without a snapshot; never inferred from the current user name.
+     * @nullable
+     */
+  userNameAtAction?: string | null;
   timestamp: string;
   /** @nullable */
-  oldValues?: string | null;
+  oldValues?: AuditLogOldValues;
   /** @nullable */
-  newValues?: string | null;
+  newValues?: AuditLogNewValues;
+  /** Evidence recorded by a People reconciliation; null when not recorded. */
+  peopleConfirmation?: PeopleConfirmation | null;
 }
 
 export interface AuditPage {
@@ -669,7 +1026,18 @@ export interface ActivityItem {
   providerName: string;
   teamName: string;
   action: string;
-  userName: string;
+  /**
+     * Current name from the user record; not a historical snapshot.
+     * @nullable
+     */
+  userName: string | null;
+  /** @nullable */
+  userId?: number | null;
+  /**
+     * Authenticated user's name recorded at action time; null when not recorded. Never inferred from the current user name.
+     * @nullable
+     */
+  userNameAtAction?: string | null;
   timestamp: string;
   status: string;
 }
@@ -684,6 +1052,19 @@ export interface DiariasReport {
   byStatus: DiariasReportByStatus;
   byTeam: TeamMetrics[];
 }
+
+export type ListUserSyncReportsParams = {
+/**
+ * @minimum 1
+ * @maximum 10000
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+pageSize?: number;
+};
 
 export type ListProvidersParams = {
 /**
@@ -864,6 +1245,11 @@ value?: number | null;
 };
 
 export type ListAuditLogsParams = {
+/**
+ * Exact audit action filter
+ * @nullable
+ */
+action?: string | null;
 /**
  * @nullable
  */

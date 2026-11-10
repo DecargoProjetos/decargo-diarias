@@ -43,6 +43,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /healthz/retention:
+    get:
+      operationId: userSyncRetentionHealth
+      tags: [health]
+      summary: Per-process report cleanup alert status (not a liveness check)
+      description: Returns 503 after three consecutive hourly failures until a successful cleanup. Contains no report data or database error details.
+      responses:
+        "200":
+          description: No active cleanup alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSyncRetentionHealth"
+        "503":
+          description: Repeated cleanup failure alert is active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSyncRetentionHealth"
+
   # ── AUTH ──────────────────────────────────────────────────────────────
   /auth/me:
     get:
@@ -121,13 +141,157 @@ paths:
       operationId: syncUsers
       tags: [users]
       summary: Sync users (funcionários) from DECARGO People (admin only)
+      description: Importação aditiva e auditoria agregada são confirmadas na mesma transação. Contas existentes não são alteradas; evidências pessoais de conflitos não são gravadas na auditoria.
       responses:
         "200":
-          description: Sync result
+          description: Importação e auditoria confirmadas; relatório desta execução
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/UserSyncResult"
+        "500":
+          description: Importação ou auditoria não confirmada; nenhum usuário importado nesta tentativa (USER_SYNC_NOT_COMMITTED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Falha ao consultar DECARGO People antes da importação (PEOPLE_FETCH_FAILED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/sync-reports:
+    get:
+      operationId: listUserSyncReports
+      tags: [users]
+      summary: Execuções salvas vigentes, da mais recente à mais antiga (somente admin)
+      description: Lista somente datas e contadores, sem consultar o People nem expor evidências de outras execuções.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Página de execuções não expiradas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSyncReportPage"
+        "400":
+          description: Paginação inválida
+        "401":
+          description: Não autenticado
+        "403":
+          description: Administrador obrigatório
+        "503":
+          description: Consulta ao histórico indisponível
+
+  /users/sync-reports/{reportId}:
+    get:
+      operationId: getUserSyncReport
+      tags: [users]
+      summary: Snapshot de uma execução salva (somente admin, sem chamada ao People)
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      responses:
+        "200":
+          description: Execução vigente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSyncReport"
+        "400":
+          description: Identificador inválido
+        "401":
+          description: Não autenticado
+        "403":
+          description: Administrador obrigatório
+        "404":
+          description: Execução inexistente ou expirada
+        "503":
+          description: Consulta ao histórico indisponível
+
+  /users/sync-reports/latest:
+    get:
+      operationId: getLatestUserSyncReport
+      tags: [users]
+      summary: Último relatório salvo de funcionários (somente admin, sem chamada ao People)
+      description: Execuções concluídas são retidas por 30 dias. Retorna null se não houver relatório vigente.
+      responses:
+        "200":
+          description: Última execução concluída ou ausência de relatório
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSyncReportLookup"
+        "401":
+          description: Não autenticado
+        "403":
+          description: Administrador obrigatório
+        "503":
+          description: Consulta ao histórico indisponível
+
+  /users/{id}/enable-diarias:
+    post:
+      operationId: enableUserDiarias
+      tags: [users]
+      summary: Habilitar diárias localmente sem alterar o cadastro ou permissões (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserDiariasEnablement"
+      responses:
+        "201":
+          description: Vínculo local criado; exportação permanece bloqueada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserDiariasEnablementResult"
+        "400":
+          description: Confirmação ou valor inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Login obrigatório
+        "403":
+          description: Apenas administradores
+        "404":
+          description: Usuário não encontrado
+        "409":
+          description: Já habilitado ou vínculo de identidade não confirmado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /users/{id}:
     get:
@@ -157,7 +321,7 @@ paths:
     patch:
       operationId: updateUser
       tags: [users]
-      summary: Update user role, team, name, email or status (admin only)
+      summary: Atomically update a person and their linked provider (admin only)
       parameters:
         - name: id
           in: path
@@ -177,6 +341,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Stale edit or ambiguous person identity; no changes saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
     delete:
       operationId: deleteUser
@@ -342,6 +518,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/SyncResult"
 
+  /providers/reconciliation:
+    get:
+      operationId: listProviderReconciliation
+      tags: [providers]
+      summary: Review fresh People provider identities (admin only)
+      responses:
+        "200":
+          description: Pending or conflicting People identities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderReconciliationCandidate"
+    post:
+      operationId: resolveProviderReconciliation
+      tags: [providers]
+      summary: Explicitly reconcile or import a distinct People provider (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderReconciliationInput"
+      responses:
+        "200":
+          description: Resolution completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "409":
+          description: Ambiguous, stale or conflicting identity; no changes made
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /providers/{id}:
     get:
       operationId: getProvider
@@ -390,6 +604,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Provider"
+        "400":
+          description: Invalid confirmed provider email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Only administrators may update providers or confirm an email association
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already associated with another provider
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
     delete:
       operationId: deleteProvider
@@ -1010,6 +1242,83 @@ paths:
         "409": { description: Reservation changed or export not known to have failed }
         "503": { description: Recovery result could not be confirmed }
 
+  /diarias/export/review:
+    post:
+      operationId: reviewPeopleExportBatch
+      tags: [diarias]
+      summary: Review selected records against People destinations (admin only)
+      description: Read-only review of all selected IDs, including other pages. Derives destinations from local types. Does not query People persons, write financial data or touch reservations. Export POST rechecks independently.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PeopleExportReviewInput" }
+      responses:
+        "200":
+          description: Complete batch compatibility review
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PeopleExportReview" }
+        "400": { description: Invalid selection }
+        "401": { description: Authentication required }
+        "403": { description: Administrator required }
+        "503":
+          description: Review unavailable, not an indication of unsupported destinations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /diarias/export/capabilities:
+    get:
+      operationId: getPeopleExportCapabilities
+      tags: [diarias]
+      summary: Read People v2 financial destinations (authenticated admin only)
+      description: Read-only indication. Does not query people, reserve records or release existing reservations. Export POST always rechecks availability.
+      responses:
+        "200":
+          description: Supported destinations; an empty list means no financial destination is supported
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PeopleExportCapabilities" }
+        "401": { description: Authentication required }
+        "403": { description: Administrator required }
+        "503":
+          description: Access, timeout or invalid upstream contract; not an unsupported destination
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /diarias/export/attempts:
+    get:
+      operationId: listExportAttempts
+      tags: [diarias]
+      summary: Recent persistent export attempts (admin only)
+      responses:
+        "200":
+          description: Latest 20 attempts, including running attempts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ExportAttempt" }
+  /diarias/export/attempts/{integrationRef}:
+    get:
+      operationId: getExportAttempt
+      tags: [diarias]
+      summary: Consult an export without resending financial records (admin only)
+      parameters:
+        - in: path
+          name: integrationRef
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Persistent progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportAttempt" }
+        "404":
+          description: Attempt not found
   /diarias/export:
     post:
       operationId: exportDiarias
@@ -1178,6 +1487,11 @@ paths:
       tags: [audit]
       summary: List audit log entries (admin only)
       parameters:
+        - name: action
+          in: query
+          description: Exact audit action filter
+          schema:
+            type: ["string", "null"]
         - name: entityType
           in: query
           schema:
@@ -1479,6 +1793,75 @@ components:
           type: string
       required: [status]
 
+    UserSyncRetentionHealth:
+      type: object
+      required: [status, alertActive, consecutiveFailures, threshold, firstFailureAt, lastSuccessAt]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        alertActive:
+          type: boolean
+        consecutiveFailures:
+          type: integer
+          minimum: 0
+        threshold:
+          type: integer
+          enum: [3]
+        firstFailureAt:
+          type: string
+          nullable: true
+        lastSuccessAt:
+          type: string
+          nullable: true
+
+    PeopleExportReviewInput:
+      type: object
+      required: [diariaIds]
+      properties:
+        diariaIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: integer, minimum: 1, maximum: 2147483647 }
+
+    PeopleExportReview:
+      type: object
+      required: [supportedTargets, reviewedCount, incompatibleRecords, missingIds]
+      properties:
+        supportedTargets:
+          type: array
+          items: { type: string, enum: [diarias, descontos] }
+        reviewedCount: { type: integer }
+        missingIds:
+          type: array
+          items: { type: integer }
+        incompatibleRecords:
+          type: array
+          items: { $ref: "#/components/schemas/PeopleExportIncompatibleRecord" }
+
+    PeopleExportIncompatibleRecord:
+      type: object
+      required: [id, providerName, workDate, typeName, requiredTarget, reason]
+      properties:
+        id: { type: integer }
+        providerName: { type: string }
+        workDate: { type: string }
+        typeName: { type: string, nullable: true }
+        requiredTarget: { type: string, nullable: true, enum: [diarias, descontos, null] }
+        reason: { type: string, enum: [unsupported_target, unconfigured_type] }
+
+    PeopleExportCapabilities:
+      type: object
+      required: [supportedTargets]
+      properties:
+        supportedTargets:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [diarias, descontos]
+
     ErrorResponse:
       type: object
       properties:
@@ -1591,11 +1974,54 @@ components:
         createdAt:
           type: string
           format: date-time
+        updatedAt:
+          type: string
+          format: date-time
       required: [id, decargoId, name, email, role, active, createdAt]
+
+    UserDiariasEnablement:
+      type: object
+      properties:
+        confirmed:
+          type: boolean
+          enum: [true]
+        dailyRate:
+          type: number
+          minimum: 0
+          maximum: 99999999.99
+      required: [confirmed, dailyRate]
+
+    UserDiariasEnablementResult:
+      type: object
+      properties:
+        providerId:
+          type: integer
+        dailyRate:
+          type: number
+        localOnly:
+          type: boolean
+          enum: [true]
+      required: [providerId, dailyRate, localOnly]
 
     UserUpdate:
       type: object
       properties:
+        expectedUpdatedAt:
+          description: Access record version captured when editing began
+          type: string
+          format: date-time
+        expectedProviderUpdatedAt:
+          description: Linked financial record version captured when editing began
+          type: ["string", "null"]
+          format: date-time
+        expectedProviderId:
+          description: Expected link (null if not enabled); never used to choose an identity
+          type: ["integer", "null"]
+          minimum: 1
+        dailyRate:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 99999999.99
         role:
           type: string
           enum: [admin, gestor, prestador, funcionario]
@@ -1605,8 +2031,12 @@ components:
           type: boolean
         name:
           type: string
+          minLength: 1
+          maxLength: 200
         email:
           type: string
+          pattern: '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+          maxLength: 254
 
     UserCreate:
       type: object
@@ -1679,6 +2109,11 @@ components:
           type: integer
         decargoId:
           type: string
+        localReference:
+          type: ["string", "null"]
+          description: Stable local identity retained after administrator reconciliation
+        cnpj:
+          type: ["string", "null"]
         name:
           type: string
         email:
@@ -1695,19 +2130,71 @@ components:
         syncedAt:
           type: ["string", "null"]
           format: date-time
+        updatedAt:
+          type: string
+          format: date-time
       required: [id, decargoId, name, active]
+
+    ProviderReconciliationCandidate:
+      type: object
+      required: [externalId, name, cnpj, existingProviderId, conflict]
+      properties:
+        externalId:
+          type: string
+        name:
+          type: string
+        cnpj:
+          type: ["string", "null"]
+        existingProviderId:
+          type: ["integer", "null"]
+        conflict:
+          type: ["string", "null"]
+
+    ProviderReconciliationInput:
+      type: object
+      required: [externalId, action, confirmed, evidence]
+      properties:
+        externalId:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+        action:
+          type: string
+          enum: [link, separate]
+        localProviderId:
+          type: integer
+          minimum: 1
+        verifiedCnpj:
+          type: string
+        evidence:
+          type: string
+          minLength: 10
+          maxLength: 500
+          description: Description of independently checked contract/document, without credentials
+        confirmed:
+          type: boolean
 
     ProviderUpdate:
       type: object
       properties:
+        expectedUpdatedAt:
+          type: string
+          format: date-time
         name:
           type: string
+          minLength: 1
+          maxLength: 200
         email:
+          type: ["string", "null"]
+          pattern: '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+        cnpj:
           type: ["string", "null"]
         teamId:
           type: ["integer", "null"]
+          minimum: 1
         dailyRate:
           type: ["number", "null"]
+          minimum: 0
+          maximum: 99999999.99
         active:
           type: boolean
 
@@ -1725,6 +2212,9 @@ components:
           type: integer
         skipped:
           type: integer
+        pending:
+          type: integer
+          description: Records withheld for explicit administrator identity review
       required: [synced, created, skipped]
 
     UserSyncResult:
@@ -1741,7 +2231,136 @@ components:
           type: integer
         skipped:
           type: integer
-      required: [synced, created, skipped]
+        conflicts:
+          type: integer
+        conflictDetails:
+          type: array
+          description: Admin-only, read-only report for this sync; one entry per ignored source record.
+          items:
+            $ref: "#/components/schemas/UserSyncConflict"
+      required: [synced, created, skipped, conflicts, conflictDetails]
+
+    UserSyncReportSummary:
+      type: object
+      required: [id, completedAt, expiresAt, synced, created, skipped, conflicts]
+      properties:
+        id:
+          type: string
+        completedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        synced:
+          type: integer
+        created:
+          type: integer
+        skipped:
+          type: integer
+        conflicts:
+          type: integer
+
+    UserSyncReportPage:
+      type: object
+      required: [reports, page, pageSize, hasMore, retentionDays]
+      properties:
+        reports:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserSyncReportSummary"
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        hasMore:
+          type: boolean
+        retentionDays:
+          type: integer
+          enum: [30]
+
+    UserSyncReportLookup:
+      type: object
+      required: [report, retentionDays]
+      properties:
+        retentionDays:
+          type: integer
+          enum: [30]
+        report:
+          oneOf:
+            - $ref: "#/components/schemas/UserSyncReport"
+            - type: "null"
+
+    UserSyncReport:
+      type: object
+      description: Snapshot administrativo, sem dados de pessoas importadas sem conflito, tokens ou payload bruto do People.
+      required: [id, completedAt, expiresAt, result]
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        completedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        result:
+          $ref: "#/components/schemas/UserSyncResult"
+
+    UserSyncEmployee:
+      type: object
+      required: [employeeId, name, email, active]
+      properties:
+        employeeId:
+          type: string
+          description: People employee ID (id_funcionario), not a login account or local user ID.
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+          description: Trimmed, lowercase email, or null when absent.
+        active:
+          type: boolean
+
+    UserSyncLocalAccount:
+      type: object
+      required: [localUserId, externalReference, name, email, active]
+      properties:
+        localUserId:
+          type: integer
+          description: Local Diárias user ID, suitable for locating the existing record.
+        externalReference:
+          type: string
+          description: Stored decargoId; its origin may be legacy employee, login account or manual. Not proof of identity.
+        name:
+          type: string
+        email:
+          type: string
+        active:
+          type: boolean
+
+    UserSyncConflict:
+      type: object
+      required: [employee, reasons, localAccounts, sourceEmployees]
+      properties:
+        employee:
+          $ref: "#/components/schemas/UserSyncEmployee"
+        reasons:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [employee_id_account_collision, ambiguous_local_email, duplicate_source, invalid_employee_id]
+        localAccounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserSyncLocalAccount"
+        sourceEmployees:
+          type: array
+          description: All source records sharing this employee ID or normalized email, including the ignored record.
+          items:
+            $ref: "#/components/schemas/UserSyncEmployee"
 
     # ── DIÁRIAS ──────────────────────────────────────────────────────────
     Diaria:
@@ -1888,6 +2507,40 @@ components:
           description: Data de pagamento usada como alternativa para diárias extras sem data definida.
       required: [diariaIds]
 
+    ExportAttempt:
+      type: object
+      required: [integrationRef, status, createdAt, updatedAt, total, confirmed, rejected, uncertain, unsent, skipped, message]
+      properties:
+        integrationRef: { type: string }
+        status:
+          type: string
+          enum: [running, completed, interrupted]
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        total: { type: integer }
+        confirmed:
+          type: array
+          items: { type: integer }
+        rejected:
+          type: array
+          items: { type: integer }
+        uncertain:
+          description: In-flight or unconfirmed records; never automatically resent
+          type: array
+          items: { type: integer }
+        unsent:
+          type: array
+          items: { type: integer }
+        skipped:
+          type: array
+          items: { $ref: "#/components/schemas/ExportSkippedItem" }
+        message: { type: ["string", "null"] }
+    ExportSkippedItem:
+      type: object
+      required: [id, reason]
+      properties:
+        id: { type: integer }
+        reason: { type: string }
     ExportResult:
       type: object
       properties:
@@ -2040,14 +2693,58 @@ components:
           type: ["integer", "null"]
         userName:
           type: ["string", "null"]
+          description: Current name from the user record; not a historical snapshot.
+        userNameAtAction:
+          type: ["string", "null"]
+          description: Authenticated user's name recorded when the action occurred. Null for system actions and legacy records without a snapshot; never inferred from the current user name.
         timestamp:
           type: string
           format: date-time
         oldValues:
-          type: ["string", "null"]
+          type: ["object", "null"]
+          additionalProperties: true
         newValues:
-          type: ["string", "null"]
+          type: ["object", "null"]
+          additionalProperties: true
+        peopleConfirmation:
+          description: Evidence recorded by a People reconciliation; null when not recorded.
+          anyOf:
+            - $ref: "#/components/schemas/PeopleConfirmation"
+            - type: "null"
       required: [id, entityType, entityId, action, timestamp]
+
+    PeopleConfirmation:
+      type: object
+      properties:
+        confirmedByName:
+          type: ["string", "null"]
+          description: Responsible user's name recorded at confirmation time; null for legacy records without a snapshot. Never inferred from the current user record.
+        externalId:
+          type: ["string", "null"]
+        verifiedCnpj:
+          type: ["string", "null"]
+        documentDescription:
+          type: ["string", "null"]
+        preservedProvider:
+          anyOf:
+            - $ref: "#/components/schemas/ConfirmationProvider"
+            - type: "null"
+        removedProvider:
+          anyOf:
+            - $ref: "#/components/schemas/ConfirmationProvider"
+            - type: "null"
+      required: [confirmedByName, externalId, verifiedCnpj, documentDescription, preservedProvider, removedProvider]
+
+    ConfirmationProvider:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: ["string", "null"]
+        decargoId:
+          type: ["string", "null"]
+      required: [id, name, decargoId]
 
     AuditPage:
       type: object
@@ -2162,7 +2859,13 @@ components:
         action:
           type: string
         userName:
-          type: string
+          type: ["string", "null"]
+          description: Current name from the user record; not a historical snapshot.
+        userId:
+          type: ["integer", "null"]
+        userNameAtAction:
+          type: ["string", "null"]
+          description: Authenticated user's name recorded at action time; null when not recorded. Never inferred from the current user name.
         timestamp:
           type: string
           format: date-time

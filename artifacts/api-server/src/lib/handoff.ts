@@ -5,6 +5,7 @@ export interface HandoffClaims {
   aud: string;
   sub: string;         // email lowercase
   email: string;
+  email_verified?: boolean;
   name: string;
   id_usuario: number;
   papel?: string;      // legacy role: current People keeps permissions local to each app
@@ -77,6 +78,17 @@ export function verifyHandoffToken(token: string): HandoffClaims {
     issuer: "decargo-id",
     audience: appCode,
   }) as HandoffClaims;
+
+  // Legacy handoffs attest email with their signature and omit this flag.
+  // An explicit negative verification must never authenticate a local account.
+  if (typeof claims.email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(claims.email.trim()) ||
+      (claims.email_verified !== undefined && claims.email_verified !== true) ||
+      typeof claims.sub !== "string" || claims.sub.trim().toLowerCase() !== claims.email.trim().toLowerCase() ||
+      typeof claims.name !== "string" || !claims.name.trim() ||
+      !Number.isSafeInteger(claims.id_usuario) || claims.id_usuario <= 0 ||
+      typeof claims.jti !== "string" || !claims.jti.trim()) {
+    throw new Error("Claims de identidade inválidas");
+  }
 
   if (!claims.jti) {
     throw new Error("Token sem jti — não é possível garantir uso único");

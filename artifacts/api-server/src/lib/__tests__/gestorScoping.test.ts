@@ -272,11 +272,12 @@ describe("buildDiariaFilters — pure SQL-builder", () => {
     expect(params[0]).toBe(7);
   });
 
-  it("prestador/funcionário is scoped by decargoId, not teamId", () => {
+  it("prestador/funcionário is scoped by an unambiguous person link, never numeric decargoId", () => {
     const prestador = { ...baseGestor, role: "prestador", decargoId: "dc123" };
     const { where, params } = buildDiariaFilters(prestador, {});
-    expect(where).toContain("p.decargo_id = $1");
-    expect(params[0]).toBe("dc123");
+    expect(where).toContain("p.id = coalesce(");
+    expect(where).toContain("lu.id = ($1)::integer");
+    expect(params[0]).toBe(prestador.id);
   });
 });
 

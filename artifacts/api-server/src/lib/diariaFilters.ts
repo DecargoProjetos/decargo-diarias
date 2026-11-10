@@ -4,6 +4,7 @@
  * Exported as a standalone module so it can be unit-tested independently of
  * the Express router that uses it.
  */
+import { linkedProviderSql } from "./providerIdentity";
 
 export interface AnaliseFilterQuery {
   name?: string;
@@ -61,9 +62,9 @@ export function buildDiariaFilters(
       params.push(teamIds);
     }
   } else if (me.role !== "admin") {
-    // prestador / funcionário: only their own records via decargoId
-    conditions.push(`p.decargo_id = $${p++}`);
-    params.push(me.decargoId);
+    // A numeric account/HR/provider ID may refer to different people.
+    conditions.push(`p.id = ${linkedProviderSql(`$${p++}`)}`);
+    params.push(me.id);
   }
 
   if (includeStatus) {

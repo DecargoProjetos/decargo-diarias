@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import {
   previewExportCorrection, resolveExportCorrection,
   type ExportCorrectionPreview, type ExportCorrectionRow, type ExportCorrectionItem,
@@ -44,6 +44,9 @@ function money(v: string) { const n = Number(v); return Number.isFinite(n) ? for
 
 export default function ExportCorrectionDialog({ diariaIds, onDone, disabled }: { diariaIds: number[]; onDone: () => void; disabled?: boolean }) {
   const { toast } = useToast();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const consentId = useId();
   const [open, setOpen] = useState(false);
   const [ids, setIds] = useState<number[]>([]);
   const [preview, setPreview] = useState<ExportCorrectionPreview | null>(null);
@@ -58,6 +61,37 @@ export default function ExportCorrectionDialog({ diariaIds, onDone, disabled }: 
   const [confirmed, setConfirmed] = useState(false);
   const ctrl = useRef<AbortController | null>(null);
   const generation = useRef(0);
+  const [visibleArea, setVisibleArea] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+
+  // Mobile keyboards may resize only the visual viewport, leaving dvh and
+  // the layout viewport unchanged. Keep this dialog in the unobscured area.
+  useEffect(() => {
+    if (!open || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+    const update = () => {
+      setVisibleArea({ top: viewport.offsetTop, left: viewport.offsetLeft, width: viewport.width, height: viewport.height });
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+    };
+  }, [open]);
+
+  // Measure only after React has applied the new size. Panning alone must not
+  // pull the reader back to the last focused field or scroll the page behind us.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const active = document.activeElement;
+    const dialog = active?.closest('[data-export-correction-dialog]');
+    if (active instanceof HTMLElement && dialog instanceof HTMLElement) {
+      const field = active.getBoundingClientRect(), bounds = dialog.getBoundingClientRect();
+      if (field.bottom > bounds.bottom) dialog.scrollTop += field.bottom - bounds.bottom + 2;
+      else if (field.top < bounds.top) dialog.scrollTop -= bounds.top - field.top + 2;
+    }
+  }, [open, visibleArea?.height, visibleArea?.width]);
 
   useEffect(() => () => { generation.current++; ctrl.current?.abort(); }, []);
 
@@ -155,13 +189,36 @@ export default function ExportCorrectionDialog({ diariaIds, onDone, disabled }: 
   const busy = loading || saving;
 
   return <>
-    <Button size="sm" variant="outline" disabled={disabled || open || diariaIds.length === 0} onClick={start} data-testid="button-open-export-correction">
+    <Button ref={triggerRef} size="sm" variant="outline" disabled={disabled || open || diariaIds.length === 0} onClick={start} data-testid="button-open-export-correction">
       <UserCheck size={16} className="mr-2" /> Corrigir prestador/tipo
     </Button>
     <Dialog open={open} onOpenChange={(n) => { if (!saving) close(n); }}>
-      <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
+      <DialogContent data-export-correction-dialog className="w-[calc(100%-1rem)] max-w-3xl max-h-[88dvh] overflow-y-auto transition-none [overflow-wrap:anywhere] [&>*]:min-w-0 [&_input]:h-auto [&_input]:min-h-9 [&_select]:h-auto [&_select]:min-h-9 [&_button]:h-auto [&_button]:min-h-9 [&_button]:whitespace-normal"
+        style={visibleArea ? {
+          top: visibleArea.top + visibleArea.height / 2,
+          left: visibleArea.left + visibleArea.width / 2,
+          width: `calc(${visibleArea.width}px - 1rem)`,
+          maxHeight: visibleArea.height * 0.88,
+        } : undefined}
+        onFocusCapture={(e) => {
+          const content = e.currentTarget;
+          const target = e.target;
+          // Some engines scroll a newly focused control only partially into
+          // this overflow container. Finish scrolling after the native focus
+          // action, without changing selection, focus, or the page scroll.
+          window.requestAnimationFrame(() => {
+            if (!content.isConnected || document.activeElement !== target) return;
+            const viewport = content.getBoundingClientRect();
+            const control = target.getBoundingClientRect();
+            const inset = 8;
+            if (control.top < viewport.top + inset) content.scrollTop += control.top - viewport.top - inset;
+            else if (control.bottom > viewport.bottom - inset) content.scrollTop += control.bottom - viewport.bottom + inset;
+          });
+        }}
+        onOpenAutoFocus={(e) => { e.preventDefault(); titleRef.current?.focus(); }}
+        onCloseAutoFocus={(e) => { e.preventDefault(); triggerRef.current?.focus(); }}>
         <DialogHeader>
-          <DialogTitle>Corrigir prestador e tipo de pagamento extra</DialogTitle>
+          <DialogTitle ref={titleRef} tabIndex={-1} className="pr-6">Corrigir prestador e tipo de pagamento extra</DialogTitle>
           <DialogDescription>
             Escolha o prestador integrado ao DECARGO People (ID e CNPJ) e o tipo de diária extra. Valores, datas, equipe e autoria são preservados.
             Registros alterados voltam para Pendente de aprovação e não são exportados. Cadastros do People e contas de usuário nunca são alterados.
@@ -207,12 +264,15 @@ export default function ExportCorrectionDialog({ diariaIds, onDone, disabled }: 
                 </li>)}</ul>
                 <label className="block space-y-1.5">
                   <span className="font-medium">Prestador correto no People *</span>
-                  <select className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={choice[orig] ?? ''} disabled={busy}
+                  <select className="flex h-9 w-full min-w-0 max-w-full rounded-md border border-input bg-background px-3 text-sm" value={choice[orig] ?? ''} disabled={busy}
                     onChange={(e) => { setChoice((c) => ({ ...c, [orig]: e.target.value })); setCnpj((c) => ({ ...c, [orig]: '' })); setConfirmed(false); }} data-testid={`select-correction-provider-${orig}`}>
                     <option value="">Selecione explicitamente</option>
                     {opts.map((c) => <option key={c.id} value={c.id}>{c.name} · ID People {c.decargoId} · CNPJ {c.cnpj || 'não informado'}</option>)}
                   </select>
                 </label>
+                {cand && <p className="text-xs text-muted-foreground" data-testid={`text-correction-provider-${orig}`}>
+                  Prestador selecionado: {cand.name} · ID People {cand.decargoId} · CNPJ {cand.cnpj || 'não informado'}
+                </p>}
                 {changes && <label className="block space-y-1.5">
                   <span className="font-medium">CNPJ conferido no People *</span>
                   <Input inputMode="numeric" autoComplete="off" maxLength={18} value={cnpj[orig] ?? ''} disabled={busy}
@@ -230,8 +290,8 @@ export default function ExportCorrectionDialog({ diariaIds, onDone, disabled }: 
               <Textarea value={reason} maxLength={1000} disabled={busy} onChange={(e) => setReason(e.target.value)}
                 placeholder="Descreva a conferência realizada (mínimo 10 caracteres)." data-testid="input-correction-reason" />
             </label>
-            <label className="flex items-start gap-3">
-              <Checkbox checked={confirmed} disabled={busy} onCheckedChange={(v) => setConfirmed(v === true)} data-testid="checkbox-correction-confirm" />
+            <label htmlFor={consentId} className="flex items-start gap-3">
+              <Checkbox id={consentId} className="shrink-0" checked={confirmed} disabled={busy} onCheckedChange={(v) => setConfirmed(v === true)} data-testid="checkbox-correction-confirm" />
               <span>Conferi o ID do People e, nos vínculos alterados, o CNPJ da mesma pessoa. Confirmo que estes pagamentos são diárias extras. *</span>
             </label>
             <p className="text-xs text-muted-foreground" data-testid="text-correction-summary">
@@ -239,7 +299,7 @@ export default function ExportCorrectionDialog({ diariaIds, onDone, disabled }: 
             </p>
           </>}
         </div>}
-        <DialogFooter>
+        <DialogFooter className="gap-2">
           <Button variant="outline" disabled={saving} onClick={() => close(false)} data-testid="button-cancel-correction">Cancelar</Button>
           <Button disabled={!canSave} onClick={() => void save()} data-testid="button-save-correction">
             {saving && <Loader2 size={16} className="mr-2 animate-spin" />} Salvar correção

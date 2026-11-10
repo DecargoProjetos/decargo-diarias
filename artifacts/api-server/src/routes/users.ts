@@ -1,165 +1,69 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
-import { db, usersTable, providersTable, teamsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
-import { fetchFuncionarios } from "../lib/peopleClient";
-import { getPeopleSyncAccess, peopleUserSyncEnabled, PeopleUserSyncError } from "../lib/peopleUserSync";
-import { CreateUserBody } from "@workspace/api-zod";
 import { normalizePersonEmail, normalizePersonName } from "../lib/personIdentity";
+import { localProviderReference, providerBelongsToUser } from "../lib/providerIdentity";
+import { CreateUserBody, EnableUserDiariasBody, UpdateUserBody } from "@workspace/api-zod";
+import { updatePerson, PersonUpdateError } from "../lib/updatePerson";
+import { latestUserSyncReport, listUserSyncReports, getUserSyncReport, USER_SYNC_REPORT_RETENTION_DAYS } from "../lib/userSyncReports";
+import { ListUserSyncReportsQueryParams, GetUserSyncReportParams } from "@workspace/api-zod";
+import { db, usersTable, providersTable, teamsTable, auditLogsTable } from "@workspace/db";
+import usersSyncRouter from "./usersSync";
 
 const router = Router();
+router.use(usersSyncRouter);
 
-const VALID_ROLES = ["admin", "gestor", "prestador", "funcionario"];
-
-// Diárias e o Valor da Diária vivem exclusivamente na tabela `providers` —
-// alguém só ganha acesso a esse campo (e aparece no seletor de "Nova
-// Diária") se também existir uma linha correspondente em `providers`.
-// Pessoas sincronizadas do DECARGO People já recebem essa linha via
-// /api/providers/sync; esta função cobre quem é cadastrado manualmente
-// pela tela de Usuários — independente do papel de acesso escolhido
-// (Admin/Gestor/Funcionário/Prestador também podem receber diárias), já
-// que "manual" aqui é sinal de que a pessoa não veio do DECARGO People e
-// pode precisar lançar diárias. É idempotente e só cria — nunca atualiza
-// um registro de provider já existente, seguindo o mesmo princípio "sync
-// é aditivo" usado no resto do sistema.
-function isManualUser(decargoId: string): boolean {
-  return decargoId.startsWith("manual-");
-}
-
-async function ensureProviderForManualUser(user: {
-  decargoId: string;
-  name: string;
-  email: string | null;
-  teamId: number | null;
-  active: boolean;
-}) {
-  const normalizedEmail = user.email?.toLowerCase() ?? null;
-
-  const [existing] = await db
-    .select({ id: providersTable.id })
-    .from(providersTable)
-    .where(
-      normalizedEmail
-        ? sql`${providersTable.decargoId} = ${user.decargoId} OR lower(${providersTable.email}) = ${normalizedEmail}`
-        : eq(providersTable.decargoId, user.decargoId)
-    )
-    .limit(1);
-
-  if (existing) return;
-
-  await db.insert(providersTable).values({
-    decargoId: user.decargoId,
-    name: user.name,
-    email: normalizedEmail,
-    teamId: user.teamId,
-    active: user.active,
-  });
-}
-
-// POST /api/users/sync (admin only)
-// Fetches all active funcionários from DECARGO People and upserts them into
-// the local users table.  Only name and email are updated for existing rows —
-// role and teamId remain under admin control.  New users receive the default
-// "prestador" role (least-privilege); admins promote them as needed.
-router.post("/sync", requireRole("admin"), async (req, res) => {
-  req.log.info("User sync started");
-
-  // The whole handler body is wrapped in one try/catch — not just the initial
-  // fetch — so any failure (reaching the People API, or a DB error while
-  // upserting) is caught here and answered with a diagnosable message.
-  // Express 5 auto-forwards rejected async handlers to the global error
-  // middleware, which replaces the message with a generic "Internal server
-  // error" in production; this route is admin-only, so it's safe to surface
-  // details here instead (never our own secrets, only upstream/DB errors).
+router.get("/sync-reports", requireRole("admin"), async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const parsed = ListUserSyncReportsQueryParams.safeParse(req.query);
+  if (!parsed.success || !Number.isInteger(parsed.data.page) || !Number.isInteger(parsed.data.pageSize)) {
+    res.status(400).json({ error: "Paginação inválida." });
+    return;
+  }
   try {
-    const access = peopleUserSyncEnabled() ? await getPeopleSyncAccess(req) : undefined;
-    const remote = await fetchFuncionarios(access);
-
-    let created = 0;
-    let skipped = 0;
-
-    // Sync is additive-only: an existing local row (matched by decargoId or,
-    // failing that, by email) is left completely untouched — no name/email/
-    // active updates. This guarantees (a) nothing is duplicated, (b) a
-    // manual deactivation in the app is never resurrected by a later sync
-    // just because the person is still active in DECARGO People, and (c)
-    // sync does no unnecessary writes for people already on file.
-    for (const f of remote) {
-      const decargoId = String(f.id_funcionario);
-      const email = f.email_principal?.toLowerCase() ?? null;
-      const name = f.nome;
-
-      let [existing] = await db
-        .select({ id: usersTable.id })
-        .from(usersTable)
-        .where(eq(usersTable.decargoId, decargoId))
-        .limit(1);
-
-      if (!existing && email) {
-        [existing] = await db
-          .select({ id: usersTable.id })
-          .from(usersTable)
-          .where(sql`lower(${usersTable.email}) = ${email}`)
-          .limit(1);
-      }
-
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      if (!email) {
-        // Cannot provision without an email — skip
-        skipped++;
-        continue;
-      }
-
-      await db.insert(usersTable).values({
-        decargoId,
-        name,
-        email,
-        role: "prestador",
-        // `demitido` (terminated) is the real employment-status field from
-        // the People API — there is no `ativo` field. A newly-synced person
-        // who already shows up as terminated is created inactive.
-        active: !f.demitido,
-      });
-      created++;
-    }
-
-    req.log.info({ created, skipped }, "User sync complete");
-
-    await logAudit({
-      entityType: "user",
-      entityId: 0,
-      action: "sync",
-      userId: req.currentUser!.id,
-      newValues: { synced: remote.length, created, skipped, timestamp: new Date() },
-    });
-
-    res.json({ synced: remote.length, created, skipped });
+    res.json(await listUserSyncReports(parsed.data.page ?? 1, parsed.data.pageSize ?? 10));
   } catch (err) {
-    if (err instanceof PeopleUserSyncError) {
-      res.status(err.status).json({ error: err.message, code: err.code });
-      return;
-    }
-    req.log.error({ err }, "User sync failed");
-    res.status(502).json({
-      error: `Falha ao sincronizar usuários: ${err instanceof Error ? err.message : String(err)}`,
-    });
+    req.log.error({ err }, "User sync report listing failed");
+    res.status(503).json({ error: "Não foi possível consultar o histórico de funcionários." });
   }
 });
 
-// POST /api/users (admin only) — manual creation for people not yet synced
-// from DECARGO People (or who won't be, e.g. external collaborators). A
-// synthetic decargoId is assigned since the column is NOT NULL/UNIQUE; if
-// this person later logs in via DECARGO ID, auth.ts's email-fallback lookup
-// rebinds the row to their real decargoId automatically.
+router.get("/sync-reports/latest", requireRole("admin"), async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    res.json({ report: await latestUserSyncReport(), retentionDays: USER_SYNC_REPORT_RETENTION_DAYS });
+  } catch (err) {
+    req.log.error({ err }, "User sync report lookup failed");
+    res.status(503).json({ error: "Não foi possível consultar o relatório salvo. Tente consultar novamente, sem repetir a importação." });
+  }
+});
+
+router.get("/sync-reports/:reportId", requireRole("admin"), async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const parsed = GetUserSyncReportParams.safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Identificador de execução inválido." });
+    return;
+  }
+  try {
+    const report = await getUserSyncReport(parsed.data.reportId);
+    if (!report) {
+      res.status(404).json({ error: "Execução não encontrada ou fora do prazo de retenção de 30 dias." });
+      return;
+    }
+    res.json(report);
+  } catch (err) {
+    req.log.error({ err }, "User sync report lookup failed");
+    res.status(503).json({ error: "Não foi possível consultar o histórico de funcionários." });
+  }
+});
+
+// Registration is separate from import and from explicit provider enablement.
 router.post("/", requireRole("admin"), async (req, res) => {
   const body = req.body;
-  const parsed = CreateUserBody.safeParse(body && typeof body === "object" ? {
+  const parsed = CreateUserBody.strict().safeParse(body && typeof body === "object" ? {
     ...body,
     name: typeof body.name === "string" ? body.name.trim().replace(/\s+/g, " ") : body.name,
     email: typeof body.email === "string" ? normalizePersonEmail(body.email) : body.email,
@@ -170,14 +74,15 @@ router.post("/", requireRole("admin"), async (req, res) => {
   }
   const { name, email, role, teamId, active, dailyRate } = parsed.data;
   const normalizedName = normalizePersonName(name);
-  if (!normalizedName) {
+  if (!normalizedName ||
+      (teamId != null && !Number.isSafeInteger(teamId)) ||
+      (dailyRate != null && Math.abs(dailyRate * 100 - Math.round(dailyRate * 100)) > 0.000001)) {
     res.status(400).json({ error: "Informe o nome completo da pessoa." });
     return;
   }
 
   const result = await db.transaction(async tx => {
-    // Serialize manual registrations across processes/replicas, not just this
-    // request, and keep the user + diária-provider creation atomic.
+    // Serialize manual registrations and keep user + provider creation atomic.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(724091513)`);
     const identities = [
       ...await tx.select({ name: usersTable.name, email: usersTable.email }).from(usersTable),
@@ -186,21 +91,15 @@ router.post("/", requireRole("admin"), async (req, res) => {
     if (identities.some(person =>
       normalizePersonName(person.name) === normalizedName ||
       (person.email && normalizePersonEmail(person.email) === email)
-    )) {
-      return { error: "duplicate" as const };
-    }
+    )) return { error: "duplicate" as const };
     if (teamId != null) {
       const [team] = await tx.select({ id: teamsTable.id }).from(teamsTable)
         .where(eq(teamsTable.id, teamId)).limit(1);
       if (!team) return { error: "team" as const };
     }
     const [created] = await tx.insert(usersTable).values({
-      decargoId: `manual-${randomUUID()}`,
-      name,
-      email,
-      role,
-      teamId: teamId ?? null,
-      active: active ?? true,
+      decargoId: `manual-${randomUUID()}`, name, email, role,
+      teamId: teamId ?? null, active: active ?? true,
     }).returning();
     await tx.insert(providersTable).values({
       decargoId: created.decargoId, name, email,
@@ -224,7 +123,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
     entityType: "user",
     entityId: created.id,
     action: "criado manualmente",
-    userId: req.currentUser!.id,
+    actor: req.currentUser!,
     newValues: { name, email, role, teamId: teamId ?? null, dailyRate: dailyRate ?? null },
   });
 
@@ -245,21 +144,70 @@ router.get("/", requireRole("admin"), async (req, res) => {
       avatarUrl: usersTable.avatarUrl,
       active: usersTable.active,
       createdAt: usersTable.createdAt,
+      updatedAt: usersTable.updatedAt,
     })
     .from(usersTable)
     .leftJoin(teamsTable, eq(usersTable.teamId, teamsTable.id))
     .orderBy(usersTable.name);
 
-  // Self-heals manual users created before ensureProviderForManualUser
-  // existed (or created some other way that skipped it) — every listing of
-  // Usuários/Pessoas is a chance to backfill any missing provider row, so
-  // people already stuck without a Valor da Diária field get fixed on the
-  // next page load instead of needing a re-edit.
-  await Promise.all(
-    users.filter(u => isManualUser(u.decargoId)).map(u => ensureProviderForManualUser(u))
-  );
-
   res.json(users);
+});
+
+// Explicit enablement only: never promote the access role or borrow a numeric
+// employee/account id as an external provider identity.
+router.post("/:id/enable-diarias", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.id);
+  const parsed = EnableUserDiariasBody.strict().safeParse(req.body);
+  if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647 || !parsed.success ||
+      parsed.data.confirmed !== true ||
+      !Number.isFinite(parsed.data.dailyRate) ||
+      Math.abs(parsed.data.dailyRate * 100 - Math.round(parsed.data.dailyRate * 100)) > 0.000001) {
+    res.status(400).json({ error: "Confirme a habilitação e informe um valor de diária válido com até duas casas decimais." });
+    return;
+  }
+  const result = await db.transaction(async tx => {
+    // Same cross-process lock as registration. A second request cannot overwrite
+    // the winner's rate, nor leave a partial provider or missing audit.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(724091513)`);
+    const [user] = await tx.select().from(usersTable).where(eq(usersTable.id, id)).for("update");
+    if (!user) return { error: "missing" as const };
+    const providers = await tx.select().from(providersTable);
+    if (providers.some(provider => providerBelongsToUser(provider, user))) {
+      return { error: "enabled" as const };
+    }
+    if (providers.some(provider =>
+      (provider.email && normalizePersonEmail(provider.email) === normalizePersonEmail(user.email)) ||
+      normalizePersonName(provider.name) === normalizePersonName(user.name)
+    )) return { error: "ambiguous" as const };
+    const [provider] = await tx.insert(providersTable).values({
+      decargoId: localProviderReference(user.id),
+      name: user.name, email: user.email,
+      teamId: user.teamId, active: user.active,
+      dailyRate: parsed.data.dailyRate.toFixed(2),
+      syncedAt: null,
+    }).returning();
+    await tx.insert(auditLogsTable).values({
+      entityType: "user", entityId: id, action: "diárias habilitadas",
+      userId: req.currentUser!.id,
+      userNameAtAction: req.currentUser!.name,
+      newValues: { providerId: provider.id, dailyRate: provider.dailyRate, localOnly: true },
+    });
+    return { provider };
+  });
+  if (result.error) {
+    const errors = {
+      missing: ["Usuário não encontrado", "USER_NOT_FOUND"],
+      enabled: ["Esta pessoa já possui vínculo para diárias. Edite o valor no cadastro existente.", "DIARIAS_ALREADY_ENABLED"],
+      ambiguous: ["Existe um prestador com o mesmo nome ou e-mail sem vínculo confirmado. Resolva a identificação antes de habilitar diárias.", "PROVIDER_IDENTITY_CONFLICT"],
+    };
+    const [error, code] = errors[result.error];
+    res.status(result.error === "missing" ? 404 : 409).json({ error, code });
+    return;
+  }
+  res.status(201).json({
+    providerId: result.provider.id, dailyRate: Number(result.provider.dailyRate),
+    localOnly: true,
+  });
 });
 
 // GET /api/users/:id
@@ -285,6 +233,7 @@ router.get("/:id", requireAuth, async (req, res) => {
       avatarUrl: usersTable.avatarUrl,
       active: usersTable.active,
       createdAt: usersTable.createdAt,
+      updatedAt: usersTable.updatedAt,
     })
     .from(usersTable)
     .leftJoin(teamsTable, eq(usersTable.teamId, teamsTable.id))
@@ -301,57 +250,23 @@ router.get("/:id", requireAuth, async (req, res) => {
 // PATCH /api/users/:id (admin only)
 router.patch("/:id", requireRole("admin"), async (req, res) => {
   const id = Number(req.params.id);
-  const { role, teamId, active, name, email } = req.body as {
-    role?: string;
-    teamId?: number | null;
-    active?: boolean;
-    name?: string;
-    email?: string;
-  };
-
-  if (role !== undefined && !VALID_ROLES.includes(role)) {
-    res.status(400).json({ error: `Papel inválido. Use um de: ${VALID_ROLES.join(", ")}` });
+  const parsed = UpdateUserBody.strict().safeParse(req.body);
+  if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647 || !parsed.success ||
+      (parsed.data.name !== undefined && !parsed.data.name.trim()) ||
+      (parsed.data.teamId != null && !Number.isSafeInteger(parsed.data.teamId)) ||
+      (parsed.data.dailyRate != null && Math.abs(parsed.data.dailyRate * 100 - Math.round(parsed.data.dailyRate * 100)) > 0.000001)) {
+    res.status(400).json({ error: "Informe dados válidos e valor com até duas casas decimais." });
     return;
   }
-
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (role !== undefined) updates.role = role;
-  // Gestores are no longer scoped via users.teamId — their teams come from
-  // teams.manager_id. Writing teamId for a gestor would be misleading, so we
-  // ignore it. For prestador/funcionário the field still controls team membership.
-  const effectiveRole = (role ?? (await (async () => {
-    const [u] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, id)).limit(1);
-    return u?.role;
-  })()));
-  if (teamId !== undefined && effectiveRole !== "gestor") updates.teamId = teamId;
-  if (active !== undefined) updates.active = active;
-  if (name !== undefined) updates.name = name;
-  if (email !== undefined) updates.email = email;
-
-  const [updated] = await db
-    .update(usersTable)
-    .set(updates)
-    .where(eq(usersTable.id, id))
-    .returning();
-
-  if (!updated) {
-    res.status(404).json({ error: "Usuário não encontrado" });
-    return;
+  try {
+    res.json(await updatePerson("user", id, parsed.data, req.currentUser!));
+  } catch (err) {
+    if (err instanceof PersonUpdateError) {
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
+    throw err;
   }
-
-  if (isManualUser(updated.decargoId)) {
-    await ensureProviderForManualUser(updated);
-  }
-
-  await logAudit({
-    entityType: "user",
-    entityId: id,
-    action: "atualizado",
-    userId: req.currentUser!.id,
-    newValues: updates,
-  });
-
-  res.json(updated);
 });
 
 // DELETE /api/users/:id (admin only)
@@ -388,7 +303,7 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
     entityType: "user",
     entityId: id,
     action: "excluído",
-    userId: me.id,
+    actor: me,
   });
 
   res.json({ message: "Usuário excluído" });

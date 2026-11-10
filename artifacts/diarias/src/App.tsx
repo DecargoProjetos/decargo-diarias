@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Shell } from '@/components/layout/Shell';
 import { Switch, Route, Router as WouterRouter } from 'wouter';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SessionQueryProvider } from '@/components/SessionQueryProvider';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
-import { getToken, setToken, PEOPLE_PORTAL_URL } from '@/lib/auth';
+import { getToken, setToken, subscribeToSession, PEOPLE_PORTAL_URL } from '@/lib/auth';
 import { Building2, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NotFound from '@/pages/not-found';
@@ -42,17 +42,6 @@ setBaseUrl(API_BASE || null);
 // Configure API client to send Bearer token on every request
 setAuthTokenGetter(() => getToken());
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: (failureCount, error: any) => {
-        if (error?.status === 401 || error?.status === 403) return false;
-        return failureCount < 2;
-      },
-    },
-  },
-});
-
 // ---------------------------------------------------------------------------
 // HandoffGate — must run before any route or authenticated query executes.
 //
@@ -76,7 +65,7 @@ function extractHandoffToken(): string | null {
   return token || null;
 }
 
-// Check synchronously so useState initializer runs before first render
+// Capture and remove the fragment before the first render, without starting HTTP.
 const pendingToken = extractHandoffToken();
 
 function HandoffGate({ children }: { children: React.ReactNode }) {
@@ -84,12 +73,15 @@ function HandoffGate({ children }: { children: React.ReactNode }) {
     pendingToken ? 'processing' : 'idle',
   );
   const [errorMsg, setErrorMsg] = useState('');
+  const exchange = useRef<Promise<{ access_token: string }> | null>(null);
+  const superseded = useRef(false);
 
-  // Run the exchange exactly once if a token was found
-  useState(() => {
+  useEffect(() => {
     if (!pendingToken) return;
 
-    fetch(`${API_BASE}/api/auth/handoff`, {
+    // StrictMode replays effect setup/cleanup. Reuse the same request rather
+    // than consuming the one-time token again; renders have no HTTP effects.
+    exchange.current ??= fetch(`${API_BASE}/api/auth/handoff`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: pendingToken }),
@@ -99,18 +91,45 @@ function HandoffGate({ children }: { children: React.ReactNode }) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error || `Falha no handoff (${res.status})`);
         }
-        return res.json();
-      })
+        const body: unknown = await res.json();
+        if (
+          typeof body !== 'object' || body === null || Array.isArray(body) ||
+          !('access_token' in body) ||
+          typeof body.access_token !== 'string' || body.access_token.trim().length === 0
+        ) {
+          throw new Error('O portal retornou uma credencial inválida. Tente novamente pelo portal.');
+        }
+        return { access_token: body.access_token };
+      });
+
+    // Any session action (including logout or reusing the same token) wins over
+    // this pending entry. Persist that decision across StrictMode effect replay.
+    // Release the gate immediately; neither a late token nor error may replace
+    // the current session. Keep this gate outside the keyed route provider.
+    let active = true;
+    const unsubscribe = subscribeToSession(() => {
+      if (!active) return;
+      superseded.current = true;
+      setState('idle');
+    });
+    exchange.current
       .then(({ access_token }: { access_token: string }) => {
+        if (!active || superseded.current) return;
+        // Our own installation is not a competing session action.
+        unsubscribe();
         setToken(access_token);
-        queryClient.invalidateQueries();
         setState('idle');
       })
       .catch((err: Error) => {
+        if (!active || superseded.current) return;
         setErrorMsg(err.message);
         setState('error');
       });
-  });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   if (state === 'processing') {
     return (
@@ -175,16 +194,16 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <HandoffGate>
+    <TooltipProvider>
+      <HandoffGate>
+        <SessionQueryProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
             <Router />
           </WouterRouter>
-        </HandoffGate>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+        </SessionQueryProvider>
+      </HandoffGate>
+      <Toaster />
+    </TooltipProvider>
   );
 }
 

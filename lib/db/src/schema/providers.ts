@@ -13,7 +13,13 @@ import { teamsTable } from "./teams";
 
 export const providersTable = pgTable("providers", {
   id: serial("id").primaryKey(),
+  // External id_prestador only for People records. Local-only links use
+  // manual-* (legacy) or local-user:<users.id>; never export those references.
+  // Uniqueness also enforces at most one explicitly enabled link per local user.
   decargoId: text("decargo_id").notNull().unique(),
+  // Reconciliation replaces decargoId with a verified People id_prestador,
+  // retaining the original local namespace for stable ownership/history.
+  localReference: text("local_reference").unique(),
   name: text("name").notNull(),
   email: text("email"),
   teamId: integer("team_id").references(() => teamsTable.id, {

@@ -13,13 +13,15 @@ import { eq, and, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { randomUUID } from "crypto";
-import { pushDiariasToPeople, pushFaltasToPeople } from "../lib/peopleClient";
+import { checkPeopleExportAvailability, pushDiariasToPeople, pushFaltasToPeople } from "../lib/peopleClient";
 import { getGestorTeamIds } from "../lib/gestorTeams";
 import { buildDiariaFilters, type AnaliseFilterQuery } from "../lib/diariaFilters";
 import { authorizeCompetenceRegistration } from "../lib/competenceAuthorization";
 import { canSeeDiariaValue } from "../lib/diariaPermissions";
-
+import { linkedProviderSql, hasLocalProviderReference, providerAccessActiveSql } from "../lib/providerIdentity";
 import exportRecoveryRouter from "./exportRecovery";
+import exportAttemptsRouter from "./exportAttempts";
+import { newExportAttempt, createExportAttempt, trackExportAttempt } from "../lib/exportAttempts";
 
 const router = Router();
 
@@ -28,7 +30,8 @@ const router = Router();
 // once a diária reaches one of these (Bloqueio Pós-Exportação).
 const LOCKED_STATUSES = ["exportada", "paga"];
 
-async function getDiariaById(id: number, userId: number, role: string, gestorTeamIds: number[], decargoId: string) {
+async function getDiariaById(id: number, userId: number, role: string, gestorTeamIds: number[], _decargoId: string) {
+  const selfScoped = role !== "admin" && role !== "gestor";
   const result = await pool.query<Record<string, unknown>>(
     `SELECT
         d.id, d.provider_id AS "providerId", p.name AS "providerName",
@@ -53,22 +56,12 @@ async function getDiariaById(id: number, userId: number, role: string, gestorTea
       LEFT JOIN users au ON au.id = d.approved_by
       LEFT JOIN users eu ON eu.id = d.exported_by
       LEFT JOIN diaria_types dt ON dt.id = d.type_id
-      WHERE d.id = $1`,
-    [id]
+      WHERE d.id = $1${selfScoped ? ` AND p.id = ${linkedProviderSql("$2")}` : ""}`,
+    selfScoped ? [id, userId] : [id]
   );
 
   const row = result.rows[0];
   if (!row) return null;
-
-  // Record-level access control
-  if (role !== "admin" && role !== "gestor") {
-    // Prestadores/funcionários may only see diárias linked to their provider
-    // record (funcionários have none, so they see nothing here — expected,
-    // since diárias belong to prestadores).
-    if (String(row.providerDecargoId) !== String(decargoId)) {
-      return null;
-    }
-  }
 
   if (role === "gestor" && !gestorTeamIds.includes(Number(row.teamId))) {
     return null;
@@ -253,7 +246,7 @@ router.post("/bulk-approve", requireRole("admin"), async (req, res) => {
         entityType: "diaria",
         entityId: r.id,
         action: "aprovado_em_lote",
-        userId: me.id,
+        actor: me,
         oldValues: { status: r.status },
         newValues: { status: "disponivel_exportacao" },
       });
@@ -328,7 +321,7 @@ router.post("/bulk-reject", requireRole("admin"), async (req, res) => {
         entityType: "diaria",
         entityId: r.id,
         action: "rejeitado_em_lote",
-        userId: me.id,
+        actor: me,
         oldValues: { status: r.status },
         newValues: { status: "rejeitada", note },
       });
@@ -386,7 +379,7 @@ router.post("/bulk-set-payment-date", requireRole("admin"), async (req, res) => 
         entityType: "diaria",
         entityId: r.id,
         action: "data_pagamento_atualizada_em_lote",
-        userId: me.id,
+        actor: me,
         oldValues: { paymentDate: r.paymentDate },
         newValues: { paymentDate },
       });
@@ -415,7 +408,7 @@ router.patch("/:id/payment-date", requireRole("admin"), async (req, res) => {
       entityType: "diaria",
       entityId: id,
       action: "alteracao_bloqueada_pos_exportacao",
-      userId: me.id,
+      actor: me,
       oldValues: { status: diaria.status, paymentDate: diaria.paymentDate },
       newValues: { attemptedPaymentDate: paymentDate },
     });
@@ -430,7 +423,7 @@ router.patch("/:id/payment-date", requireRole("admin"), async (req, res) => {
     entityType: "diaria",
     entityId: id,
     action: "data_pagamento_atualizada",
-    userId: me.id,
+    actor: me,
     oldValues: { paymentDate: diaria.paymentDate },
     newValues: { paymentDate },
   });
@@ -455,20 +448,31 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
       observations?: string;
     };
 
-  if (!typeId) {
-    res.status(400).json({ error: "Tipo de diária é obrigatório" });
-    return;
-  }
-  const [diariaType] = await db.select().from(diariaTypesTable).where(eq(diariaTypesTable.id, typeId)).limit(1);
-  if (!diariaType || !diariaType.active) {
-    res.status(400).json({ error: "Tipo de diária inválido ou inativo" });
-    return;
-  }
+  // Resolve manager scope/deadline outside the transaction: these helpers use
+  // the pool, and nested pool requests while holding a connection can starve
+  // concurrent creations. Provider eligibility/team/rate are locked below.
+  const gestorTeamIds = me.role === "gestor" ? await getGestorTeamIds(me.id) : [];
+  const authorization = me.role === "gestor"
+    ? await authorizeCompetenceRegistration({ role: me.role, managerId: me.id, workDate })
+    : undefined;
+  const outcome = await db.transaction(async tx => {
+    // Shared with edits and imports: ambiguous deactivation may only change
+    // the access account, so locking a provider alone is not sufficient.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(724091513)`);
+    // FK checks for created_by/manager_id need a user lock at insertion.
+    // Acquire it before the provider, matching administrative edit lock order,
+    // especially when an administrator launches their own diária.
+    const [actor] = await tx.select({ active: usersTable.active }).from(usersTable)
+      .where(eq(usersTable.id, me.id)).for("key share");
+    if (!actor?.active) return { status: 401, error: "Usuário inativo" };
+    if (!typeId) return { status: 400, error: "Tipo de diária é obrigatório" };
+    const [diariaType] = await tx.select().from(diariaTypesTable).where(eq(diariaTypesTable.id, typeId)).limit(1);
+    if (!diariaType || !diariaType.active) return { status: 400, error: "Tipo de diária inválido ou inativo" };
 
   // Resolve the provider relationship server-side. The submitted teamId is
   // only a consistency check; it must never be used to move a provider into a
   // manager's scope.
-  const [provider] = await db
+  const [provider] = await tx
     .select({
       id: providersTable.id,
       teamId: providersTable.teamId,
@@ -477,38 +481,30 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
     })
     .from(providersTable)
     .where(eq(providersTable.id, providerId))
-    .limit(1);
+    .limit(1)
+    .for("share");
   if (!provider || !provider.active) {
-    res.status(400).json({ error: "Prestador inválido ou inativo" });
-    return;
+    return { status: 400, error: "Prestador inválido ou inativo" };
   }
+  const eligibility = await tx.execute(sql`SELECT ${sql.raw(providerAccessActiveSql(String(provider.id)))} AS allowed`);
+  if (eligibility.rows[0]?.allowed !== true) return { status: 400, error: "Pessoa com acesso inativo" };
   if (!provider.teamId) {
-    res.status(400).json({ error: "Prestador sem equipe vinculada" });
-    return;
+    return { status: 400, error: "Prestador sem equipe vinculada" };
   }
   if (provider.teamId !== teamId) {
-    res.status(400).json({ error: "A equipe informada não corresponde à equipe atual do prestador" });
-    return;
+    return { status: 400, error: "A equipe informada não corresponde à equipe atual do prestador" };
   }
 
   const authoritativeTeamId = provider.teamId;
 
   // Gestor can only create for their managed teams (derived from teams.manager_id).
-  const gestorTeamIds = me.role === "gestor" ? await getGestorTeamIds(me.id) : [];
   if (me.role === "gestor" && !gestorTeamIds.includes(authoritativeTeamId)) {
-    res.status(403).json({ error: "Você só pode lançar diárias das suas equipes" });
-    return;
+    return { status: 403, error: "Você só pode lançar diárias das suas equipes" };
   }
 
-  if (me.role === "gestor") {
-    const authorization = await authorizeCompetenceRegistration({
-      role: me.role,
-      managerId: me.id,
-      workDate,
-    });
+  if (authorization) {
     if (!authorization.allowed) {
-      res.status(403).json({ error: authorization.message });
-      return;
+      return { status: 403, error: authorization.message ?? "Competência fechada" };
     }
   }
 
@@ -518,13 +514,12 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
   let effectiveValue = value;
   if (me.role === "gestor") {
     if (provider.dailyRate == null) {
-      res.status(400).json({ error: "Configure o valor da diária deste prestador em Pessoas antes de lançar." });
-      return;
+      return { status: 400, error: "Configure o valor da diária deste prestador em Pessoas antes de lançar." };
     }
     effectiveValue = Number(provider.dailyRate);
   }
 
-  const [diaria] = await db
+  const [diaria] = await tx
     .insert(diariasTable)
     .values({
       providerId,
@@ -542,15 +537,22 @@ router.post("/", requireRole("admin", "gestor"), async (req, res) => {
     })
     .returning();
 
-  await logAudit({
+  await tx.insert(auditLogsTable).values({
     entityType: "diaria",
     entityId: diaria.id,
     action: "criado",
     userId: me.id,
+    userNameAtAction: me.name,
     newValues: { status: "pendente_aprovacao", value: effectiveValue, providerId, teamId: authoritativeTeamId, workDate },
   });
 
-  const result = await getDiariaById(diaria.id, me.id, me.role, gestorTeamIds, me.decargoId);
+  return { diariaId: diaria.id, gestorTeamIds };
+  });
+  if ("error" in outcome) {
+    res.status(outcome.status!).json({ error: outcome.error });
+    return;
+  }
+  const result = await getDiariaById(outcome.diariaId, me.id, me.role, outcome.gestorTeamIds, me.decargoId);
   res.status(201).json(result);
 });
 
@@ -567,6 +569,7 @@ function calcDiscountDate(workDate: string): string {
 
 // POST /api/diarias/export (must come before /:id)
 router.use("/export", exportRecoveryRouter);
+router.use("/export/attempts", exportAttemptsRouter);
 router.post("/export", requireRole("admin"), async (req, res) => {
   const me = req.currentUser!;
   const { diariaIds, paymentDate: fallbackPaymentDate } = req.body as { diariaIds: number[]; paymentDate?: string };
@@ -605,6 +608,10 @@ router.post("/export", requireRole("admin"), async (req, res) => {
     if (!row.exportTarget || !["diaria_extra", "falta"].includes(row.exportTarget)) {
       validationErrors.push({ id, reason: "Tipo de diária não definido — configure o tipo antes de exportar" }); continue;
     }
+    // Preserve the local enablement protection for BOTH export targets.
+    if (hasLocalProviderReference(row.providerDecargoId)) {
+      validationErrors.push({ id, reason: "Vínculo apenas local: exportação bloqueada até validar o prestador no DECARGO People" }); continue;
+    }
     // Diárias extras need a payment date; faltas have auto-calculated discount date.
     if (row.exportTarget === "diaria_extra") {
       const effectivePaymentDate = row.paymentDate ?? fallbackPaymentDate ?? null;
@@ -621,7 +628,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
   }
 
   const invalidIds = new Set(validationErrors.map(({ id }) => id));
-  const eligibleIds = diariaIds.filter((id) => !invalidIds.has(id));
+  const eligibleIds = [...new Set(diariaIds.filter((id) => !invalidIds.has(id)))];
 
   if (eligibleIds.length === 0) {
     res.status(400).json({ error: "Algumas diárias não passaram na validação", details: validationErrors });
@@ -632,8 +639,24 @@ router.post("/export", requireRole("admin"), async (req, res) => {
   const diariaExtraIds = eligibleIds.filter((id) => byId.get(id)!.exportTarget === "diaria_extra");
   const faltaIds = eligibleIds.filter((id) => byId.get(id)!.exportTarget === "falta");
 
+  // Fail before creating any reservation. This catch must not enter export
+  // recovery: it owns no reservation and may not release another attempt's.
+  try {
+    await checkPeopleExportAvailability([
+      ...(diariaExtraIds.length ? ["diarias" as const] : []),
+      ...(faltaIds.length ? ["descontos" as const] : []),
+    ]);
+  } catch {
+    res.status(503).json({
+      error: "Não foi possível confirmar o acesso e os destinos necessários da integração DECARGO People. Nenhum lote foi enviado e nenhuma reserva foi alterada. Verifique a disponibilidade de diárias e descontos no People.",
+      code: "PEOPLE_EXPORT_UNAVAILABLE",
+    });
+    return;
+  }
+
   const integrationRef = `EXP-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
   const now = new Date();
+  const attempt = newExportAttempt(integrationRef, eligibleIds, validationErrors, now);
 
   // Reserve every record before sending any payload externally. This is the
   // synchronization point shared with permanent deletion: a reservation keeps
@@ -656,6 +679,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
         (error as Error & { code?: string }).code = "EXPORT_RESERVATION_CONFLICT";
         throw error;
       }
+      await createExportAttempt(tx, attempt);
     });
   } catch (error) {
     if ((error as { code?: string }).code === "EXPORT_RESERVATION_CONFLICT") {
@@ -666,18 +690,85 @@ router.post("/export", requireRole("admin"), async (req, res) => {
   }
 
   const allFailedLocalIds = new Set<number>();
+  const tracker = trackExportAttempt(attempt);
   const blockUnidentifiedResult = async (source: string) => {
     await Promise.all(eligibleIds.map((id) => logAudit({
       entityType: "diaria",
       entityId: id,
       action: "exportacao_aguardando_conferencia",
-      userId: me.id,
+      actor: me,
       oldValues: { status: "disponivel_exportacao" },
       newValues: { integrationId: integrationRef, reason: "resultado_externo_nao_identificavel", source },
     })));
+    await tracker.finish("interrupted", `Resultado externo não identificável para ${source}`, {
+      confirmed: attempt.confirmed, rejected: attempt.rejected,
+      uncertain: attempt.uncertain.length ? attempt.uncertain : eligibleIds,
+      unsent: attempt.unsent,
+    });
     res.status(502).json({
       error: `O DECARGO People devolveu um resultado externo não identificável para ${source}; os registros foram bloqueados para conferência`,
       integrationRef,
+    });
+  };
+
+  // Both financial targets share the same recovery rules. Never release an
+  // uncertain POST; do persist earlier receipts and release definitely unsent
+  // records (including faltas not yet attempted after an extras failure).
+  const handleBatchFailure = async (
+    err: unknown, source: string, currentIds: number[],
+    previouslyConfirmedIds: number[], notAttemptedIds: number[],
+  ) => {
+    const partial = err && typeof err === "object"
+      && Array.isArray((err as { completedLocalIds?: unknown }).completedLocalIds)
+      && Array.isArray((err as { rejectedLocalIds?: unknown }).rejectedLocalIds)
+      && Array.isArray((err as { uncertainLocalIds?: unknown }).uncertainLocalIds)
+      && Array.isArray((err as { pendingLocalIds?: unknown }).pendingLocalIds)
+      ? err as {
+          completedLocalIds: number[]; rejectedLocalIds: number[];
+          uncertainLocalIds: number[]; pendingLocalIds: number[];
+        }
+      : null;
+    const confirmedIds = [...previouslyConfirmedIds, ...(partial?.completedLocalIds ?? [])];
+    const rejectedIds = [...allFailedLocalIds, ...(partial?.rejectedLocalIds ?? [])];
+    const uncertainIds = partial?.uncertainLocalIds ?? currentIds;
+    const retryableIds = [...rejectedIds, ...(partial?.pendingLocalIds ?? []), ...notAttemptedIds];
+
+    if (confirmedIds.length > 0) {
+      await db.update(diariasTable).set({
+        status: "exportada", exportedAt: now, exportedBy: me.id, integrationId: integrationRef, updatedAt: now,
+      }).where(and(inArray(diariasTable.id, confirmedIds), eq(diariasTable.integrationId, integrationRef)));
+      for (const id of confirmedIds) {
+        const row = byId.get(id)!;
+        if (!row.paymentDate) {
+          await db.update(diariasTable).set({
+            paymentDate: row.exportTarget === "falta" ? calcDiscountDate(row.workDate) : fallbackPaymentDate,
+            updatedAt: now,
+          }).where(and(eq(diariasTable.id, id), eq(diariasTable.integrationId, integrationRef)));
+        }
+      }
+    }
+    if (retryableIds.length > 0) {
+      await db.update(diariasTable).set({ integrationId: null, updatedAt: now }).where(and(
+        inArray(diariasTable.id, retryableIds), eq(diariasTable.integrationId, integrationRef),
+      ));
+    }
+    await Promise.all(confirmedIds.map((id) => logAudit({
+      entityType: "diaria", entityId: id, action: "exportado", actor: me,
+      oldValues: { status: "disponivel_exportacao" },
+      newValues: { status: "exportada", integrationId: integrationRef, exportTarget: byId.get(id)?.exportTarget },
+    })));
+    await Promise.all(uncertainIds.map((id) => logAudit({
+      entityType: "diaria", entityId: id, action: "exportacao_aguardando_conferencia", actor: me,
+      oldValues: { status: "disponivel_exportacao" },
+      newValues: { integrationId: integrationRef },
+    })));
+    await tracker.finish("interrupted", `Falha ao confirmar ${source}. Confira os registros incertos no People.`, {
+      confirmed: confirmedIds, rejected: rejectedIds, uncertain: uncertainIds,
+      unsent: [...(partial?.pendingLocalIds ?? []), ...notAttemptedIds],
+    });
+    res.status(502).json({
+      error: `Falha ao enviar ${source} para o DECARGO People; o lote sem confirmação foi bloqueado para conferência: ${err instanceof Error ? err.message : String(err)}`,
+      exported: confirmedIds, awaitingConfirmation: uncertainIds, retryable: retryableIds, integrationRef,
     });
   };
 
@@ -697,17 +788,10 @@ router.post("/export", requireRole("admin"), async (req, res) => {
             __localId: id,
           };
         }),
+        tracker.progress,
       );
     } catch (err) {
-      await Promise.all(eligibleIds.map((id) => logAudit({
-        entityType: "diaria",
-        entityId: id,
-        action: "exportacao_aguardando_conferencia",
-        userId: me.id,
-        oldValues: { status: "disponivel_exportacao" },
-        newValues: { integrationId: integrationRef },
-      })));
-      res.status(502).json({ error: `Falha ao enviar diárias extras; os registros foram bloqueados para conferência: ${err instanceof Error ? err.message : String(err)}` });
+      await handleBatchFailure(err, "diárias extras", diariaExtraIds, [], faltaIds);
       return;
     }
     const hasUnidentifiedExtraError =
@@ -739,75 +823,11 @@ router.post("/export", requireRole("admin"), async (req, res) => {
             __localId: id,
           };
         }),
+        tracker.progress,
       );
     } catch (err) {
-      const partial = err && typeof err === "object"
-        && Array.isArray((err as { completedLocalIds?: unknown }).completedLocalIds)
-        && Array.isArray((err as { rejectedLocalIds?: unknown }).rejectedLocalIds)
-        && Array.isArray((err as { uncertainLocalIds?: unknown }).uncertainLocalIds)
-        && Array.isArray((err as { pendingLocalIds?: unknown }).pendingLocalIds)
-        ? err as {
-            completedLocalIds: number[];
-            rejectedLocalIds: number[];
-            uncertainLocalIds: number[];
-            pendingLocalIds: number[];
-          }
-        : null;
       const confirmedExtraIds = diariaExtraIds.filter((id) => !allFailedLocalIds.has(id));
-      const confirmedIds = [...confirmedExtraIds, ...(partial?.completedLocalIds ?? [])];
-      const rejectedIds = [...allFailedLocalIds, ...(partial?.rejectedLocalIds ?? [])];
-      const pendingIds = partial?.pendingLocalIds ?? [];
-      const uncertainIds = partial?.uncertainLocalIds ?? faltaIds;
-      const retryableIds = [...rejectedIds, ...pendingIds];
-
-      if (confirmedIds.length > 0) {
-        await db.update(diariasTable).set({
-          status: "exportada", exportedAt: now, exportedBy: me.id, integrationId: integrationRef, updatedAt: now,
-        }).where(and(
-          inArray(diariasTable.id, confirmedIds),
-          eq(diariasTable.integrationId, integrationRef),
-        ));
-        const confirmedFaltaIds = confirmedIds.filter((id) => byId.get(id)?.exportTarget === "falta");
-        for (const id of confirmedFaltaIds) {
-          const row = byId.get(id)!;
-          if (!row.paymentDate) {
-            await db.update(diariasTable).set({
-              paymentDate: calcDiscountDate(row.workDate),
-              updatedAt: now,
-            }).where(eq(diariasTable.id, id));
-          }
-        }
-      }
-      if (retryableIds.length > 0) {
-        await db.update(diariasTable).set({ integrationId: null, updatedAt: now }).where(and(
-          inArray(diariasTable.id, retryableIds),
-          eq(diariasTable.integrationId, integrationRef),
-        ));
-      }
-
-      await Promise.all(confirmedIds.map((id) => logAudit({
-        entityType: "diaria",
-        entityId: id,
-        action: "exportado",
-        userId: me.id,
-        oldValues: { status: "disponivel_exportacao" },
-        newValues: { status: "exportada", integrationId: integrationRef, exportTarget: byId.get(id)?.exportTarget },
-      })));
-      await Promise.all(uncertainIds.map((id) => logAudit({
-        entityType: "diaria",
-        entityId: id,
-        action: "exportacao_aguardando_conferencia",
-        userId: me.id,
-        oldValues: { status: "disponivel_exportacao" },
-        newValues: { integrationId: integrationRef },
-      })));
-      res.status(502).json({
-        error: `Falha ao enviar faltas para o DECARGO People; o lote sem confirmação foi bloqueado para conferência: ${err instanceof Error ? err.message : String(err)}`,
-        exported: confirmedIds,
-        awaitingConfirmation: uncertainIds,
-        retryable: retryableIds,
-        integrationRef,
-      });
+      await handleBatchFailure(err, "faltas", faltaIds, confirmedExtraIds, []);
       return;
     }
     const hasUnidentifiedFaltaError =
@@ -864,7 +884,7 @@ router.post("/export", requireRole("admin"), async (req, res) => {
 
     for (const id of succeededIds) {
       await logAudit({
-        entityType: "diaria", entityId: id, action: "exportado", userId: me.id,
+        entityType: "diaria", entityId: id, action: "exportado", actor: me,
         oldValues: { status: "disponivel_exportacao" },
         newValues: { status: "exportada", integrationId: integrationRef, exportTarget: byId.get(id)!.exportTarget },
       });
@@ -873,11 +893,14 @@ router.post("/export", requireRole("admin"), async (req, res) => {
 
   for (const id of allFailedLocalIds) {
     await logAudit({
-      entityType: "diaria", entityId: id, action: "exportacao_falhou", userId: me.id,
+      entityType: "diaria", entityId: id, action: "exportacao_falhou", actor: me,
       newValues: { reason: "Rejeitado pelo DECARGO People" },
     });
   }
 
+  await tracker.finish("completed", null, {
+    confirmed: succeededIds, rejected: [...allFailedLocalIds], uncertain: [], unsent: [],
+  });
   res.json({
     exported: succeededIds.length,
     integrationRef,
@@ -971,7 +994,7 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
     entityType: "diaria",
     entityId: id,
     action: "editado",
-    userId: me.id,
+    actor: me,
     oldValues,
     newValues: updates,
   });
@@ -1006,6 +1029,7 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
       entityId: id,
       action: "excluido_permanentemente",
       userId: me.id,
+      userNameAtAction: me.name,
       oldValues: {
         status: diaria.status,
         providerId: diaria.providerId,
@@ -1058,7 +1082,7 @@ router.post("/:id/revert", requireRole("admin"), async (req, res) => {
   }).where(eq(diariasTable.id, id));
 
   await logAudit({
-    entityType: "diaria", entityId: id, action: "revertido", userId: me.id,
+    entityType: "diaria", entityId: id, action: "revertido", actor: me,
     oldValues: { status: diaria.status },
     newValues: { status: "pendente_aprovacao" },
   });
@@ -1090,7 +1114,7 @@ router.post("/:id/approve", requireRole("admin"), async (req, res) => {
     updatedAt: now,
   }).where(eq(diariasTable.id, id));
 
-  await logAudit({ entityType: "diaria", entityId: id, action: "aprovado", userId: me.id, newValues: { status: "disponivel_exportacao" } });
+  await logAudit({ entityType: "diaria", entityId: id, action: "aprovado", actor: me, newValues: { status: "disponivel_exportacao" } });
   const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
@@ -1127,7 +1151,7 @@ router.post("/:id/reject", requireRole("admin"), async (req, res) => {
     updatedAt: now,
   }).where(eq(diariasTable.id, id));
 
-  await logAudit({ entityType: "diaria", entityId: id, action: "rejeitado", userId: me.id, oldValues: { status: diaria.status }, newValues: { status: "rejeitada", note } });
+  await logAudit({ entityType: "diaria", entityId: id, action: "rejeitado", actor: me, oldValues: { status: diaria.status }, newValues: { status: "rejeitada", note } });
   const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
@@ -1152,7 +1176,7 @@ router.post("/:id/request-correction", requireRole("admin"), async (req, res) =>
     updatedAt: now,
   }).where(eq(diariasTable.id, id));
 
-  await logAudit({ entityType: "diaria", entityId: id, action: "solicitacao_correcao", userId: me.id, newValues: { status: "solicitacao_correcao", note } });
+  await logAudit({ entityType: "diaria", entityId: id, action: "solicitacao_correcao", actor: me, newValues: { status: "solicitacao_correcao", note } });
   const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });
@@ -1173,7 +1197,7 @@ router.post("/:id/mark-paid", requireRole("admin"), async (req, res) => {
   const now = new Date();
   await db.update(diariasTable).set({ status: "paga", paidAt: now, updatedAt: now }).where(eq(diariasTable.id, id));
 
-  await logAudit({ entityType: "diaria", entityId: id, action: "pago", userId: me.id, newValues: { status: "paga" } });
+  await logAudit({ entityType: "diaria", entityId: id, action: "pago", actor: me, newValues: { status: "paga" } });
   const result = await getDiariaById(id, me.id, me.role, [], me.decargoId);
   res.json(result);
 });

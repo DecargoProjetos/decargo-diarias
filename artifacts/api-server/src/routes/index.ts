@@ -12,6 +12,7 @@ import auditRouter from "./audit";
 import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
 import competencePeriodsRouter from "./competencePeriods";
+import peopleExportCapabilitiesRouter from "./peopleExportCapabilities";
 
 const router: IRouter = Router();
 
@@ -22,6 +23,7 @@ router.use("/users", usersRouter);
 router.use("/teams", teamsRouter);
 router.use("/providers", providersRouter);
 router.use("/diarias/import", diariaImportRouter);
+router.use("/diarias/export", peopleExportCapabilitiesRouter);
 router.use("/diarias", diariasRouter);
 router.use("/diaria-types", diariaTypesRouter);
 router.use("/audit", auditRouter);

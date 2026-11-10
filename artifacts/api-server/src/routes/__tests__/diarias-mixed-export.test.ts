@@ -18,6 +18,7 @@ const { pushDiariasToPeople } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../lib/peopleClient", () => ({
+  checkPeopleExportAvailability: vi.fn().mockResolvedValue(undefined),
   pushDiariasToPeople,
   pushFaltasToPeople: vi.fn(),
 }));
@@ -181,7 +182,7 @@ describe("POST /api/diarias/export — mixed valid and invalid batch", () => {
         valor_diaria: 150,
         data_pagamento: "2026-09-15",
       }),
-    ]);
+    ], expect.any(Object));
 
     const persisted = await db
       .select({

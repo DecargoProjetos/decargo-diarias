@@ -5,6 +5,9 @@
  * Controle de Diárias de Prestadores de Serviços
  * OpenAPI spec version: 0.1.0
  */
+import type { AuditLogNewValues } from './auditLogNewValues';
+import type { AuditLogOldValues } from './auditLogOldValues';
+import type { PeopleConfirmation } from './peopleConfirmation';
 
 export interface AuditLog {
   id: number;
@@ -13,11 +16,21 @@ export interface AuditLog {
   action: string;
   /** @nullable */
   userId?: number | null;
-  /** @nullable */
+  /**
+     * Current name from the user record; not a historical snapshot.
+     * @nullable
+     */
   userName?: string | null;
+  /**
+     * Authenticated user's name recorded when the action occurred. Null for system actions and legacy records without a snapshot; never inferred from the current user name.
+     * @nullable
+     */
+  userNameAtAction?: string | null;
   timestamp: Date;
   /** @nullable */
-  oldValues?: string | null;
+  oldValues?: AuditLogOldValues;
   /** @nullable */
-  newValues?: string | null;
+  newValues?: AuditLogNewValues;
+  /** Evidence recorded by a People reconciliation; null when not recorded. */
+  peopleConfirmation?: PeopleConfirmation | null;
 }

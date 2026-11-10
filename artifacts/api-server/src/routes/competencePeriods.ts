@@ -77,7 +77,7 @@ router.post("/", requireRole("admin"), async (req, res): Promise<void> => {
   });
   if ("error" in result) { res.status(409).json({ error: result.error }); return; }
   const period = result.period;
-  await logAudit({ entityType: "competence_period", entityId: period.id, action: "criado", userId: req.currentUser!.id, newValues: period });
+  await logAudit({ entityType: "competence_period", entityId: period.id, action: "criado", actor: req.currentUser!, newValues: period });
   res.status(201).json(period);
 });
 
@@ -98,7 +98,7 @@ router.patch("/:id", requireRole("admin"), async (req, res): Promise<void> => {
   if ("notFound" in result) { res.status(404).json({ error: "Período não encontrado." }); return; }
   if ("error" in result) { res.status(409).json({ error: result.error }); return; }
   const { oldPeriod, period } = result;
-  await logAudit({ entityType: "competence_period", entityId: id, action: "atualizado", userId: req.currentUser!.id, oldValues: oldPeriod, newValues: period });
+  await logAudit({ entityType: "competence_period", entityId: id, action: "atualizado", actor: req.currentUser!, oldValues: oldPeriod, newValues: period });
   res.json(period);
 });
 
@@ -107,7 +107,7 @@ router.delete("/:id", requireRole("admin"), async (req, res): Promise<void> => {
   if (!id) { res.status(400).json({ error: "Identificador inválido." }); return; }
   const [period] = await db.delete(competenceRegistrationPeriodsTable).where(eq(competenceRegistrationPeriodsTable.id, id)).returning();
   if (!period) { res.status(404).json({ error: "Período não encontrado." }); return; }
-  await logAudit({ entityType: "competence_period", entityId: id, action: "excluido", userId: req.currentUser!.id, oldValues: period });
+  await logAudit({ entityType: "competence_period", entityId: id, action: "excluido", actor: req.currentUser!, oldValues: period });
   res.json({ message: "Período excluído." });
 });
 
@@ -140,7 +140,7 @@ router.post("/:id/releases", requireRole("admin"), async (req, res): Promise<voi
   if ("managerNotFound" in result) { res.status(400).json({ error: "Gestor não encontrado." }); return; }
   if ("conflict" in result) { res.status(409).json({ error: "Já existe uma liberação ativa sobreposta para este gestor." }); return; }
   const release = result.release;
-  await logAudit({ entityType: "competence_period_release", entityId: release.id, action: "criado", userId: req.currentUser!.id, newValues: release });
+  await logAudit({ entityType: "competence_period_release", entityId: release.id, action: "criado", actor: req.currentUser!, newValues: release });
   res.status(201).json(release);
 });
 
@@ -168,7 +168,7 @@ router.delete("/:id/releases/:releaseId", requireRole("admin"), async (req, res)
     .where(and(eq(competencePeriodReleasesTable.id, releaseId), eq(competencePeriodReleasesTable.periodId, periodId), eq(competencePeriodReleasesTable.active, true)))
     .returning();
   if (!release) { res.status(404).json({ error: "Liberação ativa não encontrada." }); return; }
-  await logAudit({ entityType: "competence_period_release", entityId: releaseId, action: "cancelado", userId: req.currentUser!.id, oldValues: { active: true }, newValues: release });
+  await logAudit({ entityType: "competence_period_release", entityId: releaseId, action: "cancelado", actor: req.currentUser!, oldValues: { active: true }, newValues: release });
   res.json({ message: "Liberação cancelada." });
 });
 
@@ -181,7 +181,7 @@ router.post("/:id/:status", requireRole("admin"), async (req, res): Promise<void
   const status = action === "close" ? "closed" : "open";
   const [period] = await db.update(competenceRegistrationPeriodsTable).set({ status, updatedAt: new Date() })
     .where(eq(competenceRegistrationPeriodsTable.id, id)).returning();
-  await logAudit({ entityType: "competence_period", entityId: id, action: action === "close" ? "fechado" : "reaberto", userId: req.currentUser!.id, oldValues: oldPeriod, newValues: period });
+  await logAudit({ entityType: "competence_period", entityId: id, action: action === "close" ? "fechado" : "reaberto", actor: req.currentUser!, oldValues: oldPeriod, newValues: period });
   res.json(period);
 });
 

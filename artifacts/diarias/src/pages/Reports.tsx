@@ -7,9 +7,17 @@ import { formatCurrency, statusLabels, statusColors } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { FileDown, Filter } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { usePeopleExportCapabilities } from '@/hooks/use-people-export-capabilities';
+import ExportAttemptsPanel from '@/components/ExportAttemptsPanel';
+import PeopleExportCapabilities from '@/components/PeopleExportCapabilities';
+import PeopleExportBatchReview, { canConfirmReviewedBatch } from '@/components/PeopleExportBatchReview';
+import { usePeopleExportReview } from '@/hooks/use-people-export-review';
 
 export default function Reports() {
   const { data: user } = useGetMe();
+  const peopleCapabilities = usePeopleExportCapabilities(user?.role === 'admin');
+  const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
   const { toast } = useToast();
   
   const [filters, setFilters] = useState({
@@ -25,6 +33,8 @@ export default function Reports() {
   }, { query: { enabled: user?.role === 'admin', queryKey: ['getReportDiarias', filters] } });
 
   const exportMutation = useExportDiarias();
+  const exportableIds = report?.data.filter(d => d.status === 'disponivel_exportacao').map(d => d.id) ?? [];
+  const exportReview = usePeopleExportReview(exportableIds, exportConfirmOpen && user?.role === 'admin');
 
   // Relatórios agora é exclusivo do admin — gestor não tem mais acesso.
   if (user && user.role !== 'admin') {
@@ -32,10 +42,8 @@ export default function Reports() {
   }
 
   const handleExportERP = () => {
+    if (!canConfirmReviewedBatch(exportReview, exportableIds.length)) return;
     if (!report?.data) return;
-    const exportableIds = report.data
-      .filter(d => d.status === 'disponivel_exportacao')
-      .map(d => d.id);
       
     if (exportableIds.length === 0) {
       toast({ title: 'Nenhuma diária disponível para exportação.' });
@@ -44,11 +52,20 @@ export default function Reports() {
 
     exportMutation.mutate({ data: { diariaIds: exportableIds } }, {
       onSuccess: (res) => {
+        setExportConfirmOpen(false);
         toast({ 
           title: 'Exportação Concluída',
           description: `${res.exported} diárias enviadas ao ERP. Lote: ${res.integrationRef}`
         });
-      }
+      },
+      onError: (error) => {
+        setExportConfirmOpen(false);
+        toast({
+          title: 'Confirmação da exportação indisponível',
+          description: `${error.message}. Consulte o acompanhamento antes de reenviar. O envio pode continuar mesmo após a conexão cair.`,
+          variant: 'destructive',
+        });
+      },
     });
   };
 
@@ -67,12 +84,32 @@ export default function Reports() {
         </div>
         
         {user?.role === 'admin' && (
-          <Button onClick={handleExportERP} disabled={exportMutation.isPending} className="bg-indigo-600 hover:bg-indigo-700">
+          <Button onClick={() => { setExportConfirmOpen(true); void peopleCapabilities.refetch(); }} disabled={exportMutation.isPending} className="bg-indigo-600 hover:bg-indigo-700">
             <FileDown className="w-4 h-4 mr-2" />
             Exportar Disponíveis para ERP
           </Button>
         )}
       </div>
+
+      {user?.role === 'admin' && <PeopleExportCapabilities query={peopleCapabilities} />}
+      <ExportAttemptsPanel enabled={user?.role === 'admin'} />
+      <Dialog open={exportConfirmOpen} onOpenChange={setExportConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Exportar para o DECARGO People</DialogTitle>
+            <DialogDescription>
+              {report?.data.filter(d => d.status === 'disponivel_exportacao').length ?? 0} diária(s) disponíveis no relatório serão enviadas. Nenhum tipo será removido do lote automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+          <PeopleExportBatchReview query={exportReview} count={exportableIds.length} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportConfirmOpen(false)}>Cancelar</Button>
+            <Button onClick={handleExportERP} disabled={exportMutation.isPending || !canConfirmReviewedBatch(exportReview, exportableIds.length)}>
+              Confirmar exportação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardContent className="p-4 flex flex-wrap gap-4 items-end bg-muted/20">

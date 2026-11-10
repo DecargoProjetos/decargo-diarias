@@ -106,7 +106,10 @@ export default function DiariaForm() {
   
   const { data: user } = useGetMe();
   const { data: teams } = useListTeams();
-  const { data: providers } = useListProviders({ activeOnly: true });
+  const { data: providers } = useListProviders({ activeOnly: true }, {
+    query: { queryKey: ['/api/providers', { activeOnly: true }],
+      staleTime: 0, refetchOnMount: 'always', refetchInterval: 15000 },
+  });
   const { data: diariaTypes = [] } = useActiveDiariaTypes();
   
   const { data: existingDiaria, isLoading: isLoadingExisting } = useGetDiaria(
@@ -134,6 +137,14 @@ export default function DiariaForm() {
 
   const createMutation = useCreateDiaria();
   const updateMutation = useUpdateDiaria();
+
+  useEffect(() => {
+    if (!isEditing && providers && formData.providerId &&
+        !providers.some(p => String(p.id) === formData.providerId)) {
+      setFormData(prev => ({ ...prev, providerId: '' }));
+      toast({ title: 'Pessoa indisponível', description: 'O cadastro foi desativado ou saiu da sua equipe. Selecione outra pessoa.' });
+    }
+  }, [providers, formData.providerId, isEditing, toast]);
 
   useEffect(() => {
     if (existingDiaria) {

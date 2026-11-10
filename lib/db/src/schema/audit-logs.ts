@@ -18,6 +18,7 @@ export const auditLogsTable = pgTable("audit_logs", {
   userId: integer("user_id").references(() => usersTable.id, {
     onDelete: "set null",
   }),
+  userNameAtAction: text("user_name_at_action"),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
   oldValues: jsonb("old_values"),
   newValues: jsonb("new_values"),

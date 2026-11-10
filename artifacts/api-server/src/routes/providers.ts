@@ -1,14 +1,20 @@
 import { Router } from "express";
 import { db, providersTable, teamsTable } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { fetchPrestadores } from "../lib/peopleClient";
 import { getPeopleSyncAccess, peopleUserSyncEnabled, PeopleUserSyncError } from "../lib/peopleUserSync";
 import { getGestorTeamIds } from "../lib/gestorTeams";
 import { redactProviderDailyRates } from "../lib/diariaPermissions";
+import providerReconciliationRouter from "./providerReconciliation";
+import { needsProviderReview, remoteProviderId } from "../lib/providerReconciliation";
+import { UpdateProviderBody } from "@workspace/api-zod";
+import { updatePerson, PersonUpdateError } from "../lib/updatePerson";
+import { providerAccessActiveSql } from "../lib/providerIdentity";
 
 const router = Router();
+router.use("/reconciliation", providerReconciliationRouter);
 
 // GET /api/providers
 // By default returns ALL providers (active and inactive) so the admin
@@ -28,6 +34,7 @@ router.get("/", requireAuth, async (req, res) => {
     .select({
       id: providersTable.id,
       decargoId: providersTable.decargoId,
+      localReference: providersTable.localReference,
       name: providersTable.name,
       email: providersTable.email,
       cnpj: providersTable.cnpj,
@@ -36,6 +43,7 @@ router.get("/", requireAuth, async (req, res) => {
       dailyRate: providersTable.dailyRate,
       active: providersTable.active,
       syncedAt: providersTable.syncedAt,
+      updatedAt: providersTable.updatedAt,
     })
     .from(providersTable)
     .leftJoin(teamsTable, eq(providersTable.teamId, teamsTable.id))
@@ -55,7 +63,10 @@ router.get("/", requireAuth, async (req, res) => {
   } else if (teamId !== undefined) {
     conditions.push(eq(providersTable.teamId, teamId));
   }
-  if (activeOnly) conditions.push(eq(providersTable.active, true));
+  if (activeOnly) {
+    conditions.push(eq(providersTable.active, true));
+    conditions.push(sql.raw(providerAccessActiveSql('"providers"."id"')));
+  }
   if (conditions.length > 0) query = query.where(and(...conditions));
 
   const providers = await query.orderBy(providersTable.name);
@@ -92,38 +103,29 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
       );
     }
 
-    let created = 0;
-    let skipped = 0;
-
-    // Sync is additive-only: an existing local row (matched by decargoId) is
-    // left completely untouched — no name/active updates. This guarantees
-    // (a) nothing is duplicated, (b) a manual deactivation in the app is
-    // never resurrected by a later sync just because the contract is still
-    // active in DECARGO People, and (c) sync does no unnecessary writes for
-    // providers already on file.
-    for (const p of remote) {
-      const decargoId = String(p.id_prestador);
-
-      const [existing] = await db
-        .select({ id: providersTable.id })
-        .from(providersTable)
-        .where(eq(providersTable.decargoId, decargoId))
-        .limit(1);
-
-      if (existing) {
-        skipped++;
-        continue;
+    const { created, skipped, pending } = await db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(724091513)`);
+      const providers = await tx.select().from(providersTable);
+      let created = 0, skipped = 0, pending = 0;
+      for (const p of remote) {
+        const decargoId = remoteProviderId(p);
+        if (decargoId && providers.some(existing => existing.decargoId === decargoId)) {
+          skipped++;
+          continue;
+        }
+        if (!decargoId || needsProviderReview(p, providers, remote)) {
+          pending++;
+          continue;
+        }
+        const [inserted] = await tx.insert(providersTable).values({
+          decargoId, name: p.titular_do_contrato, cnpj: p.cnpj ?? null,
+          active: p.tem_contrato_ativo ?? false, syncedAt: now,
+        }).returning();
+        providers.push(inserted);
+        created++;
       }
-
-      await db.insert(providersTable).values({
-        decargoId,
-        name: p.titular_do_contrato,
-        cnpj: p.cnpj ?? null,
-        active: p.tem_contrato_ativo ?? false,
-        syncedAt: now,
-      });
-      created++;
-    }
+      return { created, skipped, pending };
+    });
 
     req.log.info({ created, skipped }, "Provider sync complete");
 
@@ -131,11 +133,11 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
       entityType: "provider",
       entityId: 0,
       action: "sync",
-      userId: req.currentUser!.id,
-      newValues: { synced: remote.length, created, skipped, timestamp: now },
+      actor: req.currentUser!,
+      newValues: { synced: remote.length, created, skipped, pending, timestamp: now },
     });
 
-    res.json({ synced: remote.length, created, skipped });
+    res.json({ synced: remote.length, created, skipped, pending });
   } catch (err) {
     if (err instanceof PeopleUserSyncError) {
       res.status(err.status).json({ error: err.message, code: err.code });
@@ -151,43 +153,20 @@ router.post("/sync", requireRole("admin"), async (req, res) => {
 // PATCH /api/providers/:id (admin only)
 router.patch("/:id", requireRole("admin"), async (req, res) => {
   const id = Number(req.params.id);
-  const { name, email, cnpj, teamId, dailyRate, active } = req.body as {
-    name?: string;
-    email?: string | null;
-    cnpj?: string | null;
-    teamId?: number | null;
-    dailyRate?: number | null;
-    active?: boolean;
-  };
-
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (name !== undefined) updates.name = name;
-  if (email !== undefined) updates.email = email;
-  if (cnpj !== undefined) updates.cnpj = cnpj;
-  if (teamId !== undefined) updates.teamId = teamId;
-  if (dailyRate !== undefined) updates.dailyRate = dailyRate === null ? null : String(dailyRate);
-  if (active !== undefined) updates.active = active;
-
-  const [updated] = await db
-    .update(providersTable)
-    .set(updates)
-    .where(eq(providersTable.id, id))
-    .returning();
-
-  if (!updated) {
-    res.status(404).json({ error: "Prestador não encontrado" });
+  const parsed = UpdateProviderBody.strict().safeParse(req.body);
+  if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647 || !parsed.success ||
+      (parsed.data.name !== undefined && !parsed.data.name.trim()) ||
+      (parsed.data.teamId != null && !Number.isSafeInteger(parsed.data.teamId)) ||
+      (parsed.data.dailyRate != null && Math.abs(parsed.data.dailyRate * 100 - Math.round(parsed.data.dailyRate * 100)) > 0.000001)) {
+    res.status(400).json({ error: "Informe dados válidos e valor com até duas casas decimais." });
     return;
   }
-
-  await logAudit({
-    entityType: "provider",
-    entityId: id,
-    action: "atualizado",
-    userId: req.currentUser!.id,
-    newValues: updates,
-  });
-
-  res.json(updated);
+  try {
+    res.json(await updatePerson("provider", id, parsed.data, req.currentUser!));
+  } catch (err) {
+    if (!(err instanceof PersonUpdateError)) throw err;
+    res.status(err.status).json({ error: err.message, code: err.code });
+  }
 });
 
 // DELETE /api/providers/:id (admin only)
@@ -216,7 +195,7 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
     entityType: "provider",
     entityId: id,
     action: "excluído",
-    userId: req.currentUser!.id,
+    actor: req.currentUser!,
   });
 
   res.json({ message: "Prestador excluído" });
@@ -232,6 +211,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     .select({
       id: providersTable.id,
       decargoId: providersTable.decargoId,
+      localReference: providersTable.localReference,
       name: providersTable.name,
       email: providersTable.email,
       cnpj: providersTable.cnpj,

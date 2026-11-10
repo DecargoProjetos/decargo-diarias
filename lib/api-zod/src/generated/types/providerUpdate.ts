@@ -7,12 +7,29 @@
  */
 
 export interface ProviderUpdate {
+  expectedUpdatedAt?: Date;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
   name?: string;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^[^\s@]+@[^\s@]+\.[^\s@]+$
+     */
   email?: string | null;
   /** @nullable */
+  cnpj?: string | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
   teamId?: number | null;
-  /** @nullable */
+  /**
+     * @minimum 0
+     * @maximum 99999999.99
+     * @nullable
+     */
   dailyRate?: number | null;
   active?: boolean;
 }

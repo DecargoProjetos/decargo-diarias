@@ -9,6 +9,9 @@ import {
   Download, Upload, CheckCircle2, XCircle, AlertTriangle, Loader2, FileSpreadsheet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useQueryClient } from '@tanstack/react-query';
+import { Link } from 'wouter';
+import { importAnalysisUrl } from '@/lib/importAnalysis';
 
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
@@ -68,12 +71,15 @@ export default function ImportarPlanilhaDialog({
   open,
   onOpenChange,
   onImportDone,
+  isAdmin = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onImportDone?: () => void;
+  isAdmin?: boolean;
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
@@ -84,17 +90,21 @@ export default function ImportarPlanilhaDialog({
   const [loadingConfirm, setLoadingConfirm] = useState(false);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [confirmResult, setConfirmResult] = useState<ConfirmResult | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const confirming = useRef(false);
 
   function reset() {
     setStep('upload');
     setSelectedFile(null);
     setPreviewResult(null);
     setConfirmResult(null);
+    setConfirmError(null);
     setLoadingPreview(false);
     setLoadingConfirm(false);
   }
 
   function handleClose(v: boolean) {
+    if (loadingPreview || confirming.current) return;
     if (!v) reset();
     onOpenChange(v);
   }
@@ -146,10 +156,12 @@ export default function ImportarPlanilhaDialog({
   // ── Confirm import ────────────────────────────────────────────────────────
 
   async function handleConfirm() {
-    if (!previewResult) return;
+    if (!previewResult || confirming.current) return;
     const validRows = previewResult.rows.filter(r => r.status === 'valido');
     if (validRows.length === 0) return;
     setLoadingConfirm(true);
+    confirming.current = true;
+    let confirmed: ConfirmResult | null = null;
     try {
       const resp = await apiFetch('/api/diarias/import/confirm', {
         method: 'POST',
@@ -157,14 +169,32 @@ export default function ImportarPlanilhaDialog({
         body: JSON.stringify({ rows: validRows }),
       });
       const data = await resp.json();
-      if (!resp.ok) { toast({ title: 'Erro na importação', description: data?.error ?? resp.statusText, variant: 'destructive' }); return; }
+      if (!resp.ok) throw new Error(data?.error ?? resp.statusText);
+      if (!Number.isInteger(data?.imported) || data.imported < 0 ||
+          !Number.isInteger(data?.skipped) || data.skipped < 0 ||
+          data.imported + data.skipped !== validRows.length ||
+          !Array.isArray(data.details) || !data.details.every((d: ConfirmResult['details'][number]) =>
+            d && Number.isInteger(d.line) && typeof d.motivo === 'string')) {
+        throw new Error('Resposta de confirmação inválida.');
+      }
       setConfirmResult(data as ConfirmResult);
+      confirmed = data as ConfirmResult;
       setStep('result');
-      onImportDone?.();
     } catch (e: any) {
-      toast({ title: 'Erro na importação', description: e?.message, variant: 'destructive' });
+      setConfirmError(e?.message ?? 'Não foi possível obter a confirmação do servidor.');
+      setStep('result');
     } finally {
       setLoadingConfirm(false);
+      confirming.current = false;
+    }
+    // Refresh failures must not turn a confirmed write into an uncertain import.
+    if (confirmed && confirmed.imported > 0) {
+      void queryClient.invalidateQueries({ predicate: query =>
+        ['diariasRange', 'listDiariasEquipe', 'getReportDiarias'].includes(String(query.queryKey[0])) ||
+        (typeof query.queryKey[0] === 'string' &&
+          /^\/api\/(diarias|dashboard|audit|reports)(\/|$)/.test(query.queryKey[0])),
+      });
+      onImportDone?.();
     }
   }
 
@@ -256,7 +286,8 @@ export default function ImportarPlanilhaDialog({
             <DialogHeader>
               <DialogTitle>Pré-visualização</DialogTitle>
               <DialogDescription>
-                Revise os dados antes de confirmar. Somente registros válidos serão importados.
+                Nenhuma diária foi gravada nesta etapa. Revise os dados antes de confirmar.
+                Somente registros válidos serão enviados; a API verificará novamente cada linha.
               </DialogDescription>
             </DialogHeader>
 
@@ -322,7 +353,7 @@ export default function ImportarPlanilhaDialog({
             </div>
 
             <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => setStep('upload')}>Voltar</Button>
+              <Button variant="outline" disabled={loadingConfirm} onClick={() => setStep('upload')}>Voltar</Button>
               <Button
                 disabled={previewResult.summary.validos === 0 || loadingConfirm}
                 onClick={handleConfirm}
@@ -335,32 +366,67 @@ export default function ImportarPlanilhaDialog({
           </>
         )}
 
-        {step === 'result' && confirmResult && (
+        {step === 'result' && (confirmResult || confirmError) && (
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <CheckCircle2 size={20} className="text-emerald-600" /> Importação concluída
+                {confirmError || confirmResult?.imported === 0 ? (
+                  <XCircle size={20} className="text-red-600" />
+                ) : confirmResult!.skipped > 0 || (previewResult?.summary.erros ?? 0) + (previewResult?.summary.duplicados ?? 0) > 0 ? (
+                  <AlertTriangle size={20} className="text-amber-600" />
+                ) : <CheckCircle2 size={20} className="text-emerald-600" />}
+                {confirmError ? 'Gravação não confirmada' : confirmResult!.imported === 0
+                  ? 'Nenhuma diária importada'
+                  : confirmResult!.skipped > 0 || (previewResult?.summary.erros ?? 0) + (previewResult?.summary.duplicados ?? 0) > 0
+                    ? 'Importação parcial' : 'Gravação confirmada'}
               </DialogTitle>
+              <DialogDescription>
+                {confirmError
+                  ? 'Não foi possível confirmar o resultado. Algumas linhas podem ter sido gravadas. Consulte as diárias antes de tentar uma nova importação.'
+                  : confirmResult!.imported === 0
+                    ? 'A API confirmou que nenhuma diária foi gravada. Confira os motivos abaixo.'
+                    : `${confirmResult!.imported} diária(s) gravada(s), com status pendente de aprovação. Confira abaixo as contagens e eventuais linhas não importadas.`}
+                {' '}Nenhum registro será reenviado automaticamente.
+              </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-2">
               {/* Result summary */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <ResultCard label="Total processados" value={previewResult?.summary.total ?? 0} color="slate" />
+              {confirmError && <p role="alert" className="text-sm text-red-700">{confirmError}</p>}
+              {confirmResult && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <ResultCard label="Linhas na planilha" value={previewResult?.summary.total ?? 0} color="slate" />
                 <ResultCard label="Importados" value={confirmResult.imported} color="emerald" />
-                <ResultCard label="Não importados" value={confirmResult.skipped} color="red" />
-                <ResultCard label="Duplicados" value={previewResult?.summary.duplicados ?? 0} color="amber" />
-              </div>
+                <ResultCard label="Não gravados na confirmação" value={confirmResult.skipped} color="red" />
+                <ResultCard label="Enviados para gravação" value={previewResult?.summary.validos ?? 0} color="slate" />
+                <ResultCard label="Duplicados na prévia (não enviados)" value={previewResult?.summary.duplicados ?? 0} color="amber" />
+                <ResultCard label="Com erro na prévia (não enviados)" value={previewResult?.summary.erros ?? 0} color="red" />
+              </div>}
 
               {/* Error detail */}
-              {confirmResult.details.length > 0 && (
+              {!!confirmResult?.details.length && (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 space-y-1">
-                  <p className="text-xs font-semibold text-red-700 mb-2">Registros não importados:</p>
+                  <p className="text-xs font-semibold text-red-700 mb-2">Motivos retornados pela API na confirmação:</p>
                   {confirmResult.details.map((d, i) => (
                     <p key={i} className="text-xs text-red-700">
                       <span className="font-medium">Linha {d.line}:</span> {d.motivo}
                     </p>
                   ))}
+                </div>
+              )}
+              {previewResult?.rows.filter(row => row.status !== 'valido').map(row => (
+                <p key={row.line} className="text-xs text-amber-800">
+                  Linha {row.line} — {row.status === 'duplicado' ? 'Duplicado' : 'Erro'} na prévia (não enviada):
+                  {' '}{row.errors.map(error => `${error.campo}: ${error.motivo}`).join('; ')}
+                </p>
+              ))}
+              {isAdmin && previewResult && (
+                <div className="space-y-2 text-sm">
+                  <p>Consulte o período da planilha com todos os status, incluindo pendentes. O filtro P/ Exportar não será aplicado.</p>
+                  <Button variant="outline" asChild>
+                    <Link href={importAnalysisUrl(previewResult.rows)} onClick={() => handleClose(false)}>
+                      Consultar na Análise de Diárias
+                    </Link>
+                  </Button>
                 </div>
               )}
             </div>

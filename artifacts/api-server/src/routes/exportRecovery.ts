@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import { requireRole } from "../middlewares/requireAuth";
-
 import exportCorrectionRouter from "./exportCorrection";
 
 const router = Router();

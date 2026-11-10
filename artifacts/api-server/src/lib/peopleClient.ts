@@ -8,8 +8,8 @@
  * Note on IDs: The funcionarios endpoint exposes `id_funcionario` (the HR
  * record ID).  The DECARGO ID handoff JWT carries `id_usuario` (the auth
  * account ID).  These may differ.  We store `id_funcionario` as `decargoId`
- * when syncing; the first login via handoff resolves any mismatch through the
- * email-fallback / rebind flow in auth.ts.
+ * when syncing; handoff selects the local user by attested email while keeping
+ * the local/HR identifier stable.
  */
 
 import { peopleUserSyncEnabled, requestPeopleSync, PeopleUserSyncError, type PeopleSyncAccess } from "./peopleUserSync";
@@ -229,6 +229,10 @@ export interface DiariaExportResult {
   unidentifiedErrors?: number;
 }
 
+export interface ExportProgress {
+  beforeBatch(ids: number[]): Promise<void>;
+  afterBatch(confirmed: number[], rejected: number[]): Promise<void>;
+}
 export class PeopleBatchExportError extends Error {
   constructor(
     message: string,
@@ -244,11 +248,95 @@ export class PeopleBatchExportError extends Error {
 }
 
 const INTEGRATION_BATCH_SIZE = 500;
+const INTEGRATION_POST_TIMEOUT_MS = 30_000;
+
+/**
+ * One deadline for both the POST and its body. Aborting a financial request
+ * does not prove People rolled it back: callers must keep this batch uncertain.
+ * The race also bounds transports/body readers that fail to honor abort.
+ */
+async function postIntegrationBatch(path: string, apiKey: string, body: unknown): Promise<DiariaExportResult> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error("Tempo limite de 30 segundos excedido; recebimento pelo People não confirmado"));
+      controller.abort();
+    }, INTEGRATION_POST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const res = await fetch(`${baseUrl()}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`People API ${path} → ${res.status}: ${text}`);
+        }
+        return await res.json() as DiariaExportResult;
+      })(),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function integrationApiKey(): string {
   const key = process.env.DECARGO_PEOPLE_API_KEY;
   if (!key) throw new Error("DECARGO_PEOPLE_API_KEY not set");
   return key;
+}
+
+/**
+ * Read-only, authenticated preflight. Never fall back to a personal-data
+ * endpoint or a financial POST. A successful probe is not an export receipt.
+ */
+export type PeopleFinancialTarget = "diarias" | "descontos";
+export async function checkPeopleExportAvailability(
+  requiredTargets: readonly PeopleFinancialTarget[] = ["diarias"],
+): Promise<void> {
+  const supportedTargets = await getPeopleExportCapabilities();
+  if (requiredTargets.some(target => !supportedTargets.includes(target))) {
+    throw new Error("People integration availability: required financial destination unavailable");
+  }
+}
+
+/** Returns only known financial destinations from the validated v2 contract. */
+export async function getPeopleExportCapabilities(): Promise<PeopleFinancialTarget[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const res = await fetch(`${baseUrl()}/api/integration/availability`, {
+      method: "GET",
+      headers: { "x-api-key": integrationApiKey(), Accept: "application/json" },
+      signal: controller.signal,
+      redirect: "error",
+      cache: "no-store",
+    });
+    if (res.status !== 200) {
+      throw new Error(`People integration availability: HTTP ${res.status}`);
+    }
+    const data: unknown = await res.json();
+    if (!data || typeof data !== "object" ||
+        (data as Record<string, unknown>).service !== "people-financial-integration" ||
+        (data as Record<string, unknown>).version !== 2 ||
+        (data as Record<string, unknown>).ready !== true) {
+      throw new Error("People integration availability: invalid response");
+    }
+    const supportedTargets = (data as Record<string, unknown>).supportedTargets;
+    if (!Array.isArray(supportedTargets) ||
+        !supportedTargets.every(target => typeof target === "string")) {
+      throw new Error("People integration availability: invalid capabilities");
+    }
+    return (["diarias", "descontos"] as const).filter(target => supportedTargets.includes(target));
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**
@@ -259,7 +347,7 @@ function integrationApiKey(): string {
  * - request: { descontos: [{ cnpj, tipo, valor, data_desconto, anotacoes_gerais? }] }
  * - response: { total, inserted, updated, skipped, errors }
  */
-export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<DiariaExportResult> {
+export async function pushFaltasToPeople(items: FaltaExportItem[], progress?: ExportProgress): Promise<DiariaExportResult> {
   const apiKey = integrationApiKey();
   const merged: DiariaExportResult = {
     total: 0, inserted: 0, updated: 0, skipped: 0, errors: [], unidentifiedErrors: 0,
@@ -270,17 +358,22 @@ export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<Diar
   for (let i = 0; i < items.length; i += INTEGRATION_BATCH_SIZE) {
     const chunk = items.slice(i, i + INTEGRATION_BATCH_SIZE);
     const payload = chunk.map(({ __localId: _localId, ...rest }) => rest);
-
-    let res: Response;
     try {
-      res = await fetch(`${baseUrl()}/api/integration/descontos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-        body: JSON.stringify({ descontos: payload }),
-      });
+      await progress?.beforeBatch(chunk.map(item => item.__localId));
     } catch (cause) {
       throw new PeopleBatchExportError(
-        `Falha de rede ao enviar lote de descontos: ${cause instanceof Error ? cause.message : String(cause)}`,
+        "Não foi possível registrar o início do lote; nenhum registro deste lote foi enviado",
+        completedLocalIds, rejectedLocalIds, [],
+        items.slice(i).map(item => item.__localId), { cause },
+      );
+    }
+
+    let data: DiariaExportResult;
+    try {
+      data = await postIntegrationBatch("/api/integration/descontos", apiKey, { descontos: payload });
+    } catch (cause) {
+      throw new PeopleBatchExportError(
+        `Falha ao confirmar lote de descontos: ${cause instanceof Error ? cause.message : String(cause)}`,
         completedLocalIds,
         rejectedLocalIds,
         chunk.map((item) => item.__localId),
@@ -289,18 +382,6 @@ export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<Diar
       );
     }
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "(no body)");
-      throw new PeopleBatchExportError(
-        `People API /api/integration/descontos → ${res.status}: ${text}`,
-        completedLocalIds,
-        rejectedLocalIds,
-        chunk.map((item) => item.__localId),
-        items.slice(i + chunk.length).map((item) => item.__localId),
-      );
-    }
-
-    const data = (await res.json()) as DiariaExportResult;
     merged.total += data.total ?? chunk.length;
     merged.inserted += data.inserted ?? 0;
     merged.updated += data.updated ?? 0;
@@ -333,6 +414,18 @@ export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<Diar
     rejectedLocalIds.push(...chunkRejectedIds);
     const rejectedSet = new Set(chunkRejectedIds);
     completedLocalIds.push(...chunk.filter((item) => !rejectedSet.has(item.__localId)).map((item) => item.__localId));
+    try {
+      await progress?.afterBatch(
+        chunk.filter(item => !rejectedSet.has(item.__localId)).map(item => item.__localId),
+        chunkRejectedIds,
+      );
+    } catch (cause) {
+      throw new PeopleBatchExportError(
+        "People confirmou o lote, mas houve falha ao registrar seu progresso",
+        completedLocalIds, rejectedLocalIds, [],
+        items.slice(i + chunk.length).map(item => item.__localId), { cause },
+      );
+    }
   }
 
   return merged;
@@ -342,36 +435,50 @@ export async function pushFaltasToPeople(items: FaltaExportItem[]): Promise<Diar
  * Pushes a batch of diárias to DECARGO People > Folha Mensal > Diárias
  * Extras via POST /api/integration/diarias, chunking at 500 items per
  * request (the documented limit) and merging results/errors across chunks.
- * Each error item is tagged back with `__localId` when it can be matched by
- * position, so callers can tell which local diária a given error belongs to.
+ * Each error item is tagged back with `__localId` only when its external key
+ * identifies exactly one local diária. Failures carry prior batch progress.
  */
-export async function pushDiariasToPeople(items: DiariaExportItem[]): Promise<DiariaExportResult> {
+export async function pushDiariasToPeople(items: DiariaExportItem[], progress?: ExportProgress): Promise<DiariaExportResult> {
   const apiKey = integrationApiKey();
   const merged: DiariaExportResult = {
     total: 0, inserted: 0, updated: 0, skipped: 0, errors: [], unidentifiedErrors: 0,
   };
+  const completedLocalIds: number[] = [];
+  const rejectedLocalIds: number[] = [];
 
   for (let i = 0; i < items.length; i += INTEGRATION_BATCH_SIZE) {
     const chunk = items.slice(i, i + INTEGRATION_BATCH_SIZE);
     const payload = chunk.map(({ __localId: _localId, ...rest }) => rest);
-
-    const res = await fetch(`${baseUrl()}/api/integration/diarias`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-      body: JSON.stringify({ diarias: payload }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "(no body)");
-      throw new Error(`People API /api/integration/diarias → ${res.status}: ${text}`);
+    try {
+      await progress?.beforeBatch(chunk.map(item => item.__localId));
+    } catch (cause) {
+      throw new PeopleBatchExportError(
+        "Não foi possível registrar o início do lote; nenhum registro deste lote foi enviado",
+        completedLocalIds, rejectedLocalIds, [],
+        items.slice(i).map(item => item.__localId), { cause },
+      );
     }
 
-    const data = (await res.json()) as DiariaExportResult;
+    let data: DiariaExportResult;
+    try {
+      data = await postIntegrationBatch("/api/integration/diarias", apiKey, { diarias: payload });
+    } catch (cause) {
+      throw new PeopleBatchExportError(
+        `Falha ao confirmar lote de diárias extras: ${cause instanceof Error ? cause.message : String(cause)}`,
+        completedLocalIds,
+        rejectedLocalIds,
+        chunk.map((item) => item.__localId),
+        items.slice(i + chunk.length).map((item) => item.__localId),
+        { cause },
+      );
+    }
     merged.total += data.total ?? chunk.length;
     merged.inserted += data.inserted ?? 0;
     merged.updated += data.updated ?? 0;
     merged.skipped += data.skipped ?? 0;
 
+    const chunkRejectedIds: number[] = [];
+    let chunkHasUnidentifiedError = false;
     // The People API's error entries don't carry our local id. Only tag an
     // error when its external key identifies exactly one submitted item.
     for (const err of data.errors ?? []) {
@@ -380,8 +487,37 @@ export async function pushDiariasToPeople(items: DiariaExportItem[]): Promise<Di
           String((err as Record<string, unknown>).id_prestador) === String(c.id_prestador) &&
           String((err as Record<string, unknown>).dia_trabalhado) === String(c.dia_trabalhado),
       );
-      if (matches.length !== 1) merged.unidentifiedErrors!++;
+      if (matches.length !== 1) {
+        merged.unidentifiedErrors!++;
+        chunkHasUnidentifiedError = true;
+      } else {
+        chunkRejectedIds.push(matches[0].__localId);
+      }
       merged.errors.push({ ...err, __localId: matches.length === 1 ? matches[0].__localId : undefined });
+    }
+    if (chunkHasUnidentifiedError) {
+      throw new PeopleBatchExportError(
+        "People API devolveu rejeição de diária sem identificação local inequívoca",
+        completedLocalIds,
+        rejectedLocalIds,
+        chunk.map((item) => item.__localId),
+        items.slice(i + chunk.length).map((item) => item.__localId),
+      );
+    }
+    rejectedLocalIds.push(...chunkRejectedIds);
+    const rejectedSet = new Set(chunkRejectedIds);
+    completedLocalIds.push(...chunk.filter((item) => !rejectedSet.has(item.__localId)).map((item) => item.__localId));
+    try {
+      await progress?.afterBatch(
+        chunk.filter(item => !rejectedSet.has(item.__localId)).map(item => item.__localId),
+        chunkRejectedIds,
+      );
+    } catch (cause) {
+      throw new PeopleBatchExportError(
+        "People confirmou o lote, mas houve falha ao registrar seu progresso",
+        completedLocalIds, rejectedLocalIds, [],
+        items.slice(i + chunk.length).map(item => item.__localId), { cause },
+      );
     }
   }
 

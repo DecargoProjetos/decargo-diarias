@@ -1,10 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetMe, useListUsers, useListProviders, useListTeams,
   useSyncUsers, useSyncProviders,
+  useGetLatestUserSyncReport, getGetLatestUserSyncReportQueryKey,
+  useListUserSyncReports, getListUserSyncReportsQueryKey,
+  useGetUserSyncReport, getGetUserSyncReportQueryKey,
   useUpdateUser, useDeleteUser, useUpdateProvider, useDeleteProvider,
   getListUsersQueryKey, getListProvidersQueryKey,
+  type UserSyncResult, type SyncResult,
 } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +18,11 @@ import { formatDateTime } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { RefreshCw, CheckCircle2, XCircle, Edit2, Trash2, Save, X, UserPlus } from 'lucide-react';
 import { ManualPersonDialog } from '@/components/ManualPersonDialog';
+import { EnableDiariasDialog } from '@/components/EnableDiariasDialog';
+import { ProviderReconciliationDialog } from '@/components/ProviderReconciliationDialog';
+import { PeopleConfirmationDialog } from '@/components/PeopleConfirmationDialog';
+import { buildPeopleRows, type PersonTipo, type PersonRow } from '@/lib/personIdentity';
+import { UserSyncConflictReport } from '@/components/UserSyncConflictReport';
 
 // Unified "Pessoas" view — funcionários (users) e prestadores estão ambos
 // vinculados a equipes e prestadores se reportam a funcionários, então
@@ -24,33 +33,6 @@ import { ManualPersonDialog } from '@/components/ManualPersonDialog';
 // "Tipo" distingue não só a origem do registro (funcionário x prestador),
 // mas também o papel de acesso do funcionário (admin/gestor/funcionário),
 // já que isso é o que o usuário enxerga como "tipo de pessoa" no filtro.
-type PersonTipo = 'Administrador' | 'Gestor' | 'Funcionário' | 'Prestador';
-
-type PersonRow = {
-  key: string;
-  tipo: PersonTipo;
-  sourceId: number;
-  decargoId: string;
-  name: string;
-  email: string | null | undefined;
-  teamId: number | null | undefined;
-  teamName: string | null | undefined;
-  // Só existe para prestadores (ou pessoas cadastradas manualmente que
-  // também ganharam uma linha de provider) — quem não pode receber
-  // diárias não tem esse campo e a UI mostra "-" nesse caso.
-  dailyRate: number | null | undefined;
-  active: boolean;
-  syncedAt: string | null | undefined;
-  // Só preenchido para linhas de usuário (isUserRow) cadastradas
-  // manualmente que também têm uma linha de provider correspondente —
-  // é o que torna o Valor da Diária editável mesmo quando o papel de
-  // acesso não é "Prestador" (ex.: um Gestor que também lança diárias).
-  // Ao editar/desativar/excluir essa pessoa, espelhamos a ação nessa
-  // linha de provider para manter os dois registros em sincronia (o
-  // seletor de "Nova Diária" só lista providers ativos).
-  linkedProviderId?: number;
-};
-
 const formatCurrency = (value: number): string =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -59,13 +41,6 @@ const TIPO_BADGE_CLASSES: Record<PersonTipo, string> = {
   Gestor: 'bg-teal-50 text-teal-700',
   Funcionário: 'bg-blue-50 text-blue-700',
   Prestador: 'bg-purple-50 text-purple-700',
-};
-
-const roleToTipo = (role: string): PersonTipo => {
-  if (role === 'admin') return 'Administrador';
-  if (role === 'gestor') return 'Gestor';
-  if (role === 'prestador') return 'Prestador';
-  return 'Funcionário';
 };
 
 // Normaliza para comparar nomes ignorando acentos/caixa, já que a pesquisa
@@ -82,6 +57,50 @@ export default function PeopleList() {
   const queryClient = useQueryClient();
   const { data: currentUser } = useGetMe();
   const isAdmin = currentUser?.role === 'admin';
+  const [reportPage, setReportPage] = useState(1);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const reportParams = { page: reportPage, pageSize: 10 };
+  const reportHistory = useListUserSyncReports(reportParams, {
+    query: {
+      queryKey: [...getListUserSyncReportsQueryKey(reportParams), currentUser?.id],
+      enabled: isAdmin, staleTime: 0, gcTime: 0, refetchOnMount: 'always',
+    },
+  });
+  const selectedReport = useGetUserSyncReport(selectedReportId ?? '', {
+    query: {
+      queryKey: [...getGetUserSyncReportQueryKey(selectedReportId ?? ''), currentUser?.id],
+      enabled: isAdmin && selectedReportId !== null,
+      staleTime: 0, gcTime: 0, refetchOnMount: 'always',
+    },
+  });
+  const savedUserSyncReport = useGetLatestUserSyncReport({
+    query: {
+      queryKey: [...getGetLatestUserSyncReportQueryKey(), currentUser?.id],
+      enabled: isAdmin,
+      staleTime: 0,
+      gcTime: 0,
+      refetchOnMount: 'always',
+    },
+  });
+  useEffect(() => {
+    setSelectedReportId(null);
+    setReportPage(1);
+    setUserSyncResult(null);
+  }, [currentUser?.id]);
+  const activeReportQuery = selectedReportId ? selectedReport : savedUserSyncReport;
+  const reportSnapshot = selectedReportId ? selectedReport.data : savedUserSyncReport.data?.report;
+  // Drop displayed evidence when its retention window ends, even while the page stays open.
+  const [reportClock, setReportClock] = useState(Date.now());
+  useEffect(() => {
+    if (!reportSnapshot) return;
+    const remaining = new Date(reportSnapshot.expiresAt).getTime() - Date.now();
+    if (remaining <= 0) return;
+    const timer = setTimeout(() => setReportClock(Date.now()),
+      Math.min(remaining, 86400_000));
+    return () => clearTimeout(timer);
+  }, [reportSnapshot, reportClock]);
+  const reportExpired = !!reportSnapshot && new Date(reportSnapshot.expiresAt).getTime() <= Math.max(reportClock, Date.now());
+  const visibleReport = reportExpired || activeReportQuery.isError ? null : reportSnapshot ?? null;
 
   const { data: users, isLoading: usersLoading, refetch: refetchUsers } = useListUsers({ query: { enabled: isAdmin, queryKey: ['listUsers'] } });
   const { data: providers, isLoading: providersLoading, refetch: refetchProviders } = useListProviders();
@@ -96,76 +115,31 @@ export default function PeopleList() {
   const { toast } = useToast();
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', teamId: '', dailyRate: '' });
+  const [editingSnapshot, setEditingSnapshot] = useState<PersonRow | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', teamId: '', dailyRate: '' });
 
   const [filterTipo, setFilterTipo] = useState<'todos' | PersonTipo>('todos');
   const [filterTeamId, setFilterTeamId] = useState<'todas' | string>('todas');
   const [filterStatus, setFilterStatus] = useState<'todos' | 'ativo' | 'inativo'>('todos');
   const [searchName, setSearchName] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [enablingPerson, setEnablingPerson] = useState<PersonRow | null>(null);
+  const [isReconciliationOpen, setIsReconciliationOpen] = useState(false);
+  const [confirmationPerson, setConfirmationPerson] = useState<{ providerId: number; name: string } | null>(null);
+  const [userSyncResult, setUserSyncResult] = useState<UserSyncResult | null>(null);
+  useEffect(() => {
+    setUserSyncResult(null);
+    setUserSyncFailed(false);
+  }, [currentUser?.id]);
+  const [userSyncFailed, setUserSyncFailed] = useState(false);
+  const [locatedUserId, setLocatedUserId] = useState<number | null>(null);
 
-  const rows = useMemo<PersonRow[]>(() => {
-    // O Valor da Diária vive exclusivamente na linha de `providers`. Pessoas
-    // com papel "Prestador" só são representadas pela linha de provider
-    // quando há realmente um provider da mesma pessoa. Já
-    // pessoas cadastradas manualmente (decargoId "manual-...") com outro
-    // papel de acesso (Admin/Gestor/Funcionário) também podem ter ganhado
-    // uma linha de provider — o backend cria isso automaticamente — então
-    // "casamos" essa linha com o usuário para manter o Tipo correto (ex.:
-    // "Gestor") enquanto ainda expomos o Valor da Diária como editável.
-    const providersByDecargoId = new Map((providers ?? []).map(p => [p.decargoId, p]));
-
-    const fromUsers: PersonRow[] = (users ?? [])
-      .flatMap(u => {
-        // IDs numéricos de funcionários e prestadores pertencem a domínios
-        // diferentes no People. Igualdade de ID sozinha não prova vínculo.
-        const byId = providersByDecargoId.get(u.decargoId);
-        const email = u.email?.trim().toLowerCase();
-        const linkedProvider = byId && (u.decargoId.startsWith('manual-') ||
-          (email && byId.email?.trim().toLowerCase() === email)) ? byId : undefined;
-        if (u.role === 'prestador' && linkedProvider) return [];
-        return [{
-          key: `user-${u.id}`,
-          tipo: roleToTipo(u.role),
-          sourceId: u.id,
-          decargoId: u.decargoId,
-          name: u.name,
-          email: u.email,
-          teamId: u.teamId,
-          teamName: u.teamName,
-          dailyRate: linkedProvider?.dailyRate,
-          active: u.active,
-          syncedAt: linkedProvider?.syncedAt ?? null,
-          linkedProviderId: linkedProvider?.id,
-        }];
-      });
-
-    // Providers já "casados" com uma linha de usuário acima não devem
-    // aparecer de novo aqui, senão a pessoa apareceria duas vezes.
-    const claimedProviderIds = new Set(
-      fromUsers.map(r => r.linkedProviderId).filter((id): id is number => id != null)
-    );
-    const fromProviders: PersonRow[] = (providers ?? [])
-      .filter(p => !claimedProviderIds.has(p.id))
-      .map(p => ({
-        key: `provider-${p.id}`,
-        tipo: 'Prestador',
-        sourceId: p.id,
-        decargoId: p.decargoId,
-        name: p.name,
-        email: p.email,
-        teamId: p.teamId,
-        teamName: p.teamName,
-        dailyRate: p.dailyRate,
-        active: p.active,
-        syncedAt: p.syncedAt,
-      }));
-    return [...fromUsers, ...fromProviders].sort((a, b) => a.name.localeCompare(b.name));
-  }, [users, providers]);
+  const rows = useMemo(() => buildPeopleRows(users ?? [], providers ?? []), [users, providers]);
 
   const filteredRows = useMemo(() => {
     const normalizedSearch = normalize(searchName.trim());
     return rows.filter(row => {
+      if (locatedUserId !== null && row.key !== `user-${locatedUserId}`) return false;
       if (filterTipo !== 'todos' && row.tipo !== filterTipo) return false;
       if (filterTeamId !== 'todas' && row.teamId?.toString() !== filterTeamId) return false;
       if (filterStatus === 'ativo' && !row.active) return false;
@@ -175,11 +149,17 @@ export default function PeopleList() {
           !normalize(row.email ?? '').includes(normalizedSearch)) return false;
       return true;
     });
-  }, [rows, filterTipo, filterTeamId, filterStatus, searchName]);
+  }, [rows, filterTipo, filterTeamId, filterStatus, searchName, locatedUserId]);
 
   const refetchAll = async () => {
-    await Promise.all([refetchUsers(), refetchProviders()]);
+    await Promise.all([
+      refetchUsers(), refetchProviders(),
+      queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: ['listProviders'] }),
+    ]);
   };
+  const isUpdating = updateUser.isPending || updateProvider.isPending;
 
   // Registros de funcionário (independente do papel: admin/gestor/funcionário)
   // vivem em /api/users; prestadores vivem em /api/providers. O tipo exibido
@@ -188,76 +168,92 @@ export default function PeopleList() {
 
   const startEdit = (row: PersonRow) => {
     setEditingKey(row.key);
+    setEditingSnapshot(row);
     setEditForm({
       name: row.name,
+      email: row.email ?? '',
       teamId: row.teamId?.toString() || '',
       dailyRate: row.dailyRate != null ? String(row.dailyRate) : '',
     });
   };
 
   const handleSaveEdit = (row: PersonRow) => {
+    if (isUpdating || !editingSnapshot || editingSnapshot.key !== row.key) return;
+    row = editingSnapshot;
+    const email = editForm.email.trim().toLowerCase();
+    if (!isUserRow(row) && email !== (row.email?.trim().toLowerCase() ?? '')) {
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        toast({ title: 'Informe um e-mail válido.', variant: 'destructive' });
+        return;
+      }
+      if (!confirm(email
+        ? `Confirme que ${email} pertence a ${row.name}. A conta com esse e-mail poderá acessar as diárias deste prestador. Não confirme apenas por nome ou número de cadastro.`
+        : `Remover o e-mail de ${row.name} pode interromper o acesso dessa pessoa às diárias. Continuar?`)) return;
+    }
     const teamId = editForm.teamId === '' ? null : Number(editForm.teamId);
-    const onDone = () => {
+    const onDone = async () => {
+      await refetchAll();
       toast({ title: `${row.tipo} atualizado.` });
       setEditingKey(null);
-      refetchAll();
+      setEditingSnapshot(null);
     };
-    const onFail = (err: any) => toast({ title: 'Erro ao atualizar', description: err?.message, variant: 'destructive' });
+    const onFail = (err: any) => {
+      toast({ title: 'Erro ao atualizar', description: err?.message, variant: 'destructive' });
+      if (err?.status === 409) {
+        setEditingKey(null);
+        setEditingSnapshot(null);
+        void refetchAll();
+      }
+    };
 
     if (isUserRow(row)) {
-      // Pessoas cadastradas manualmente com um provider vinculado (ver
-      // `linkedProviderId`) têm o Valor da Diária guardado nessa linha
-      // separada — salvamos o usuário primeiro e, se houver vínculo,
-      // espelhamos nome/equipe/valor da diária no provider em seguida.
-      updateUser.mutate({ id: row.sourceId, data: { name: editForm.name, teamId } }, {
-        onSuccess: () => {
-          if (row.linkedProviderId == null) {
-            onDone();
-            return;
-          }
-          const dailyRate = editForm.dailyRate.trim() === '' ? null : Number(editForm.dailyRate);
-          updateProvider.mutate(
-            { id: row.linkedProviderId, data: { name: editForm.name, teamId, dailyRate } },
-            { onSuccess: onDone, onError: onFail }
-          );
-        },
+      // The server owns link resolution and both writes. Versions come from
+      // the snapshot captured when the editor opened, not a later refetch.
+      updateUser.mutate({ id: row.sourceId, data: {
+        name: editForm.name, teamId,
+        expectedUpdatedAt: row.updatedAt,
+        expectedProviderId: row.linkedProviderId ?? null,
+        expectedProviderUpdatedAt: row.linkedProviderUpdatedAt ?? null,
+        ...(row.linkedProviderId != null ? {
+          dailyRate: editForm.dailyRate.trim() === '' ? null : Number(editForm.dailyRate),
+        } : {}),
+      } }, {
+        onSuccess: onDone,
         onError: onFail,
       });
     } else {
       const dailyRate = editForm.dailyRate.trim() === '' ? null : Number(editForm.dailyRate);
       updateProvider.mutate(
-        { id: row.sourceId, data: { name: editForm.name, teamId, dailyRate } },
+        { id: row.sourceId, data: { name: editForm.name, email: email || null, teamId, dailyRate,
+          expectedUpdatedAt: row.updatedAt } },
         { onSuccess: onDone, onError: onFail }
       );
     }
   };
 
   const handleToggleActive = (row: PersonRow) => {
-    const onDone = () => {
+    if (isUpdating) return;
+    const onDone = async () => {
+      await refetchAll();
       toast({ title: row.active ? `${row.tipo} desativado.` : `${row.tipo} ativado.` });
-      refetchAll();
     };
-    const onFail = (err: any) => toast({ title: 'Erro ao atualizar status', description: err?.message, variant: 'destructive' });
+    const onFail = (err: any) => {
+      toast({ title: 'Erro ao atualizar status', description: err?.message, variant: 'destructive' });
+      if (err?.status === 409) void refetchAll();
+    };
 
     if (isUserRow(row)) {
-      // Um provider vinculado precisa acompanhar o status do usuário —
-      // caso contrário, uma pessoa desativada em Pessoas continuaria
-      // elegível para receber diárias no seletor de "Nova Diária".
-      updateUser.mutate({ id: row.sourceId, data: { active: !row.active } }, {
-        onSuccess: () => {
-          if (row.linkedProviderId == null) {
-            onDone();
-            return;
-          }
-          updateProvider.mutate(
-            { id: row.linkedProviderId, data: { active: !row.active } },
-            { onSuccess: onDone, onError: onFail }
-          );
-        },
+      updateUser.mutate({ id: row.sourceId, data: { active: !row.active,
+        expectedUpdatedAt: row.updatedAt,
+        expectedProviderId: row.linkedProviderId ?? null,
+        expectedProviderUpdatedAt: row.linkedProviderUpdatedAt ?? null,
+      } }, {
+        onSuccess: onDone,
         onError: onFail,
       });
     } else {
-      updateProvider.mutate({ id: row.sourceId, data: { active: !row.active } }, { onSuccess: onDone, onError: onFail });
+      updateProvider.mutate({ id: row.sourceId, data: { active: !row.active,
+        expectedUpdatedAt: row.updatedAt } }, { onSuccess: onDone, onError: onFail });
     }
   };
 
@@ -306,10 +302,22 @@ export default function PeopleList() {
   const isLoading = usersLoading || providersLoading;
 
   const handleSync = () => {
+    setSelectedReportId(null);
+    setReportPage(1);
+    setUserSyncResult(null);
+    setUserSyncFailed(false);
     Promise.allSettled([
-      new Promise<any>((resolve, reject) => syncUsers.mutate(undefined, { onSuccess: resolve, onError: reject })),
-      new Promise<any>((resolve, reject) => syncProviders.mutate(undefined, { onSuccess: resolve, onError: reject })),
-    ]).then(([usersResult, providersResult]) => {
+      new Promise<UserSyncResult>((resolve, reject) => syncUsers.mutate(undefined, { onSuccess: resolve, onError: reject })),
+      new Promise<SyncResult>((resolve, reject) => syncProviders.mutate(undefined, { onSuccess: resolve, onError: reject })),
+    ]).then(async ([usersResult, providersResult]) => {
+      setUserSyncResult(usersResult.status === 'fulfilled' ? usersResult.value : null);
+      setUserSyncFailed(usersResult.status === 'rejected');
+      // A read-only refresh also after failures: another completed run may exist.
+      const saved = await savedUserSyncReport.refetch();
+      void queryClient.invalidateQueries({ queryKey: getListUserSyncReportsQueryKey() });
+      if (saved.isSuccess && saved.data.report) setUserSyncResult(null);
+      const pending = providersResult.status === 'fulfilled' ? providersResult.value?.pending ?? 0 : 0;
+      const conflicts = usersResult.status === 'fulfilled' ? usersResult.value?.conflicts ?? 0 : 0;
       const failures = [usersResult, providersResult].filter(
         (r): r is PromiseRejectedResult => r.status === 'rejected'
       );
@@ -319,7 +327,9 @@ export default function PeopleList() {
           (providersResult.status === 'fulfilled' ? providersResult.value?.created ?? 0 : 0);
         toast({
           title: 'Sincronização concluída',
-          description: newCount > 0
+          description: pending || conflicts
+            ? `${newCount} importada(s); ${pending} prestador(es) aguardando revisão de identidade; ${conflicts} conflito(s) de funcionário ignorado(s).`
+            : newCount > 0
             ? `${newCount} nova(s) pessoa(s) importada(s) do DECARGO People.`
             : 'Nenhuma pessoa nova encontrada no DECARGO People.',
         });
@@ -327,10 +337,11 @@ export default function PeopleList() {
         const details = failures.map(f => f.reason?.message).filter(Boolean).join(' | ');
         toast({
           title: failures.length === 2 ? 'Erro na sincronização' : 'Sincronização parcial',
-          description: details || 'Não foi possível sincronizar com o DECARGO People.',
+          description: `${details || 'Não foi possível sincronizar com o DECARGO People.'}${pending ? ` ${pending} prestador(es) aguardam revisão de identidade.` : ''}${conflicts ? ` ${conflicts} conflito(s) de funcionário ignorado(s).` : ''}`,
           variant: 'destructive',
         });
       }
+      if (pending > 0) setIsReconciliationOpen(true);
       refetchAll();
     });
   };
@@ -353,6 +364,9 @@ export default function PeopleList() {
             <UserPlus className="w-4 h-4 mr-2" />
             Cadastrar pessoa
           </Button>
+          <Button variant="outline" onClick={() => setIsReconciliationOpen(true)}>
+            Revisar vínculos People
+          </Button>
           <Button onClick={handleSync} disabled={isSyncing} className="bg-indigo-600 hover:bg-indigo-700">
             <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
             Sincronizar com DECARGO People
@@ -360,10 +374,58 @@ export default function PeopleList() {
         </div>
       </div>
 
+      {isAdmin && <UserSyncConflictReport
+        result={selectedReportId ? visibleReport?.result ?? null : userSyncResult ?? visibleReport?.result ?? null}
+        savedReport={!selectedReportId && userSyncResult ? null : visibleReport}
+        loading={activeReportQuery.isFetching}
+        historyFailed={reportHistory.isError || (activeReportQuery.isError &&
+          !(selectedReportId !== null && selectedReport.error?.status === 404))}
+        unavailable={reportExpired || (selectedReportId !== null && selectedReport.isError && selectedReport.error?.status === 404)}
+        history={reportHistory.data ?? null}
+        historyLoading={reportHistory.isFetching}
+        page={reportPage}
+        selectedReportId={selectedReportId}
+        onPageChange={setReportPage}
+        onSelect={id => {
+          setUserSyncResult(null);
+          setSelectedReportId(id);
+        }}
+        onReload={() => {
+          void reportHistory.refetch();
+          void activeReportQuery.refetch().then(saved => {
+            if (saved.isSuccess) setUserSyncResult(null);
+          });
+        }}
+        failed={userSyncFailed}
+        onLocate={localUserId => {
+          setEditingKey(null);
+          setSearchName('');
+          setFilterTipo('todos');
+          setFilterTeamId('todas');
+          setFilterStatus('todos');
+          setLocatedUserId(localUserId);
+        }} />}
+      {locatedUserId !== null && <div className="flex items-center gap-3 text-sm" role="status">
+        Exibindo somente a conta local Diárias #{locatedUserId}, inclusive se inativa.
+        <Button variant="outline" size="sm" onClick={() => setLocatedUserId(null)}>Mostrar todas as pessoas</Button>
+      </div>}
+
+      {isReconciliationOpen && (
+        <ProviderReconciliationDialog providers={providers ?? []}
+          onClose={() => setIsReconciliationOpen(false)}
+          onResolved={() => {
+            toast({ title: 'Identidade resolvida.', description: 'Os dados locais foram preservados.' });
+            void refetchAll();
+            void queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
+            void queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() });
+          }} />
+      )}
+
       {isCreateOpen && (
         <ManualPersonDialog teams={teams ?? []} existingPeople={rows}
           onClose={() => setIsCreateOpen(false)}
           onLocateExisting={person => {
+            setLocatedUserId(null);
             setIsCreateOpen(false);
             setEditingKey(null);
             setSearchName(person.email?.trim() || person.name);
@@ -373,6 +435,7 @@ export default function PeopleList() {
           }}
           onRefresh={() => { void refetchAll(); }}
           onCreated={() => {
+          setLocatedUserId(null);
           setIsCreateOpen(false);
           setSearchName('');
           setFilterTipo('todos');
@@ -385,19 +448,35 @@ export default function PeopleList() {
           }} />
       )}
 
+      {enablingPerson && (
+        <EnableDiariasDialog person={enablingPerson}
+          onClose={() => setEnablingPerson(null)}
+          onEnabled={() => {
+            setEnablingPerson(null);
+            toast({ title: 'Diárias habilitadas.', description: 'Cadastro e permissões preservados. Exportação bloqueada até validar o vínculo com o People.' });
+            void refetchAll();
+            void queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
+            void queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() });
+          }}
+          onConflict={() => { void refetchAll(); }} />
+      )}
+      {isAdmin && confirmationPerson && (
+        <PeopleConfirmationDialog key={confirmationPerson.providerId}
+          {...confirmationPerson} onClose={() => setConfirmationPerson(null)} />
+      )}
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row flex-wrap gap-3">
             <Input
               placeholder="Pesquisar por nome ou e-mail..."
               value={searchName}
-              onChange={e => setSearchName(e.target.value)}
+              onChange={e => { setLocatedUserId(null); setSearchName(e.target.value); }}
               className="h-9 sm:max-w-xs"
             />
             <select
               className="h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
               value={filterTipo}
-              onChange={e => setFilterTipo(e.target.value as 'todos' | PersonTipo)}
+              onChange={e => { setLocatedUserId(null); setFilterTipo(e.target.value as 'todos' | PersonTipo); }}
             >
               <option value="todos">Todos os tipos</option>
               <option value="Administrador">Administrador</option>
@@ -408,7 +487,7 @@ export default function PeopleList() {
             <select
               className="h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
               value={filterTeamId}
-              onChange={e => setFilterTeamId(e.target.value)}
+              onChange={e => { setLocatedUserId(null); setFilterTeamId(e.target.value); }}
             >
               <option value="todas">Todas as equipes</option>
               {teams?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -416,7 +495,7 @@ export default function PeopleList() {
             <select
               className="h-9 rounded border border-input bg-background px-2 text-sm shadow-sm"
               value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value as 'todos' | 'ativo' | 'inativo')}
+              onChange={e => { setLocatedUserId(null); setFilterStatus(e.target.value as 'todos' | 'ativo' | 'inativo'); }}
             >
               <option value="todos">Todos os status</option>
               <option value="ativo">Ativo</option>
@@ -472,11 +551,27 @@ export default function PeopleList() {
                     <TableCell className="font-mono text-xs text-muted-foreground">{row.decargoId}</TableCell>
                     <TableCell className="font-medium">
                       {isEditing ? (
-                        <Input
-                          value={editForm.name}
-                          onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                          className="h-8 max-w-xs"
-                        />
+                        <div className="space-y-2 max-w-xs">
+                          <Input
+                            aria-label="Nome da pessoa"
+                            value={editForm.name}
+                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                            className="h-8"
+                          />
+                          {!isUserRow && <>
+                            <Input
+                              type="email"
+                              aria-label="E-mail confirmado do prestador"
+                              placeholder="E-mail confirmado da pessoa"
+                              value={editForm.email}
+                              onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                              className="h-8"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Use o e-mail da conta DECARGO ID somente após confirmar que pertence a esta pessoa.
+                            </p>
+                          </>}
+                        </div>
                       ) : (
                         <>
                           {row.name}
@@ -510,7 +605,9 @@ export default function PeopleList() {
                           className="h-8 max-w-28"
                         />
                       ) : row.dailyRate != null ? (
-                        formatCurrency(row.dailyRate)
+                        <div>{formatCurrency(row.dailyRate)}
+                          {row.localOnly && <div className="text-xs text-muted-foreground">Vínculo local · exportação bloqueada</div>}
+                        </div>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
@@ -518,7 +615,7 @@ export default function PeopleList() {
                     <TableCell>
                       <button
                         onClick={() => handleToggleActive(row)}
-                        disabled={isSelf}
+                        disabled={isSelf || isUpdating || editingKey !== null}
                         className={`text-xs px-2 py-1 rounded border font-medium ${row.active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'}`}
                       >
                         {row.active ? (
@@ -535,12 +632,25 @@ export default function PeopleList() {
                       <div className="flex justify-end gap-2">
                         {isEditing ? (
                           <>
-                            <Button size="icon" variant="ghost" onClick={() => setEditingKey(null)}><X size={16} /></Button>
-                            <Button size="icon" variant="ghost" onClick={() => handleSaveEdit(row)} disabled={!editForm.name}><Save size={16} /></Button>
+                            <Button size="icon" variant="ghost" onClick={() => setEditingKey(null)} disabled={isUpdating}><X size={16} /></Button>
+                            <Button size="icon" variant="ghost" onClick={() => handleSaveEdit(row)} disabled={!editForm.name.trim() || isUpdating}><Save size={16} /></Button>
                           </>
                         ) : (
                           <>
-                            <Button size="icon" variant="ghost" onClick={() => startEdit(row)}>
+                            {isAdmin && (!isUserRow || row.linkedProviderId != null) && (
+                              <Button size="sm" variant="outline" onClick={() => setConfirmationPerson({
+                                providerId: isUserRow ? row.linkedProviderId! : row.sourceId,
+                                name: row.name,
+                              })}>
+                                Confirmação People
+                              </Button>
+                            )}
+                            {isUserRow && row.linkedProviderId == null && (
+                              <Button size="sm" variant="outline" onClick={() => setEnablingPerson(row)}>
+                                Habilitar diárias
+                              </Button>
+                            )}
+                            <Button size="icon" variant="ghost" onClick={() => startEdit(row)} disabled={isUpdating}>
                               <Edit2 size={16} />
                             </Button>
                             <Button

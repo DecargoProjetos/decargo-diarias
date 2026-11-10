@@ -1,20 +1,27 @@
 import { useGetDashboardSummary, useGetRecentActivity, useGetMe } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { formatCurrency, formatDateTime, statusColors, statusLabels } from '@/lib/utils';
 import { Activity, AlertCircle, CheckCircle2, Clock, DollarSign, FileDown } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { parseDashboardSummary } from '@/lib/dashboard-summary';
 
 export default function Dashboard() {
+  const [isRetryingActivity, setIsRetryingActivity] = useState(false);
   const { data: user } = useGetMe();
   // Gestor não acessa o Dashboard — só Diárias e a consulta somente leitura
   // da própria equipe. Só habilita as buscas quando sabemos que não é
   // gestor, para não disparar a chamada admin/prestador/funcionario-only
   // (que o backend agora rejeita com 403) antes de checarmos o papel.
   const isGestor = user?.role === 'gestor';
-  const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary({
-    query: { enabled: !!user && !isGestor, queryKey: ['getDashboardSummary'] },
+  const { data: summary, isLoading: isLoadingSummary, isError: isSummaryError, isFetching: isFetchingSummary, refetch: refetchSummary } = useGetDashboardSummary({
+    query: { enabled: !!user && !isGestor, queryKey: ['getDashboardSummary'], select: parseDashboardSummary },
   });
-  const { data: activity, isLoading: isLoadingActivity } = useGetRecentActivity({
+  const {
+    data: activity, isLoading: isLoadingActivity, isError: isActivityError,
+    isFetching: isFetchingActivity, refetch: refetchActivity,
+  } = useGetRecentActivity({
     query: { enabled: !!user && !isGestor, queryKey: ['getRecentActivity'] },
   });
 
@@ -23,8 +30,6 @@ export default function Dashboard() {
   if (isGestor) {
     return <div>Acesso negado. Consulte suas diárias em "Diárias" ou "Diárias da Equipe".</div>;
   }
-
-  if (isLoadingSummary || isLoadingActivity) return <div>Carregando dashboard...</div>;
 
   const showFinancials = user?.role !== 'prestador' && user?.role !== 'funcionario';
 
@@ -36,6 +41,22 @@ export default function Dashboard() {
       </div>
 
       {/* Summary Cards */}
+      <section aria-label="Indicadores de diárias">
+      {isSummaryError ? (
+        <Card>
+          <CardContent className="pt-6 space-y-3">
+            <div role="alert">
+              <p className="font-medium">Não foi possível carregar os indicadores.</p>
+              <p className="text-sm text-muted-foreground">Os indicadores estão indisponíveis. Isso não significa que não há diárias.</p>
+            </div>
+            <Button variant="outline" disabled={isFetchingSummary} onClick={() => void refetchSummary()}>
+              {isFetchingSummary ? 'Tentando novamente...' : 'Tentar novamente'}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : isLoadingSummary || !summary ? (
+        <p role="status" className="text-muted-foreground">Carregando indicadores...</p>
+      ) : (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card>
@@ -44,7 +65,7 @@ export default function Dashboard() {
               <Clock className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{summary?.pendentes || 0}</div>
+              <div className="text-2xl font-bold">{summary.pendentes}</div>
               <p className="text-xs text-muted-foreground mt-1">Aguardando aprovação</p>
             </CardContent>
           </Card>
@@ -57,10 +78,10 @@ export default function Dashboard() {
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{summary?.aprovadas || 0}</div>
+              <div className="text-2xl font-bold">{summary.aprovadas}</div>
               {showFinancials && (
                 <p className="text-xs text-emerald-600 mt-1 font-medium">
-                  {formatCurrency(summary?.totalValorAprovadas)}
+                   {formatCurrency(summary.totalValorAprovadas)}
                 </p>
               )}
             </CardContent>
@@ -74,10 +95,10 @@ export default function Dashboard() {
               <FileDown className="h-4 w-4 text-indigo-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{summary?.exportadas || 0}</div>
+              <div className="text-2xl font-bold">{summary.exportadas}</div>
               {showFinancials && (
                 <p className="text-xs text-indigo-600 mt-1 font-medium">
-                  {formatCurrency(summary?.totalValorExportadas)}
+                   {formatCurrency(summary.totalValorExportadas)}
                 </p>
               )}
             </CardContent>
@@ -91,18 +112,21 @@ export default function Dashboard() {
               <DollarSign className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{summary?.pagas || 0}</div>
+              <div className="text-2xl font-bold">{summary.pagas}</div>
               {showFinancials && (
                 <p className="text-xs text-green-600 mt-1 font-medium">
-                  {formatCurrency(summary?.totalValorPagas)}
+                   {formatCurrency(summary.totalValorPagas)}
                 </p>
               )}
             </CardContent>
           </Card>
         </motion.div>
       </div>
+      )}
+      </section>
 
       <div className="grid gap-6 md:grid-cols-2">
+        {!isSummaryError && !isLoadingSummary && summary && (
         <Card className="col-span-1">
           <CardHeader>
             <CardTitle className="text-lg">Atenção Necessária</CardTitle>
@@ -112,20 +136,21 @@ export default function Dashboard() {
               <div className="flex items-center gap-4 bg-red-50 p-4 rounded-md border border-red-100">
                 <AlertCircle className="h-8 w-8 text-red-500" />
                 <div>
-                  <p className="font-semibold text-red-900">{summary?.rejeitadas || 0} Diárias Rejeitadas</p>
+                  <p className="font-semibold text-red-900">{summary.rejeitadas} Diárias Rejeitadas</p>
                   <p className="text-sm text-red-700">Requerem ajuste ou cancelamento.</p>
                 </div>
               </div>
               <div className="flex items-center gap-4 bg-teal-50 p-4 rounded-md border border-teal-100">
                 <FileDown className="h-8 w-8 text-teal-500" />
                 <div>
-                  <p className="font-semibold text-teal-900">{summary?.disponivelExportacao || 0} Disponíveis p/ Exportação</p>
+                  <p className="font-semibold text-teal-900">{summary.disponivelExportacao} Disponíveis p/ Exportação</p>
                   <p className="text-sm text-teal-700">Aprovadas prontas para o ERP financeiro.</p>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
+        )}
 
         <Card className="col-span-1">
           <CardHeader>
@@ -133,7 +158,27 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {activity?.length === 0 ? (
+              {isActivityError || isRetryingActivity ? (
+                <div className="space-y-3">
+                  <p role="alert" className="text-sm text-destructive">
+                    Não foi possível carregar a atividade recente. Tente novamente.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isFetchingActivity || isRetryingActivity}
+                    onClick={() => {
+                      setIsRetryingActivity(true);
+                      void refetchActivity().finally(() => setIsRetryingActivity(false));
+                    }}
+                    data-testid="button-retry-recent-activity"
+                  >
+                    {isFetchingActivity || isRetryingActivity ? 'Tentando novamente...' : 'Tentar novamente'}
+                  </Button>
+                </div>
+              ) : isLoadingActivity ? (
+                <p role="status" className="text-sm text-muted-foreground">Carregando atividade recente...</p>
+              ) : activity?.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nenhuma atividade recente.</p>
               ) : (
                 activity?.slice(0, 5).map((item, idx) => (
@@ -146,7 +191,10 @@ export default function Dashboard() {
                         Diária #{item.diariaId} - {item.action}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Por {item.userName} em {formatDateTime(item.timestamp)}
+                        Nome na época: {item.userNameAtAction ?? 'Nome histórico não registrado'} em {formatDateTime(item.timestamp)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Nome atual: {item.userName ?? 'Nome atual não disponível'}{item.userId != null ? ` — usuário #${item.userId}` : ''}
                       </p>
                     </div>
                     <div className={`text-xs px-2 py-1 rounded-full border font-medium ${statusColors[item.status] || ''}`}>

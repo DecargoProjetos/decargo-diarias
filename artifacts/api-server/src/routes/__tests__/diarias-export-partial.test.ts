@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import { and, eq, inArray } from "drizzle-orm";
 
 const peopleMocks = vi.hoisted(() => ({
+  checkPeopleExportAvailability: vi.fn().mockResolvedValue(undefined),
   pushDiariasToPeople: vi.fn(),
   pushFaltasToPeople: vi.fn(),
 }));
@@ -172,7 +173,7 @@ describe("POST /api/diarias/export — lote misto", () => {
     }]);
     expect(peopleMocks.pushDiariasToPeople).toHaveBeenCalledWith([
       expect.objectContaining({ __localId: valid.id }),
-    ]);
+    ], expect.any(Object));
 
     const rows = await db.select({
       id: diariasTable.id,
@@ -255,7 +256,7 @@ describe("POST /api/diarias/export — lote misto", () => {
     expect(peopleMocks.pushDiariasToPeople).toHaveBeenCalledWith([
       expect.objectContaining({ __localId: accepted.id }),
       expect.objectContaining({ __localId: rejected.id }),
-    ]);
+    ], expect.any(Object));
 
     const rows = await db.select({
       id: diariasTable.id,
@@ -323,7 +324,7 @@ describe("POST /api/diarias/export — lote misto", () => {
         __localId: rejected.id,
         valor_diaria: 135,
       }),
-    ]);
+    ], expect.any(Object));
 
     const [retried] = await db.select({
       status: diariasTable.status,
@@ -406,7 +407,7 @@ describe("POST /api/diarias/export — lote misto", () => {
         cnpj: "22222222000122",
         __localId: rejected.id,
       }),
-    ]);
+    ], expect.any(Object));
 
     const rows = await db.select({
       id: diariasTable.id,
@@ -475,7 +476,7 @@ describe("POST /api/diarias/export — lote misto", () => {
         valor: 150,
         __localId: rejected.id,
       }),
-    ]);
+    ], expect.any(Object));
 
     const [retried] = await db.select({
       status: diariasTable.status,
@@ -700,6 +701,6 @@ describe("POST /api/diarias/export — lote misto", () => {
     expect(retryResponse.status).toBe(200);
     expect(peopleMocks.pushFaltasToPeople).toHaveBeenLastCalledWith([
       expect.objectContaining({ __localId: pending.id }),
-    ]);
+    ], expect.any(Object));
   });
 });

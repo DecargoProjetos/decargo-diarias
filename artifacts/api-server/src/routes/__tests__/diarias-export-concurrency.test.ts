@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import { and, eq, inArray } from "drizzle-orm";
 
 const peopleMocks = vi.hoisted(() => ({
+  checkPeopleExportAvailability: vi.fn().mockResolvedValue(undefined),
   pushDiariasToPeople: vi.fn(),
   pushFaltasToPeople: vi.fn(),
 }));

@@ -92,7 +92,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
     entityType: "team",
     entityId: team.id,
     action: "criado",
-    userId: req.currentUser!.id,
+    actor: req.currentUser!,
     newValues: team,
   });
 
@@ -134,7 +134,7 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
     entityType: "team",
     entityId: id,
     action: "atualizado",
-    userId: req.currentUser!.id,
+    actor: req.currentUser!,
     newValues: updates,
   });
 
@@ -159,7 +159,7 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
     entityType: "team",
     entityId: id,
     action: "excluído",
-    userId: req.currentUser!.id,
+    actor: req.currentUser!,
   });
 
   res.json({ message: "Equipe excluída" });

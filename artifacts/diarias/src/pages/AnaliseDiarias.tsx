@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   useGetMe,
   useListTeams,
@@ -30,10 +30,15 @@ import {
   CheckCircle2, XCircle, Filter, CalendarClock, FileDown, Loader2,
   Clock, ThumbsUp, ThumbsDown, PackageCheck, X, RotateCcw, Trash2,
 } from 'lucide-react';
-import { Link } from 'wouter';
+import { Link, useSearch } from 'wouter';
 import ExportRecoveryDialog from '@/components/ExportRecoveryDialog';
 import ExportCorrectionDialog from '@/components/ExportCorrectionDialog';
 import { useQueryClient } from '@tanstack/react-query';
+import PeopleExportCapabilities from '@/components/PeopleExportCapabilities';
+import { usePeopleExportCapabilities } from '@/hooks/use-people-export-capabilities';
+import PeopleExportBatchReview, { canConfirmReviewedBatch } from '@/components/PeopleExportBatchReview';
+import { usePeopleExportReview } from '@/hooks/use-people-export-review';
+import ExportAttemptsPanel from '@/components/ExportAttemptsPanel';
 
 const ANALISE_STATUSES = [
   'pendente_aprovacao',
@@ -61,15 +66,33 @@ const EMPTY_FILTERS: Filters = {
   name: '', teamId: '', startDate: '', endDate: '', minValue: '', maxValue: '', value: '', status: '', hasPaymentDate: '',
 };
 
+function filtersFromImport(search: string): Filters {
+  const params = new URLSearchParams(search);
+  const date = (name: string) => {
+    const value = params.get(name) ?? '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+  };
+  return params.get('fromImport') === '1'
+    ? { ...EMPTY_FILTERS, startDate: date('startDate'), endDate: date('endDate') }
+    : EMPTY_FILTERS;
+}
 export default function AnaliseDiarias() {
+  const search = useSearch();
   const { data: user } = useGetMe();
+  const peopleCapabilities = usePeopleExportCapabilities(user?.role === 'admin');
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: teams } = useListTeams();
 
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<Filters>(() => filtersFromImport(search));
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    if (new URLSearchParams(search).get('fromImport') !== '1') return;
+    setFilters(filtersFromImport(search));
+    setPage(1);
+    setSelected(new Set());
+  }, [search]);
   const [rejectTarget, setRejectTarget] = useState<{ ids: number[] } | null>(null);
   const [rejectNote, setRejectNote] = useState('');
   const [paymentDateTarget, setPaymentDateTarget] = useState<{ id: number; current: string | null } | null>(null);
@@ -115,6 +138,7 @@ export default function AnaliseDiarias() {
   const deleteDiaria = useDeleteDiaria();
   const [selectingAllFiltered, setSelectingAllFiltered] = useState(false);
   const [applyingPaymentDate, setApplyingPaymentDate] = useState(false);
+  const exportReview = usePeopleExportReview([...selected], exportConfirmOpen && user?.role === 'admin');
 
   if (user && user.role !== 'admin') {
     return (
@@ -162,7 +186,8 @@ export default function AnaliseDiarias() {
     setFilters((f) => ({ ...f, name: '', status: 'pendente_aprovacao' }));
     void queryClient.invalidateQueries({
       predicate: (query) => typeof query.queryKey[0] === 'string'
-        && (query.queryKey[0].includes('/diarias') || query.queryKey[0].includes('/dashboard') || query.queryKey[0].includes('/audit')),
+        && (query.queryKey[0].includes('/diarias') || query.queryKey[0].includes('/dashboard') || query.queryKey[0].includes('/audit')
+          || ['getReportDiarias', 'getDashboardSummary', 'getRecentActivity'].includes(query.queryKey[0])),
     });
   }
 
@@ -315,6 +340,7 @@ export default function AnaliseDiarias() {
   }
 
   function handleExport() {
+    if (!canConfirmReviewedBatch(exportReview, selected.size)) return;
     const ids = [...selected];
     if (!ids.length) return;
     exportMutation.mutate({
@@ -351,9 +377,14 @@ export default function AnaliseDiarias() {
               .join('\n')
           : '';
         setLastResult({
-          title: 'Exportação não realizada',
-          description: [errorData?.error ?? err?.message, details].filter(Boolean).join('\n\n'),
+          title: 'Não foi possível obter a confirmação da exportação',
+          description: [
+            errorData?.error ?? err?.message, details,
+            errorData?.integrationRef ? `Referência: ${errorData.integrationRef}` : '',
+            'Consulte o acompanhamento de exportações antes de tentar novamente. A perda da conexão não significa que o People deixou de receber o lote.',
+          ].filter(Boolean).join('\n\n'),
         });
+        refreshAll();
       },
     });
   }
@@ -393,6 +424,8 @@ export default function AnaliseDiarias() {
       </div>
 
       {/* Dashboard indicators */}
+      {user?.role === 'admin' && <PeopleExportCapabilities query={peopleCapabilities} />}
+      <ExportAttemptsPanel enabled={user?.role === 'admin'} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <IndicatorCard
           icon={Clock}
@@ -509,7 +542,7 @@ export default function AnaliseDiarias() {
           <Button size="sm" variant="destructive" disabled={isBusy} onClick={() => openReject([...selected])}>
             <XCircle size={16} className="mr-2" /> Reprovar selecionadas
           </Button>
-          <Button size="sm" variant="outline" disabled={isBusy} onClick={() => setExportConfirmOpen(true)}>
+          <Button size="sm" variant="outline" disabled={isBusy} onClick={() => { setExportConfirmOpen(true); void peopleCapabilities.refetch(); }}>
             <FileDown size={16} className="mr-2" /> Exportar selecionadas
           </Button>
           {user?.role === 'admin' && <ExportRecoveryDialog selectedIds={[...selected]} disabled={isBusy} onDone={refreshAll} />}
@@ -802,6 +835,7 @@ export default function AnaliseDiarias() {
               Somente diárias com status "P/ Exportar" serão aceitas.
             </DialogDescription>
           </DialogHeader>
+          <PeopleExportBatchReview query={exportReview} count={selected.size} />
           {(() => {
             const missingDate = rows.filter(r => selected.has(r.id) && !r.paymentDate);
             if (missingDate.length === 0) return null;
@@ -826,7 +860,7 @@ export default function AnaliseDiarias() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setExportConfirmOpen(false); setExportFallbackDate(''); }}>Cancelar</Button>
             <Button
-              disabled={exportMutation.isPending || (rows.some(r => selected.has(r.id) && !r.paymentDate) && !exportFallbackDate)}
+              disabled={!canConfirmReviewedBatch(exportReview, selected.size) || exportMutation.isPending || (rows.some(r => selected.has(r.id) && !r.paymentDate) && !exportFallbackDate)}
               onClick={handleExport}
             >
               {exportMutation.isPending ? <Loader2 className="animate-spin mr-2" size={16} /> : null}

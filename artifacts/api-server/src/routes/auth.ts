@@ -65,7 +65,7 @@ router.post("/handoff", async (req, res) => {
   const usersByEmail = await db
     .select()
     .from(usersTable)
-    .where(sql`lower(${usersTable.email}) = ${email}`)
+    .where(sql`lower(trim(${usersTable.email})) = ${email}`)
     .limit(2);
 
   if (usersByEmail.length > 1) {
@@ -79,9 +79,9 @@ router.post("/handoff", async (req, res) => {
     return;
   }
 
-  let [userByEmail] = usersByEmail;
+  const [userByEmail] = usersByEmail;
 
-  let [userByDecargoId] = await db
+  const [userByDecargoId] = await db
     .select()
     .from(usersTable)
     .where(eq(usersTable.decargoId, decargoId))
@@ -90,16 +90,9 @@ router.post("/handoff", async (req, res) => {
   let user = userByEmail;
 
   if (userByEmail && userByEmail.decargoId !== decargoId) {
-    if (!userByDecargoId) {
-      // No collision: replace the HR-record identifier with the authoritative
-      // auth-account identifier for faster future handoffs.
-      await db
-        .update(usersTable)
-        .set({ decargoId, updatedAt: new Date() })
-        .where(eq(usersTable.id, userByEmail.id));
-      userByEmail = { ...userByEmail, decargoId };
-      user = userByEmail;
-    } else if (userByDecargoId.id !== userByEmail.id) {
+    // Keep the local/HR identifier stable: id_usuario is a different domain,
+    // not a replacement for a manual or provider identifier.
+    if (userByDecargoId && userByDecargoId.id !== userByEmail.id) {
       // Preserve both rows instead of violating the unique constraint. Email
       // remains authoritative for this login; an admin can reconcile the
       // stale conflicting row later.

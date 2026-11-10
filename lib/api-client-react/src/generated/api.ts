@@ -42,6 +42,7 @@ import type {
   DiariasPage,
   DiariasReport,
   ErrorResponse,
+  ExportAttempt,
   ExportCorrectionConfirmation,
   ExportCorrectionPreview,
   ExportCorrectionResult,
@@ -59,10 +60,16 @@ import type {
   ListDiariaIdsParams,
   ListDiariasParams,
   ListProvidersParams,
+  ListUserSyncReportsParams,
   MessageResponse,
   PaymentDateInput,
+  PeopleExportCapabilities,
+  PeopleExportReview,
+  PeopleExportReviewInput,
   Provider,
   ProviderMetrics,
+  ProviderReconciliationCandidate,
+  ProviderReconciliationInput,
   ProviderUpdate,
   SyncResult,
   Team,
@@ -71,13 +78,18 @@ import type {
   TeamUpdate,
   User,
   UserCreate,
+  UserDiariasEnablement,
+  UserDiariasEnablementResult,
+  UserSyncReport,
+  UserSyncReportLookup,
+  UserSyncReportPage,
   UserSyncResult,
+  UserSyncRetentionHealth,
   UserUpdate
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
 import type { ErrorType , BodyType } from '../custom-fetch';
-
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -168,6 +180,84 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getHealthCheckQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUserSyncRetentionHealthUrl = () => {
+
+
+
+
+  return `/api/healthz/retention`
+}
+
+/**
+ * Returns 503 after three consecutive hourly failures until a successful cleanup. Contains no report data or database error details.
+ * @summary Per-process report cleanup alert status (not a liveness check)
+ */
+export const userSyncRetentionHealth = async ( options?: RequestInit): Promise<UserSyncRetentionHealth> => {
+
+  return customFetch<UserSyncRetentionHealth>(getUserSyncRetentionHealthUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getUserSyncRetentionHealthQueryKey = () => {
+    return [
+    `/api/healthz/retention`
+    ] as const;
+    }
+
+
+export const getUserSyncRetentionHealthQueryOptions = <TData = Awaited<ReturnType<typeof userSyncRetentionHealth>>, TError = ErrorType<UserSyncRetentionHealth>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof userSyncRetentionHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getUserSyncRetentionHealthQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof userSyncRetentionHealth>>> = ({ signal }) => userSyncRetentionHealth({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof userSyncRetentionHealth>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type UserSyncRetentionHealthQueryResult = NonNullable<Awaited<ReturnType<typeof userSyncRetentionHealth>>>
+export type UserSyncRetentionHealthQueryError = ErrorType<UserSyncRetentionHealth>
+
+
+/**
+ * @summary Per-process report cleanup alert status (not a liveness check)
+ */
+
+export function useUserSyncRetentionHealth<TData = Awaited<ReturnType<typeof userSyncRetentionHealth>>, TError = ErrorType<UserSyncRetentionHealth>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof userSyncRetentionHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getUserSyncRetentionHealthQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -485,6 +575,7 @@ export const getSyncUsersUrl = () => {
 }
 
 /**
+ * Importação aditiva e auditoria agregada são confirmadas na mesma transação. Contas existentes não são alteradas; evidências pessoais de conflitos não são gravadas na auditoria.
  * @summary Sync users (funcionários) from DECARGO People (admin only)
  */
 export const syncUsers = async ( options?: RequestInit): Promise<UserSyncResult> => {
@@ -502,7 +593,7 @@ export const syncUsers = async ( options?: RequestInit): Promise<UserSyncResult>
 
 
 
-export const getSyncUsersMutationOptions = <TError = ErrorType<unknown>,
+export const getSyncUsersMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext> => {
 
@@ -531,12 +622,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type SyncUsersMutationResult = NonNullable<Awaited<ReturnType<typeof syncUsers>>>
 
-    export type SyncUsersMutationError = ErrorType<unknown>
+    export type SyncUsersMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Sync users (funcionários) from DECARGO People (admin only)
  */
-export const useSyncUsers = <TError = ErrorType<unknown>,
+export const useSyncUsers = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncUsers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof syncUsers>>,
@@ -545,6 +636,318 @@ export const useSyncUsers = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSyncUsersMutationOptions(options));
+    }
+
+export const getListUserSyncReportsUrl = (params?: ListUserSyncReportsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/users/sync-reports?${stringifiedParams}` : `/api/users/sync-reports`
+}
+
+/**
+ * Lista somente datas e contadores, sem consultar o People nem expor evidências de outras execuções.
+ * @summary Execuções salvas vigentes, da mais recente à mais antiga (somente admin)
+ */
+export const listUserSyncReports = async (params?: ListUserSyncReportsParams, options?: RequestInit): Promise<UserSyncReportPage> => {
+
+  return customFetch<UserSyncReportPage>(getListUserSyncReportsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListUserSyncReportsQueryKey = (params?: ListUserSyncReportsParams,) => {
+    return [
+    `/api/users/sync-reports`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListUserSyncReportsQueryOptions = <TData = Awaited<ReturnType<typeof listUserSyncReports>>, TError = ErrorType<void>>(params?: ListUserSyncReportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUserSyncReports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListUserSyncReportsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listUserSyncReports>>> = ({ signal }) => listUserSyncReports(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listUserSyncReports>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListUserSyncReportsQueryResult = NonNullable<Awaited<ReturnType<typeof listUserSyncReports>>>
+export type ListUserSyncReportsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Execuções salvas vigentes, da mais recente à mais antiga (somente admin)
+ */
+
+export function useListUserSyncReports<TData = Awaited<ReturnType<typeof listUserSyncReports>>, TError = ErrorType<void>>(
+ params?: ListUserSyncReportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUserSyncReports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListUserSyncReportsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetUserSyncReportUrl = (reportId: string,) => {
+
+
+
+
+  return `/api/users/sync-reports/${reportId}`
+}
+
+/**
+ * @summary Snapshot de uma execução salva (somente admin, sem chamada ao People)
+ */
+export const getUserSyncReport = async (reportId: string, options?: RequestInit): Promise<UserSyncReport> => {
+
+  return customFetch<UserSyncReport>(getGetUserSyncReportUrl(reportId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserSyncReportQueryKey = (reportId: string,) => {
+    return [
+    `/api/users/sync-reports/${reportId}`
+    ] as const;
+    }
+
+
+export const getGetUserSyncReportQueryOptions = <TData = Awaited<ReturnType<typeof getUserSyncReport>>, TError = ErrorType<void>>(reportId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserSyncReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserSyncReportQueryKey(reportId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserSyncReport>>> = ({ signal }) => getUserSyncReport(reportId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: reportId !== null && reportId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserSyncReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserSyncReportQueryResult = NonNullable<Awaited<ReturnType<typeof getUserSyncReport>>>
+export type GetUserSyncReportQueryError = ErrorType<void>
+
+
+/**
+ * @summary Snapshot de uma execução salva (somente admin, sem chamada ao People)
+ */
+
+export function useGetUserSyncReport<TData = Awaited<ReturnType<typeof getUserSyncReport>>, TError = ErrorType<void>>(
+ reportId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserSyncReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserSyncReportQueryOptions(reportId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetLatestUserSyncReportUrl = () => {
+
+
+
+
+  return `/api/users/sync-reports/latest`
+}
+
+/**
+ * Execuções concluídas são retidas por 30 dias. Retorna null se não houver relatório vigente.
+ * @summary Último relatório salvo de funcionários (somente admin, sem chamada ao People)
+ */
+export const getLatestUserSyncReport = async ( options?: RequestInit): Promise<UserSyncReportLookup> => {
+
+  return customFetch<UserSyncReportLookup>(getGetLatestUserSyncReportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLatestUserSyncReportQueryKey = () => {
+    return [
+    `/api/users/sync-reports/latest`
+    ] as const;
+    }
+
+
+export const getGetLatestUserSyncReportQueryOptions = <TData = Awaited<ReturnType<typeof getLatestUserSyncReport>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLatestUserSyncReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLatestUserSyncReportQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLatestUserSyncReport>>> = ({ signal }) => getLatestUserSyncReport({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLatestUserSyncReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLatestUserSyncReportQueryResult = NonNullable<Awaited<ReturnType<typeof getLatestUserSyncReport>>>
+export type GetLatestUserSyncReportQueryError = ErrorType<void>
+
+
+/**
+ * @summary Último relatório salvo de funcionários (somente admin, sem chamada ao People)
+ */
+
+export function useGetLatestUserSyncReport<TData = Awaited<ReturnType<typeof getLatestUserSyncReport>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLatestUserSyncReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLatestUserSyncReportQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getEnableUserDiariasUrl = (id: number,) => {
+
+
+
+
+  return `/api/users/${id}/enable-diarias`
+}
+
+/**
+ * @summary Habilitar diárias localmente sem alterar o cadastro ou permissões (admin)
+ */
+export const enableUserDiarias = async (id: number,
+    userDiariasEnablement: UserDiariasEnablement, options?: RequestInit): Promise<UserDiariasEnablementResult> => {
+
+  return customFetch<UserDiariasEnablementResult>(getEnableUserDiariasUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(userDiariasEnablement)
+  }
+);}
+
+
+
+
+
+export const getEnableUserDiariasMutationOptions = <TError = ErrorType<ErrorResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enableUserDiarias>>, TError,{id: number;data: BodyType<UserDiariasEnablement>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof enableUserDiarias>>, TError,{id: number;data: BodyType<UserDiariasEnablement>}, TContext> => {
+
+const mutationKey = ['enableUserDiarias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof enableUserDiarias>>, {id: number;data: BodyType<UserDiariasEnablement>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  enableUserDiarias(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EnableUserDiariasMutationResult = NonNullable<Awaited<ReturnType<typeof enableUserDiarias>>>
+    export type EnableUserDiariasMutationBody = BodyType<UserDiariasEnablement>
+    export type EnableUserDiariasMutationError = ErrorType<ErrorResponse | void>
+
+    /**
+ * @summary Habilitar diárias localmente sem alterar o cadastro ou permissões (admin)
+ */
+export const useEnableUserDiarias = <TError = ErrorType<ErrorResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enableUserDiarias>>, TError,{id: number;data: BodyType<UserDiariasEnablement>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof enableUserDiarias>>,
+        TError,
+        {id: number;data: BodyType<UserDiariasEnablement>},
+        TContext
+      > => {
+      return useMutation(getEnableUserDiariasMutationOptions(options));
     }
 
 export const getGetUserUrl = (id: number,) => {
@@ -633,7 +1036,7 @@ export const getUpdateUserUrl = (id: number,) => {
 }
 
 /**
- * @summary Update user role, team, name, email or status (admin only)
+ * @summary Atomically update a person and their linked provider (admin only)
  */
 export const updateUser = async (id: number,
     userUpdate: UserUpdate, options?: RequestInit): Promise<User> => {
@@ -651,7 +1054,7 @@ export const updateUser = async (id: number,
 
 
 
-export const getUpdateUserMutationOptions = <TError = ErrorType<unknown>,
+export const getUpdateUserMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,{id: number;data: BodyType<UserUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,{id: number;data: BodyType<UserUpdate>}, TContext> => {
 
@@ -680,12 +1083,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type UpdateUserMutationResult = NonNullable<Awaited<ReturnType<typeof updateUser>>>
     export type UpdateUserMutationBody = BodyType<UserUpdate>
-    export type UpdateUserMutationError = ErrorType<unknown>
+    export type UpdateUserMutationError = ErrorType<ErrorResponse>
 
     /**
- * @summary Update user role, team, name, email or status (admin only)
+ * @summary Atomically update a person and their linked provider (admin only)
  */
-export const useUpdateUser = <TError = ErrorType<unknown>,
+export const useUpdateUser = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,{id: number;data: BodyType<UserUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof updateUser>>,
@@ -1290,6 +1693,154 @@ export const useSyncProviders = <TError = ErrorType<unknown>,
       return useMutation(getSyncProvidersMutationOptions(options));
     }
 
+export const getListProviderReconciliationUrl = () => {
+
+
+
+
+  return `/api/providers/reconciliation`
+}
+
+/**
+ * @summary Review fresh People provider identities (admin only)
+ */
+export const listProviderReconciliation = async ( options?: RequestInit): Promise<ProviderReconciliationCandidate[]> => {
+
+  return customFetch<ProviderReconciliationCandidate[]>(getListProviderReconciliationUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProviderReconciliationQueryKey = () => {
+    return [
+    `/api/providers/reconciliation`
+    ] as const;
+    }
+
+
+export const getListProviderReconciliationQueryOptions = <TData = Awaited<ReturnType<typeof listProviderReconciliation>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProviderReconciliation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProviderReconciliationQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProviderReconciliation>>> = ({ signal }) => listProviderReconciliation({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProviderReconciliation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProviderReconciliationQueryResult = NonNullable<Awaited<ReturnType<typeof listProviderReconciliation>>>
+export type ListProviderReconciliationQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Review fresh People provider identities (admin only)
+ */
+
+export function useListProviderReconciliation<TData = Awaited<ReturnType<typeof listProviderReconciliation>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProviderReconciliation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProviderReconciliationQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getResolveProviderReconciliationUrl = () => {
+
+
+
+
+  return `/api/providers/reconciliation`
+}
+
+/**
+ * @summary Explicitly reconcile or import a distinct People provider (admin only)
+ */
+export const resolveProviderReconciliation = async (providerReconciliationInput: ProviderReconciliationInput, options?: RequestInit): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getResolveProviderReconciliationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(providerReconciliationInput)
+  }
+);}
+
+
+
+
+
+export const getResolveProviderReconciliationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveProviderReconciliation>>, TError,{data: BodyType<ProviderReconciliationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveProviderReconciliation>>, TError,{data: BodyType<ProviderReconciliationInput>}, TContext> => {
+
+const mutationKey = ['resolveProviderReconciliation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveProviderReconciliation>>, {data: BodyType<ProviderReconciliationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resolveProviderReconciliation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveProviderReconciliationMutationResult = NonNullable<Awaited<ReturnType<typeof resolveProviderReconciliation>>>
+    export type ResolveProviderReconciliationMutationBody = BodyType<ProviderReconciliationInput>
+    export type ResolveProviderReconciliationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Explicitly reconcile or import a distinct People provider (admin only)
+ */
+export const useResolveProviderReconciliation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveProviderReconciliation>>, TError,{data: BodyType<ProviderReconciliationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resolveProviderReconciliation>>,
+        TError,
+        {data: BodyType<ProviderReconciliationInput>},
+        TContext
+      > => {
+      return useMutation(getResolveProviderReconciliationMutationOptions(options));
+    }
+
 export const getGetProviderUrl = (id: number,) => {
 
 
@@ -1394,7 +1945,7 @@ export const updateProvider = async (id: number,
 
 
 
-export const getUpdateProviderMutationOptions = <TError = ErrorType<unknown>,
+export const getUpdateProviderMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProvider>>, TError,{id: number;data: BodyType<ProviderUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateProvider>>, TError,{id: number;data: BodyType<ProviderUpdate>}, TContext> => {
 
@@ -1423,12 +1974,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type UpdateProviderMutationResult = NonNullable<Awaited<ReturnType<typeof updateProvider>>>
     export type UpdateProviderMutationBody = BodyType<ProviderUpdate>
-    export type UpdateProviderMutationError = ErrorType<unknown>
+    export type UpdateProviderMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Update a provider's name, email, team or status (admin only)
  */
-export const useUpdateProvider = <TError = ErrorType<unknown>,
+export const useUpdateProvider = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProvider>>, TError,{id: number;data: BodyType<ProviderUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof updateProvider>>,
@@ -2980,6 +3531,310 @@ export const useResolveExportRecovery = <TError = ErrorType<void>,
       > => {
       return useMutation(getResolveExportRecoveryMutationOptions(options));
     }
+
+export const getReviewPeopleExportBatchUrl = () => {
+
+
+
+
+  return `/api/diarias/export/review`
+}
+
+/**
+ * Read-only review of all selected IDs, including other pages. Derives destinations from local types. Does not query People persons, write financial data or touch reservations. Export POST rechecks independently.
+ * @summary Review selected records against People destinations (admin only)
+ */
+export const reviewPeopleExportBatch = async (peopleExportReviewInput: PeopleExportReviewInput, options?: RequestInit): Promise<PeopleExportReview> => {
+
+  return customFetch<PeopleExportReview>(getReviewPeopleExportBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(peopleExportReviewInput)
+  }
+);}
+
+
+
+
+
+export const getReviewPeopleExportBatchMutationOptions = <TError = ErrorType<void | ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewPeopleExportBatch>>, TError,{data: BodyType<PeopleExportReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewPeopleExportBatch>>, TError,{data: BodyType<PeopleExportReviewInput>}, TContext> => {
+
+const mutationKey = ['reviewPeopleExportBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewPeopleExportBatch>>, {data: BodyType<PeopleExportReviewInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  reviewPeopleExportBatch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewPeopleExportBatchMutationResult = NonNullable<Awaited<ReturnType<typeof reviewPeopleExportBatch>>>
+    export type ReviewPeopleExportBatchMutationBody = BodyType<PeopleExportReviewInput>
+    export type ReviewPeopleExportBatchMutationError = ErrorType<void | ErrorResponse>
+
+    /**
+ * @summary Review selected records against People destinations (admin only)
+ */
+export const useReviewPeopleExportBatch = <TError = ErrorType<void | ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewPeopleExportBatch>>, TError,{data: BodyType<PeopleExportReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewPeopleExportBatch>>,
+        TError,
+        {data: BodyType<PeopleExportReviewInput>},
+        TContext
+      > => {
+      return useMutation(getReviewPeopleExportBatchMutationOptions(options));
+    }
+
+export const getGetPeopleExportCapabilitiesUrl = () => {
+
+
+
+
+  return `/api/diarias/export/capabilities`
+}
+
+/**
+ * Read-only indication. Does not query people, reserve records or release existing reservations. Export POST always rechecks availability.
+ * @summary Read People v2 financial destinations (authenticated admin only)
+ */
+export const getPeopleExportCapabilities = async ( options?: RequestInit): Promise<PeopleExportCapabilities> => {
+
+  return customFetch<PeopleExportCapabilities>(getGetPeopleExportCapabilitiesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPeopleExportCapabilitiesQueryKey = () => {
+    return [
+    `/api/diarias/export/capabilities`
+    ] as const;
+    }
+
+
+export const getGetPeopleExportCapabilitiesQueryOptions = <TData = Awaited<ReturnType<typeof getPeopleExportCapabilities>>, TError = ErrorType<void | ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPeopleExportCapabilities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPeopleExportCapabilitiesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPeopleExportCapabilities>>> = ({ signal }) => getPeopleExportCapabilities({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPeopleExportCapabilities>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPeopleExportCapabilitiesQueryResult = NonNullable<Awaited<ReturnType<typeof getPeopleExportCapabilities>>>
+export type GetPeopleExportCapabilitiesQueryError = ErrorType<void | ErrorResponse>
+
+
+/**
+ * @summary Read People v2 financial destinations (authenticated admin only)
+ */
+
+export function useGetPeopleExportCapabilities<TData = Awaited<ReturnType<typeof getPeopleExportCapabilities>>, TError = ErrorType<void | ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPeopleExportCapabilities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPeopleExportCapabilitiesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListExportAttemptsUrl = () => {
+
+
+
+
+  return `/api/diarias/export/attempts`
+}
+
+/**
+ * @summary Recent persistent export attempts (admin only)
+ */
+export const listExportAttempts = async ( options?: RequestInit): Promise<ExportAttempt[]> => {
+
+  return customFetch<ExportAttempt[]>(getListExportAttemptsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListExportAttemptsQueryKey = () => {
+    return [
+    `/api/diarias/export/attempts`
+    ] as const;
+    }
+
+
+export const getListExportAttemptsQueryOptions = <TData = Awaited<ReturnType<typeof listExportAttempts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExportAttempts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListExportAttemptsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listExportAttempts>>> = ({ signal }) => listExportAttempts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listExportAttempts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListExportAttemptsQueryResult = NonNullable<Awaited<ReturnType<typeof listExportAttempts>>>
+export type ListExportAttemptsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Recent persistent export attempts (admin only)
+ */
+
+export function useListExportAttempts<TData = Awaited<ReturnType<typeof listExportAttempts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExportAttempts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListExportAttemptsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetExportAttemptUrl = (integrationRef: string,) => {
+
+
+
+
+  return `/api/diarias/export/attempts/${integrationRef}`
+}
+
+/**
+ * @summary Consult an export without resending financial records (admin only)
+ */
+export const getExportAttempt = async (integrationRef: string, options?: RequestInit): Promise<ExportAttempt> => {
+
+  return customFetch<ExportAttempt>(getGetExportAttemptUrl(integrationRef),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetExportAttemptQueryKey = (integrationRef: string,) => {
+    return [
+    `/api/diarias/export/attempts/${integrationRef}`
+    ] as const;
+    }
+
+
+export const getGetExportAttemptQueryOptions = <TData = Awaited<ReturnType<typeof getExportAttempt>>, TError = ErrorType<void>>(integrationRef: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getExportAttempt>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetExportAttemptQueryKey(integrationRef);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getExportAttempt>>> = ({ signal }) => getExportAttempt(integrationRef, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: integrationRef !== null && integrationRef !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getExportAttempt>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetExportAttemptQueryResult = NonNullable<Awaited<ReturnType<typeof getExportAttempt>>>
+export type GetExportAttemptQueryError = ErrorType<void>
+
+
+/**
+ * @summary Consult an export without resending financial records (admin only)
+ */
+
+export function useGetExportAttempt<TData = Awaited<ReturnType<typeof getExportAttempt>>, TError = ErrorType<void>>(
+ integrationRef: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getExportAttempt>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetExportAttemptQueryOptions(integrationRef,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getExportDiariasUrl = () => {
 

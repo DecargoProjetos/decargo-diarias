@@ -12,7 +12,18 @@ export interface ActivityItem {
   providerName: string;
   teamName: string;
   action: string;
-  userName: string;
+  /**
+     * Current name from the user record; not a historical snapshot.
+     * @nullable
+     */
+  userName: string | null;
+  /** @nullable */
+  userId?: number | null;
+  /**
+     * Authenticated user's name recorded at action time; null when not recorded. Never inferred from the current user name.
+     * @nullable
+     */
+  userNameAtAction?: string | null;
   timestamp: Date;
   status: string;
 }

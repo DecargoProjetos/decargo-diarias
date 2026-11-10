@@ -9,6 +9,8 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:retention": "vitest run src/routes/__tests__/user-sync-retention.integration.test.ts src/routes/__tests__/users-sync-conflicts.test.ts",
+    "test:retention-shutdown": "vitest run src/routes/__tests__/user-sync-retention.integration.test.ts src/routes/__tests__/graceful-shutdown.test.ts",
     "test:critical": "vitest run src/routes/__tests__/calendar-rules.test.ts"
   },
   "dependencies": {

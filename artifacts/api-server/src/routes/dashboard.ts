@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import { requireRole } from "../middlewares/requireAuth";
+import { linkedProviderSql } from "../lib/providerIdentity";
 
 const router = Router();
 
@@ -19,10 +20,8 @@ router.get("/summary", requireRole("admin", "prestador", "funcionario"), async (
     conditions.push(`d.team_id = $${p++}`);
     params.push(me.teamId);
   } else if (me.role !== "admin") {
-    // Prestadores/funcionários only see their own provider's data
-    // (funcionários have none, so this yields empty results — expected).
-    conditions.push(`p.decargo_id = $${p++}`);
-    params.push(me.decargoId);
+    conditions.push(`p.id = ${linkedProviderSql(`$${p++}`)}`);
+    params.push(me.id);
   }
 
   const where = conditions.join(" AND ");
@@ -74,8 +73,10 @@ router.get("/by-team", requireRole("admin", "prestador", "funcionario"), async (
   if (me.role === "gestor" && me.teamId) {
     conditions.push(`d.team_id = $${p++}`);
     params.push(me.teamId);
+  } else if (me.role !== "admin") {
+    conditions.push(`p.id = ${linkedProviderSql(`$${p++}`)}`);
+    params.push(me.id);
   }
-  // prestadores don't filter by-team (they see their own across teams)
 
   const where = conditions.join(" AND ");
 
@@ -90,6 +91,7 @@ router.get("/by-team", requireRole("admin", "prestador", "funcionario"), async (
         COUNT(*) FILTER (WHERE d.status = 'paga') AS pagas,
         SUM(d.value::numeric) AS "totalValor"
       FROM diarias d
+      JOIN providers p ON p.id = d.provider_id
       JOIN teams t ON t.id = d.team_id
       WHERE ${where}
       GROUP BY t.id, t.name
@@ -124,10 +126,8 @@ router.get("/by-provider", requireRole("admin", "prestador", "funcionario"), asy
     conditions.push(`d.team_id = $${p++}`);
     params.push(me.teamId);
   } else if (me.role !== "admin") {
-    // Prestadores/funcionários only see their own provider's data
-    // (funcionários have none, so this yields empty results — expected).
-    conditions.push(`p.decargo_id = $${p++}`);
-    params.push(me.decargoId);
+    conditions.push(`p.id = ${linkedProviderSql(`$${p++}`)}`);
+    params.push(me.id);
   }
 
   const where = conditions.join(" AND ");
@@ -176,10 +176,8 @@ router.get("/recent-activity", requireRole("admin", "prestador", "funcionario"),
     conditions.push(`d.team_id = $${p++}`);
     params.push(me.teamId);
   } else if (me.role !== "admin") {
-    // Prestadores/funcionários only see their own provider's data
-    // (funcionários have none, so this yields empty results — expected).
-    conditions.push(`p.decargo_id = $${p++}`);
-    params.push(me.decargoId);
+    conditions.push(`p.id = ${linkedProviderSql(`$${p++}`)}`);
+    params.push(me.id);
   }
 
   const where = conditions.join(" AND ");
@@ -187,7 +185,8 @@ router.get("/recent-activity", requireRole("admin", "prestador", "funcionario"),
   const result = await pool.query<Record<string, unknown>>(
     `SELECT
         al.id, al.entity_id AS "diariaId", p.name AS "providerName", t.name AS "teamName",
-        al.action, u.name AS "userName", al.timestamp, d.status
+        al.action, al.user_id AS "userId", u.name AS "userName",
+        al.user_name_at_action AS "userNameAtAction", al.timestamp, d.status
       FROM audit_logs al
       JOIN diarias d ON d.id = al.entity_id
       JOIN providers p ON p.id = d.provider_id

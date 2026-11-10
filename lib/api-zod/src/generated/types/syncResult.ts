@@ -13,4 +13,6 @@ export interface SyncResult {
   synced: number;
   created: number;
   skipped: number;
+  /** Records withheld for explicit administrator identity review */
+  pending?: number;
 }

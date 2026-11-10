@@ -17,6 +17,24 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * Returns 503 after three consecutive hourly failures until a successful cleanup. Contains no report data or database error details.
+ * @summary Per-process report cleanup alert status (not a liveness check)
+ */
+export const userSyncRetentionHealthResponseConsecutiveFailuresMin = 0;
+
+
+
+export const UserSyncRetentionHealthResponse = zod.object({
+  "status": zod.enum(['ok', 'degraded']),
+  "alertActive": zod.boolean(),
+  "consecutiveFailures": zod.number().min(userSyncRetentionHealthResponseConsecutiveFailuresMin),
+  "threshold": zod.literal(3),
+  "firstFailureAt": zod.string().nullable(),
+  "lastSuccessAt": zod.string().nullable()
+})
+
+
+/**
  * @summary Get current user session
  */
 export const GetMeResponse = zod.object({
@@ -29,7 +47,8 @@ export const GetMeResponse = zod.object({
   "teamName": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "active": zod.boolean(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
 })
 
 
@@ -54,7 +73,8 @@ export const ListUsersResponseItem = zod.object({
   "teamName": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "active": zod.boolean(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
 })
 export const ListUsersResponse = zod.array(ListUsersResponseItem)
 
@@ -93,18 +113,202 @@ export const CreateUserResponse = zod.object({
   "teamName": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "active": zod.boolean(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
 })
 
 
 /**
+ * Importação aditiva e auditoria agregada são confirmadas na mesma transação. Contas existentes não são alteradas; evidências pessoais de conflitos não são gravadas na auditoria.
  * @summary Sync users (funcionários) from DECARGO People (admin only)
  */
+
+
+
 export const SyncUsersResponse = zod.object({
   "synced": zod.number(),
   "created": zod.number(),
-  "skipped": zod.number()
+  "skipped": zod.number(),
+  "conflicts": zod.number(),
+  "conflictDetails": zod.array(zod.object({
+  "employee": zod.object({
+  "employeeId": zod.string().describe('People employee ID (id_funcionario), not a login account or local user ID.'),
+  "name": zod.string(),
+  "email": zod.string().nullable().describe('Trimmed, lowercase email, or null when absent.'),
+  "active": zod.boolean()
+}),
+  "reasons": zod.array(zod.enum(['employee_id_account_collision', 'ambiguous_local_email', 'duplicate_source', 'invalid_employee_id'])).min(1),
+  "localAccounts": zod.array(zod.object({
+  "localUserId": zod.number().describe('Local Diárias user ID, suitable for locating the existing record.'),
+  "externalReference": zod.string().describe('Stored decargoId; its origin may be legacy employee, login account or manual. Not proof of identity.'),
+  "name": zod.string(),
+  "email": zod.string(),
+  "active": zod.boolean()
+})),
+  "sourceEmployees": zod.array(zod.object({
+  "employeeId": zod.string().describe('People employee ID (id_funcionario), not a login account or local user ID.'),
+  "name": zod.string(),
+  "email": zod.string().nullable().describe('Trimmed, lowercase email, or null when absent.'),
+  "active": zod.boolean()
+})).describe('All source records sharing this employee ID or normalized email, including the ignored record.')
+})).describe('Admin-only, read-only report for this sync; one entry per ignored source record.')
 }).describe('Sync is additive-only: it creates users that don\'t exist locally yet (matched by decargoId or email) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.')
+
+
+/**
+ * Lista somente datas e contadores, sem consultar o People nem expor evidências de outras execuções.
+ * @summary Execuções salvas vigentes, da mais recente à mais antiga (somente admin)
+ */
+export const listUserSyncReportsQueryPageDefault = 1;
+export const listUserSyncReportsQueryPageMax = 10000;
+
+export const listUserSyncReportsQueryPageSizeDefault = 10;
+export const listUserSyncReportsQueryPageSizeMax = 50;
+
+
+
+export const ListUserSyncReportsQueryParams = zod.object({
+  "page": zod.coerce.number().min(1).max(listUserSyncReportsQueryPageMax).default(listUserSyncReportsQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listUserSyncReportsQueryPageSizeMax).default(listUserSyncReportsQueryPageSizeDefault)
+})
+
+export const ListUserSyncReportsResponse = zod.object({
+  "reports": zod.array(zod.object({
+  "id": zod.string(),
+  "completedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date(),
+  "synced": zod.number(),
+  "created": zod.number(),
+  "skipped": zod.number(),
+  "conflicts": zod.number()
+})),
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "hasMore": zod.boolean(),
+  "retentionDays": zod.literal(30)
+})
+
+
+/**
+ * @summary Snapshot de uma execução salva (somente admin, sem chamada ao People)
+ */
+export const getUserSyncReportPathReportIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+
+
+export const GetUserSyncReportParams = zod.object({
+  "reportId": zod.coerce.string().regex(getUserSyncReportPathReportIdRegExp)
+})
+
+export const getUserSyncReportResponseIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+
+
+
+export const GetUserSyncReportResponse = zod.object({
+  "id": zod.string().regex(getUserSyncReportResponseIdRegExp),
+  "completedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date(),
+  "result": zod.object({
+  "synced": zod.number(),
+  "created": zod.number(),
+  "skipped": zod.number(),
+  "conflicts": zod.number(),
+  "conflictDetails": zod.array(zod.object({
+  "employee": zod.object({
+  "employeeId": zod.string().describe('People employee ID (id_funcionario), not a login account or local user ID.'),
+  "name": zod.string(),
+  "email": zod.string().nullable().describe('Trimmed, lowercase email, or null when absent.'),
+  "active": zod.boolean()
+}),
+  "reasons": zod.array(zod.enum(['employee_id_account_collision', 'ambiguous_local_email', 'duplicate_source', 'invalid_employee_id'])).min(1),
+  "localAccounts": zod.array(zod.object({
+  "localUserId": zod.number().describe('Local Diárias user ID, suitable for locating the existing record.'),
+  "externalReference": zod.string().describe('Stored decargoId; its origin may be legacy employee, login account or manual. Not proof of identity.'),
+  "name": zod.string(),
+  "email": zod.string(),
+  "active": zod.boolean()
+})),
+  "sourceEmployees": zod.array(zod.object({
+  "employeeId": zod.string().describe('People employee ID (id_funcionario), not a login account or local user ID.'),
+  "name": zod.string(),
+  "email": zod.string().nullable().describe('Trimmed, lowercase email, or null when absent.'),
+  "active": zod.boolean()
+})).describe('All source records sharing this employee ID or normalized email, including the ignored record.')
+})).describe('Admin-only, read-only report for this sync; one entry per ignored source record.')
+}).describe('Sync is additive-only: it creates users that don\'t exist locally yet (matched by decargoId or email) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.')
+}).describe('Snapshot administrativo, sem dados de pessoas importadas sem conflito, tokens ou payload bruto do People.')
+
+
+/**
+ * Execuções concluídas são retidas por 30 dias. Retorna null se não houver relatório vigente.
+ * @summary Último relatório salvo de funcionários (somente admin, sem chamada ao People)
+ */
+export const getLatestUserSyncReportResponseReportOneIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+
+
+
+export const GetLatestUserSyncReportResponse = zod.object({
+  "retentionDays": zod.literal(30),
+  "report": zod.union([zod.object({
+  "id": zod.string().regex(getLatestUserSyncReportResponseReportOneIdRegExp),
+  "completedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date(),
+  "result": zod.object({
+  "synced": zod.number(),
+  "created": zod.number(),
+  "skipped": zod.number(),
+  "conflicts": zod.number(),
+  "conflictDetails": zod.array(zod.object({
+  "employee": zod.object({
+  "employeeId": zod.string().describe('People employee ID (id_funcionario), not a login account or local user ID.'),
+  "name": zod.string(),
+  "email": zod.string().nullable().describe('Trimmed, lowercase email, or null when absent.'),
+  "active": zod.boolean()
+}),
+  "reasons": zod.array(zod.enum(['employee_id_account_collision', 'ambiguous_local_email', 'duplicate_source', 'invalid_employee_id'])).min(1),
+  "localAccounts": zod.array(zod.object({
+  "localUserId": zod.number().describe('Local Diárias user ID, suitable for locating the existing record.'),
+  "externalReference": zod.string().describe('Stored decargoId; its origin may be legacy employee, login account or manual. Not proof of identity.'),
+  "name": zod.string(),
+  "email": zod.string(),
+  "active": zod.boolean()
+})),
+  "sourceEmployees": zod.array(zod.object({
+  "employeeId": zod.string().describe('People employee ID (id_funcionario), not a login account or local user ID.'),
+  "name": zod.string(),
+  "email": zod.string().nullable().describe('Trimmed, lowercase email, or null when absent.'),
+  "active": zod.boolean()
+})).describe('All source records sharing this employee ID or normalized email, including the ignored record.')
+})).describe('Admin-only, read-only report for this sync; one entry per ignored source record.')
+}).describe('Sync is additive-only: it creates users that don\'t exist locally yet (matched by decargoId or email) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.')
+}).describe('Snapshot administrativo, sem dados de pessoas importadas sem conflito, tokens ou payload bruto do People.'),zod.null()])
+})
+
+
+/**
+ * @summary Habilitar diárias localmente sem alterar o cadastro ou permissões (admin)
+ */
+
+
+
+export const EnableUserDiariasParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const enableUserDiariasBodyDailyRateMin = 0;
+export const enableUserDiariasBodyDailyRateMax = 99999999.99;
+
+
+
+export const EnableUserDiariasBody = zod.object({
+  "confirmed": zod.literal(true),
+  "dailyRate": zod.number().min(enableUserDiariasBodyDailyRateMin).max(enableUserDiariasBodyDailyRateMax)
+})
+
+export const EnableUserDiariasResponse = zod.object({
+  "providerId": zod.number(),
+  "dailyRate": zod.number(),
+  "localOnly": zod.literal(true)
+})
 
 
 /**
@@ -124,23 +328,40 @@ export const GetUserResponse = zod.object({
   "teamName": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "active": zod.boolean(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
 })
 
 
 /**
- * @summary Update user role, team, name, email or status (admin only)
+ * @summary Atomically update a person and their linked provider (admin only)
  */
 export const UpdateUserParams = zod.object({
   "id": zod.coerce.number()
 })
 
+
+export const updateUserBodyDailyRateMin = 0;
+export const updateUserBodyDailyRateMax = 99999999.99;
+
+export const updateUserBodyNameMax = 200;
+
+export const updateUserBodyEmailMax = 254;
+
+
+export const updateUserBodyEmailRegExp = new RegExp('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$');
+
+
 export const UpdateUserBody = zod.object({
+  "expectedUpdatedAt": zod.coerce.date().optional().describe('Access record version captured when editing began'),
+  "expectedProviderUpdatedAt": zod.coerce.date().nullish().describe('Linked financial record version captured when editing began'),
+  "expectedProviderId": zod.number().min(1).nullish().describe('Expected link (null if not enabled); never used to choose an identity'),
+  "dailyRate": zod.number().min(updateUserBodyDailyRateMin).max(updateUserBodyDailyRateMax).nullish(),
   "role": zod.enum(['admin', 'gestor', 'prestador', 'funcionario']).optional(),
   "teamId": zod.number().nullish(),
   "active": zod.boolean().optional(),
-  "name": zod.string().optional(),
-  "email": zod.string().optional()
+  "name": zod.string().min(1).max(updateUserBodyNameMax).optional(),
+  "email": zod.string().max(updateUserBodyEmailMax).regex(updateUserBodyEmailRegExp).optional()
 })
 
 export const UpdateUserResponse = zod.object({
@@ -153,7 +374,8 @@ export const UpdateUserResponse = zod.object({
   "teamName": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "active": zod.boolean(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
 })
 
 
@@ -269,13 +491,16 @@ export const ListProvidersQueryParams = zod.object({
 export const ListProvidersResponseItem = zod.object({
   "id": zod.number(),
   "decargoId": zod.string(),
+  "localReference": zod.string().nullish().describe('Stable local identity retained after administrator reconciliation'),
+  "cnpj": zod.string().nullish(),
   "name": zod.string(),
   "email": zod.string().nullish(),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
   "dailyRate": zod.number().nullish().describe('Valor padrão da diária deste prestador'),
   "active": zod.boolean(),
-  "syncedAt": zod.coerce.date().nullish()
+  "syncedAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().optional()
 })
 export const ListProvidersResponse = zod.array(ListProvidersResponseItem)
 
@@ -286,8 +511,46 @@ export const ListProvidersResponse = zod.array(ListProvidersResponseItem)
 export const SyncProvidersResponse = zod.object({
   "synced": zod.number(),
   "created": zod.number(),
-  "skipped": zod.number()
+  "skipped": zod.number(),
+  "pending": zod.number().optional().describe('Records withheld for explicit administrator identity review')
 }).describe('Sync is additive-only: it creates providers that don\'t exist locally yet (matched by decargoId) and never touches existing rows, so a manual deactivation (or any other admin edit) in the app is never overwritten by a later sync.')
+
+
+/**
+ * @summary Review fresh People provider identities (admin only)
+ */
+export const ListProviderReconciliationResponseItem = zod.object({
+  "externalId": zod.string(),
+  "name": zod.string(),
+  "cnpj": zod.string().nullable(),
+  "existingProviderId": zod.number().nullable(),
+  "conflict": zod.string().nullable()
+})
+export const ListProviderReconciliationResponse = zod.array(ListProviderReconciliationResponseItem)
+
+
+/**
+ * @summary Explicitly reconcile or import a distinct People provider (admin only)
+ */
+export const resolveProviderReconciliationBodyExternalIdRegExp = new RegExp('^[1-9][0-9]*$');
+
+export const resolveProviderReconciliationBodyEvidenceMin = 10;
+export const resolveProviderReconciliationBodyEvidenceMax = 500;
+
+
+
+export const ResolveProviderReconciliationBody = zod.object({
+  "externalId": zod.string().regex(resolveProviderReconciliationBodyExternalIdRegExp),
+  "action": zod.enum(['link', 'separate']),
+  "localProviderId": zod.number().min(1).optional(),
+  "verifiedCnpj": zod.string().optional(),
+  "evidence": zod.string().min(resolveProviderReconciliationBodyEvidenceMin).max(resolveProviderReconciliationBodyEvidenceMax).describe('Description of independently checked contract\/document, without credentials'),
+  "confirmed": zod.boolean()
+})
+
+export const ResolveProviderReconciliationResponse = zod.object({
+  "message": zod.string()
+})
 
 
 /**
@@ -300,13 +563,16 @@ export const GetProviderParams = zod.object({
 export const GetProviderResponse = zod.object({
   "id": zod.number(),
   "decargoId": zod.string(),
+  "localReference": zod.string().nullish().describe('Stable local identity retained after administrator reconciliation'),
+  "cnpj": zod.string().nullish(),
   "name": zod.string(),
   "email": zod.string().nullish(),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
   "dailyRate": zod.number().nullish().describe('Valor padrão da diária deste prestador'),
   "active": zod.boolean(),
-  "syncedAt": zod.coerce.date().nullish()
+  "syncedAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().optional()
 })
 
 
@@ -317,24 +583,38 @@ export const UpdateProviderParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const updateProviderBodyNameMax = 200;
+
+export const updateProviderBodyEmailRegExp = new RegExp('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$');
+
+export const updateProviderBodyDailyRateMin = 0;
+export const updateProviderBodyDailyRateMax = 99999999.99;
+
+
+
 export const UpdateProviderBody = zod.object({
-  "name": zod.string().optional(),
-  "email": zod.string().nullish(),
-  "teamId": zod.number().nullish(),
-  "dailyRate": zod.number().nullish(),
+  "expectedUpdatedAt": zod.coerce.date().optional(),
+  "name": zod.string().min(1).max(updateProviderBodyNameMax).optional(),
+  "email": zod.string().regex(updateProviderBodyEmailRegExp).nullish(),
+  "cnpj": zod.string().nullish(),
+  "teamId": zod.number().min(1).nullish(),
+  "dailyRate": zod.number().min(updateProviderBodyDailyRateMin).max(updateProviderBodyDailyRateMax).nullish(),
   "active": zod.boolean().optional()
 })
 
 export const UpdateProviderResponse = zod.object({
   "id": zod.number(),
   "decargoId": zod.string(),
+  "localReference": zod.string().nullish().describe('Stable local identity retained after administrator reconciliation'),
+  "cnpj": zod.string().nullish(),
   "name": zod.string(),
   "email": zod.string().nullish(),
   "teamId": zod.number().nullish(),
   "teamName": zod.string().nullish(),
   "dailyRate": zod.number().nullish().describe('Valor padrão da diária deste prestador'),
   "active": zod.boolean(),
-  "syncedAt": zod.coerce.date().nullish()
+  "syncedAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().optional()
 })
 
 
@@ -1029,6 +1309,90 @@ export const ResolveExportRecoveryResponse = zod.object({
 
 
 /**
+ * Read-only review of all selected IDs, including other pages. Derives destinations from local types. Does not query People persons, write financial data or touch reservations. Export POST rechecks independently.
+ * @summary Review selected records against People destinations (admin only)
+ */
+export const reviewPeopleExportBatchBodyDiariaIdsItemMax = 2147483647;
+
+
+
+
+export const ReviewPeopleExportBatchBody = zod.object({
+  "diariaIds": zod.array(zod.number().min(1).max(reviewPeopleExportBatchBodyDiariaIdsItemMax)).min(1)
+})
+
+export const ReviewPeopleExportBatchResponse = zod.object({
+  "supportedTargets": zod.array(zod.enum(['diarias', 'descontos'])),
+  "reviewedCount": zod.number(),
+  "missingIds": zod.array(zod.number()),
+  "incompatibleRecords": zod.array(zod.object({
+  "id": zod.number(),
+  "providerName": zod.string(),
+  "workDate": zod.string(),
+  "typeName": zod.string().nullable(),
+  "requiredTarget": zod.union([zod.literal('diarias'),zod.literal('descontos'),zod.literal(null)]).nullable(),
+  "reason": zod.enum(['unsupported_target', 'unconfigured_type'])
+}))
+})
+
+
+/**
+ * Read-only indication. Does not query people, reserve records or release existing reservations. Export POST always rechecks availability.
+ * @summary Read People v2 financial destinations (authenticated admin only)
+ */
+export const GetPeopleExportCapabilitiesResponse = zod.object({
+  "supportedTargets": zod.array(zod.enum(['diarias', 'descontos']))
+})
+
+
+/**
+ * @summary Recent persistent export attempts (admin only)
+ */
+export const ListExportAttemptsResponseItem = zod.object({
+  "integrationRef": zod.string(),
+  "status": zod.enum(['running', 'completed', 'interrupted']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "total": zod.number(),
+  "confirmed": zod.array(zod.number()),
+  "rejected": zod.array(zod.number()),
+  "uncertain": zod.array(zod.number()).describe('In-flight or unconfirmed records; never automatically resent'),
+  "unsent": zod.array(zod.number()),
+  "skipped": zod.array(zod.object({
+  "id": zod.number(),
+  "reason": zod.string()
+})),
+  "message": zod.string().nullable()
+})
+export const ListExportAttemptsResponse = zod.array(ListExportAttemptsResponseItem)
+
+
+/**
+ * @summary Consult an export without resending financial records (admin only)
+ */
+export const GetExportAttemptParams = zod.object({
+  "integrationRef": zod.coerce.string()
+})
+
+export const GetExportAttemptResponse = zod.object({
+  "integrationRef": zod.string(),
+  "status": zod.enum(['running', 'completed', 'interrupted']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "total": zod.number(),
+  "confirmed": zod.array(zod.number()),
+  "rejected": zod.array(zod.number()),
+  "uncertain": zod.array(zod.number()).describe('In-flight or unconfirmed records; never automatically resent'),
+  "unsent": zod.array(zod.number()),
+  "skipped": zod.array(zod.object({
+  "id": zod.number(),
+  "reason": zod.string()
+})),
+  "message": zod.string().nullable()
+})
+
+
+/**
  * @summary Export approved daily rates to DECARGO People (admin only)
  */
 export const ExportDiariasBody = zod.object({
@@ -1258,6 +1622,7 @@ export const CancelCompetencePeriodReleaseResponse = zod.object({
  * @summary List audit log entries (admin only)
  */
 export const ListAuditLogsQueryParams = zod.object({
+  "action": zod.coerce.string().nullish().describe('Exact audit action filter'),
   "entityType": zod.coerce.string().nullish(),
   "entityId": zod.coerce.number().nullish(),
   "userId": zod.coerce.number().nullish(),
@@ -1274,10 +1639,27 @@ export const ListAuditLogsResponse = zod.object({
   "entityId": zod.number(),
   "action": zod.string(),
   "userId": zod.number().nullish(),
-  "userName": zod.string().nullish(),
+  "userName": zod.string().nullish().describe('Current name from the user record; not a historical snapshot.'),
+  "userNameAtAction": zod.string().nullish().describe('Authenticated user\'s name recorded when the action occurred. Null for system actions and legacy records without a snapshot; never inferred from the current user name.'),
   "timestamp": zod.coerce.date(),
-  "oldValues": zod.string().nullish(),
-  "newValues": zod.string().nullish()
+  "oldValues": zod.record(zod.string(), zod.unknown()).nullish(),
+  "newValues": zod.record(zod.string(), zod.unknown()).nullish(),
+  "peopleConfirmation": zod.union([zod.object({
+  "confirmedByName": zod.string().nullable().describe('Responsible user\'s name recorded at confirmation time; null for legacy records without a snapshot. Never inferred from the current user record.'),
+  "externalId": zod.string().nullable(),
+  "verifiedCnpj": zod.string().nullable(),
+  "documentDescription": zod.string().nullable(),
+  "preservedProvider": zod.union([zod.object({
+  "id": zod.number(),
+  "name": zod.string().nullable(),
+  "decargoId": zod.string().nullable()
+}),zod.null()]),
+  "removedProvider": zod.union([zod.object({
+  "id": zod.number(),
+  "name": zod.string().nullable(),
+  "decargoId": zod.string().nullable()
+}),zod.null()])
+}),zod.null()]).optional().describe('Evidence recorded by a People reconciliation; null when not recorded.')
 })),
   "total": zod.number(),
   "page": zod.number(),
@@ -1347,7 +1729,9 @@ export const GetRecentActivityResponseItem = zod.object({
   "providerName": zod.string(),
   "teamName": zod.string(),
   "action": zod.string(),
-  "userName": zod.string(),
+  "userName": zod.string().nullable().describe('Current name from the user record; not a historical snapshot.'),
+  "userId": zod.number().nullish(),
+  "userNameAtAction": zod.string().nullish().describe('Authenticated user\'s name recorded at action time; null when not recorded. Never inferred from the current user name.'),
   "timestamp": zod.coerce.date(),
   "status": zod.string()
 })

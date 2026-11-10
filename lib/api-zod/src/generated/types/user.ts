@@ -21,4 +21,5 @@ export interface User {
   avatarUrl?: string | null;
   active: boolean;
   createdAt: Date;
+  updatedAt?: Date;
 }

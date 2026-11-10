@@ -164,7 +164,8 @@ export default function DiariasCalendar() {
   // can actually create diárias — prestador/funcionário never need it.
   const { data: providers } = useListProviders(
     { activeOnly: true },
-    { query: { enabled: !!canCreate, queryKey: ['listProviders', 'activeOnly'] } },
+    { query: { enabled: !!canCreate, queryKey: ['listProviders', 'activeOnly'],
+      staleTime: 0, refetchOnMount: 'always', refetchInterval: 15000 } },
   );
 
   const diariasByDay = useMemo(
@@ -223,7 +224,7 @@ export default function DiariasCalendar() {
       <ImportarPlanilhaDialog
         open={importOpen}
         onOpenChange={setImportOpen}
-        onImportDone={refetch}
+        isAdmin={user?.role === 'admin'}
       />
 
       <Card>

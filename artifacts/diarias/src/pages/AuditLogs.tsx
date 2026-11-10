@@ -1,17 +1,22 @@
 import { useState } from 'react';
-import { useGetMe, useListAuditLogs } from '@workspace/api-client-react';
+import { AuditActorDetails } from '@/components/AuditActorDetails';
+import { useGetMe, useListAuditLogs, getListAuditLogsQueryKey, type AuditLog } from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { PeopleConfirmationDetails } from '@/components/PeopleConfirmationDetails';
 
 export default function AuditLogs() {
   const { data: user } = useGetMe();
   const [page, setPage] = useState(1);
+  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [onlyPeople, setOnlyPeople] = useState(false);
+  const params = { page, pageSize: 30, ...(onlyPeople ? { action: 'identidade People reconciliada', entityType: 'provider' } : {}) };
   
-  const { data: audit, isLoading } = useListAuditLogs({
-    page,
-    pageSize: 30
+  const { data: audit, isLoading, isError, refetch } = useListAuditLogs(params, {
+    query: { enabled: user?.role === 'admin', queryKey: getListAuditLogsQueryKey(params) },
   });
 
   if (user?.role !== 'admin') {
@@ -52,6 +57,19 @@ export default function AuditLogs() {
         <p className="text-muted-foreground mt-1">Registro imutável de todas as ações no sistema.</p>
       </div>
 
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={onlyPeople} onChange={e => { setOnlyPeople(e.target.checked); setPage(1); }} />
+        Somente confirmações de vínculo People
+      </label>
+      <Dialog open={selectedLog != null} onOpenChange={open => { if (!open) setSelectedLog(null); }}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Confirmação do vínculo People</DialogTitle>
+            <DialogDescription>Auditoria #{selectedLog?.id} — consulta somente leitura.</DialogDescription>
+          </DialogHeader>
+          {selectedLog && <PeopleConfirmationDetails log={selectedLog} />}
+        </DialogContent>
+      </Dialog>
       <Card>
         <CardContent className="p-0">
           <div className="relative w-full overflow-auto">
@@ -68,14 +86,22 @@ export default function AuditLogs() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={5} className="text-center h-24">Carregando...</TableCell></TableRow>
-                ) : audit?.data.map(log => (
+                ) : isError ? (
+                  <TableRow><TableCell colSpan={5} className="text-center h-24">
+                    Não foi possível consultar a auditoria. <Button variant="outline" size="sm" onClick={() => void refetch()}>Tentar novamente</Button>
+                  </TableCell></TableRow>
+                ) : !audit?.data.length ? (
+                  <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum registro encontrado.</TableCell></TableRow>
+                ) : audit.data.map(log => (
                   <TableRow key={log.id} className="text-xs font-mono">
                     <TableCell className="text-muted-foreground">{formatDateTime(log.timestamp)}</TableCell>
-                    <TableCell>{log.userName || 'Sistema'}</TableCell>
+                    <TableCell><AuditActorDetails log={log} /></TableCell>
                     <TableCell>{formatAction(log.action)}</TableCell>
                     <TableCell>{log.entityType} #{log.entityId}</TableCell>
                     <TableCell className="max-w-md truncate">
-                      {log.newValues ? (
+                      {log.entityType === 'provider' && log.action === 'identidade People reconciliada' ? (
+                        <Button variant="outline" size="sm" onClick={() => setSelectedLog(log)}>Ver confirmação People</Button>
+                      ) : log.newValues ? (
                         <div className="truncate" title={formatDetails(log.newValues)}>
                           {formatDetails(log.newValues)}
                         </div>

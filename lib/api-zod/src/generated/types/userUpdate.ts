@@ -8,10 +8,37 @@
 import type { UserUpdateRole } from './userUpdateRole';
 
 export interface UserUpdate {
+  /** Access record version captured when editing began */
+  expectedUpdatedAt?: Date;
+  /**
+     * Linked financial record version captured when editing began
+     * @nullable
+     */
+  expectedProviderUpdatedAt?: Date | null;
+  /**
+     * Expected link (null if not enabled); never used to choose an identity
+     * @minimum 1
+     * @nullable
+     */
+  expectedProviderId?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 99999999.99
+     * @nullable
+     */
+  dailyRate?: number | null;
   role?: UserUpdateRole;
   /** @nullable */
   teamId?: number | null;
   active?: boolean;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
   name?: string;
+  /**
+     * @maxLength 254
+     * @pattern ^[^\s@]+@[^\s@]+\.[^\s@]+$
+     */
   email?: string;
 }

@@ -1,13 +1,14 @@
 import { Router } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import { pool, db, diariasTable, providersTable, diariaTypesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { pool, db, diariasTable, providersTable, diariaTypesTable, usersTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import { requireRole } from "../middlewares/requireAuth";
 import { logAudit } from "../lib/audit";
 import { getGestorTeamIds } from "../lib/gestorTeams";
 import { authorizeCompetenceRegistration } from "../lib/competenceAuthorization";
 import { indexImportProviders, resolveImportProvider } from "../lib/importProviderLookup";
+import { providerAccessActiveSql } from "../lib/providerIdentity";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -190,7 +191,9 @@ router.post("/preview", requireRole("admin", "gestor"), upload.single("file"), a
   // Pre-load lookup tables
   const [providers, types, gestorTeamIds] = await Promise.all([
     pool.query<{ id: number; name: string; teamId: number | null; active: boolean; dailyRate: string | null }>(
-      `SELECT id, name, team_id AS "teamId", active, daily_rate AS "dailyRate" FROM providers`
+      `SELECT id, name, team_id AS "teamId",
+        (active AND ${providerAccessActiveSql("providers.id")}) AS active,
+        daily_rate AS "dailyRate" FROM providers`
     ).then(r => r.rows),
     pool.query<{ id: number; description: string; active: boolean }>(
       `SELECT id, description, active FROM diaria_types`
@@ -404,48 +407,10 @@ router.post("/confirm", requireRole("admin", "gestor"), async (req, res) => {
       continue;
     }
 
-    // The preview is client-controlled after it leaves this server.  Resolve
-    // every relationship again instead of accepting its provider/team/type IDs.
-    const [[provider], [diariaType]] = await Promise.all([
-      db.select({
-        id: providersTable.id,
-        teamId: providersTable.teamId,
-        active: providersTable.active,
-        dailyRate: providersTable.dailyRate,
-      }).from(providersTable).where(eq(providersTable.id, row.providerId)).limit(1),
-      db.select({
-        id: diariaTypesTable.id,
-        active: diariaTypesTable.active,
-      }).from(diariaTypesTable).where(eq(diariaTypesTable.id, row.typeId)).limit(1),
-    ]);
-    if (!provider || !provider.active) {
-      skipped.push({ line: row.line, motivo: "Prestador inexistente ou inativo." });
-      continue;
-    }
-    if (!diariaType || !diariaType.active) {
-      skipped.push({ line: row.line, motivo: "Tipo de diária inexistente ou inativo." });
-      continue;
-    }
-    const authoritativeTeamId = provider.teamId;
-    if (!authoritativeTeamId) {
-      skipped.push({ line: row.line, motivo: "Prestador sem equipe vinculada." });
-      continue;
-    }
-    if (row.teamId !== authoritativeTeamId) {
-      skipped.push({ line: row.line, motivo: "A equipe informada não corresponde à equipe atual do prestador." });
-      continue;
-    }
-
     // Re-check duplicate
     const dupKey = `${row.providerId}:${row.workDate}`;
     if (existingSet.has(dupKey)) {
       skipped.push({ line: row.line, motivo: `Duplicata detectada durante confirmação (linha ${row.line}).` });
-      continue;
-    }
-
-    // Re-check gestor scope
-    if (me.role === "gestor" && !gestorTeamIds.includes(authoritativeTeamId)) {
-      skipped.push({ line: row.line, motivo: "Sem permissão para lançar para este prestador." });
       continue;
     }
 
@@ -461,48 +426,65 @@ router.post("/confirm", requireRole("admin", "gestor"), async (req, res) => {
       }
     }
 
-    // Daily rates for managers always come from the current provider record.
-    let effectiveValue = row.valor;
-    if (me.role === "gestor") {
-      if (provider.dailyRate == null) {
-        skipped.push({ line: row.line, motivo: `Prestador sem valor de diária configurado.` });
+    try {
+      const outcome = await db.transaction(async tx => {
+        // Same serialization boundary as administrative edits and individual
+        // launches. No deactivation can commit between eligibility and INSERT.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(724091513)`);
+        const [actor] = await tx.select({ active: usersTable.active }).from(usersTable)
+          .where(eq(usersTable.id, me.id)).for("key share");
+        if (!actor?.active) return { error: "Seu acesso foi desativado. A importação não foi realizada." };
+        // Preview fields are client-controlled. Re-resolve the current
+        // provider, eligibility, team, rate and type inside the transaction.
+        const [provider] = await tx.select({
+          id: providersTable.id, teamId: providersTable.teamId,
+          active: providersTable.active, dailyRate: providersTable.dailyRate,
+        }).from(providersTable).where(eq(providersTable.id, row.providerId!)).for("share");
+        if (!provider?.active) return { error: "Prestador inexistente ou inativo." };
+        const eligibility = await tx.execute(sql`SELECT ${sql.raw(providerAccessActiveSql(String(provider.id)))} AS allowed`);
+        if (eligibility.rows[0]?.allowed !== true) {
+          return { error: "Pessoa com acesso inativo ou vínculo inativo. Não é possível lançar novas diárias." };
+        }
+        const [diariaType] = await tx.select({ id: diariaTypesTable.id, active: diariaTypesTable.active })
+          .from(diariaTypesTable).where(eq(diariaTypesTable.id, row.typeId!)).for("share");
+        if (!diariaType?.active) return { error: "Tipo de diária inexistente ou inativo." };
+        const authoritativeTeamId = provider.teamId;
+        if (!authoritativeTeamId) return { error: "Prestador sem equipe vinculada." };
+        if (row.teamId !== authoritativeTeamId) {
+          return { error: "A equipe informada não corresponde à equipe atual do prestador." };
+        }
+        if (me.role === "gestor" && !gestorTeamIds.includes(authoritativeTeamId)) {
+          return { error: "Sem permissão para lançar para este prestador." };
+        }
+        if (me.role === "gestor" && provider.dailyRate == null) {
+          return { error: "Prestador sem valor de diária configurado." };
+        }
+        const effectiveValue = me.role === "gestor" ? Number(provider.dailyRate) : row.valor;
+        if (effectiveValue == null || effectiveValue <= 0) return { error: "Valor inválido ou não informado." };
+        const [diaria] = await tx.insert(diariasTable).values({
+          providerId: provider.id, teamId: authoritativeTeamId, typeId: diariaType.id,
+          managerId: me.id, workDate: row.workDate!,
+          startTime: row.startTime ?? null, endTime: row.endTime ?? null,
+          value: String(effectiveValue), observations: row.observacoes ?? null,
+          status: "pendente_aprovacao", createdBy: me.id,
+        }).returning();
+        return { diaria, effectiveValue, authoritativeTeamId, typeId: diariaType.id };
+      });
+      if (outcome.error !== undefined) {
+        skipped.push({ line: row.line, motivo: outcome.error });
         continue;
       }
-      effectiveValue = Number(provider.dailyRate);
-    }
-
-    if (effectiveValue == null || effectiveValue <= 0) {
-      skipped.push({ line: row.line, motivo: "Valor inválido ou não informado." });
-      continue;
-    }
-
-    try {
-      const [diaria] = await db
-        .insert(diariasTable)
-        .values({
-          providerId: row.providerId,
-          teamId: authoritativeTeamId,
-          typeId: diariaType.id,
-          managerId: me.id,
-          workDate: row.workDate,
-          startTime: row.startTime ?? null,
-          endTime: row.endTime ?? null,
-          value: String(effectiveValue),
-          observations: row.observacoes ?? null,
-          status: "pendente_aprovacao",
-          createdBy: me.id,
-        })
-        .returning();
+      const { diaria, authoritativeTeamId, effectiveValue } = outcome;
 
       await logAudit({
         entityType: "diaria",
         entityId: diaria.id,
         action: "importado",
-        userId: me.id,
+        actor: me,
         newValues: {
           providerId: row.providerId,
           teamId: authoritativeTeamId,
-          typeId: diariaType.id,
+          typeId: outcome.typeId,
           workDate: row.workDate,
           value: effectiveValue,
           source: "planilha",

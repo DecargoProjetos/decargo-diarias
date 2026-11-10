@@ -197,7 +197,7 @@ describe("pushFaltasToPeople", () => {
       }),
     }));
 
-    const result = await pushDiariasToPeople([
+    await expect(pushDiariasToPeople([
       {
         id_prestador: 987, dia_trabalhado: "2026-08-07", valor_diaria: 155,
         data_pagamento: "2026-08-31", __localId: 303,
@@ -206,10 +206,12 @@ describe("pushFaltasToPeople", () => {
         id_prestador: 987, dia_trabalhado: "2026-08-07", valor_diaria: 160,
         data_pagamento: "2026-08-31", __localId: 404,
       },
-    ]);
-
-    expect(result.unidentifiedErrors).toBe(1);
-    expect(result.errors[0].__localId).toBeUndefined();
+    ])).rejects.toMatchObject({
+      completedLocalIds: [],
+      rejectedLocalIds: [],
+      uncertainLocalIds: [303, 404],
+      pendingLocalIds: [],
+    });
   });
 
   it("informa o progresso após falha de rede no segundo lote para retomar sem reenviar aceitos", async () => {

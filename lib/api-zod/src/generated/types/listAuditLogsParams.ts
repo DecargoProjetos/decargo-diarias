@@ -8,6 +8,11 @@
 
 export type ListAuditLogsParams = {
 /**
+ * Exact audit action filter
+ * @nullable
+ */
+action?: string | null;
+/**
  * @nullable
  */
 entityType?: string | null;
